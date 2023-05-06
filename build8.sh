@@ -6,6 +6,7 @@ BUILD_LOG="LOG=debug"
 BUILD_MODE=dev
 TEST_JDK=false
 BUILD_JAVAFX=false
+BOOT_JDK="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
 
 # set to true to alway reconfigure the build (recommended that CLEAN_BUILD also be set true)
 RECONFIGURE_BUILD=true
@@ -14,7 +15,7 @@ RECONFIGURE_BUILD=true
 CLEAN_BUILD=true
 
 # set to true to always revert patches
-REVERT_PATCHES=true
+REVERT_PATCHES=false
 
 # aarch64 does not work yet - only x86_64
 export BUILD_TARGET_ARCH=x86_64
@@ -29,6 +30,13 @@ if [ "`uname`" = "Darwin" ] ; then
 	fi
 fi
 
+# check the boot jdk path is exist?
+if [ -z $BOOT_JDK ] ; then
+	echo "the boot jdk path is incorrect,please check it"
+	exit $?
+fi 
+
+
 if [ "X$BUILD_MODE" == "X" ] ; then
 	# normal, dev, shenandoah, [jvmci, eventually]
 	BUILD_MODE=normal
@@ -36,7 +44,7 @@ fi
 
 ## release, fastdebug, slowdebug
 if [ "X$DEBUG_LEVEL" == "X" ] ; then
-	DEBUG_LEVEL=fastdebug
+	DEBUG_LEVEL=slowdebug
 fi
 
 ## build directory
@@ -137,8 +145,8 @@ patch_macos_jdkbuild() {
 	progress "patch jdk"
 
 	# only one patch currently enabled!
-	# fix version check to allow Xcode 13
-	applypatch . "$PATCH_DIR/allow-xcode13.patch"
+	# fix version check to allow Xcode 14
+	applypatch . "$PATCH_DIR/allow-xcode14.patch"
 
 	# JDK-8019470: Changes needed to compile JDK 8 on MacOS with clang compiler
 #	applypatch . "$PATCH_DIR/jdk8u-8019470.patch"
@@ -236,8 +244,9 @@ configurejdk() {
 	chmod 755 ./configure
 	unset DARWIN_CONFIG
 	if $IS_DARWIN ; then
-		BOOT_JDK="$TOOL_DIR/jdk8u/Contents/Home"
-		DARWIN_CONFIG="--with-toolchain-type=clang \
+		#BOOT_JDK="$TOOL_DIR/jdk8u/Contents/Home"
+		DARWIN_CONFIG="MAKE=/usr/bin/make \
+			--with-toolchain-type=clang \
             --with-xcode-path="$XCODE_APP" \
             --includedir="$XCODE_DEVELOPER_PREFIX/Toolchains/XcodeDefault.xctoolchain/usr/include" \
             --with-boot-jdk="$BOOT_JDK""
@@ -252,6 +261,8 @@ configurejdk() {
 	./configure $DARWIN_CONFIG $BUILD_VERSION_CONFIG \
             --with-debug-level=$DEBUG_LEVEL \
             --with-conf-name=$JDK_CONF \
+            --disable-zip-debug-info \
+            --with-target-bits=64 \
 			--with-native-debug-symbols=external \
             --with-jtreg="$BUILD_DIR/tools/jtreg" \
             --with-freetype-include="$TOOL_DIR/freetype/include" \
@@ -262,7 +273,7 @@ configurejdk() {
 buildjdk() {
 	progress "build jdk"
 	pushd "$JDK_DIR"
-	make images $BUILD_LOG COMPILER_WARNINGS_FATAL=false CONF=$JDK_CONF
+	compiledb make images $BUILD_LOG COMPILER_WARNINGS_FATAL=false CONF=$JDK_CONF
 	if $IS_DARWIN ; then
 		# seems the path handling has changed; use rpath instead of hardcoded path
 		find  "$JDK_DIR/build/$JDK_CONF/images" -type f -name libfontmanager.dylib -exec install_name_tool -change /usr/local/lib/libfreetype.6.dylib @rpath/libfreetype.dylib.6 {} \; -print
@@ -329,6 +340,9 @@ if [ ! -d "$JDK_DIR" ]; then
 elif [ ! -d "$JDK_DIR/build" ] ; then
 	RECONFIGURE_BUILD=true
 fi
+
+echo "RECONFIGURE_BUILD--->$RECONFIGURE_BUILD"
+echo "CLEAN_BUILD--->$CLEAN_BUILD"
 
 if $CLEAN_BUILD ; then
 	cleanjdk
