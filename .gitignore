@@ -9,6 +9,7 @@ jdk8u-dev/build.log
 .tags*
 jdk8udev.zip
 tools/
+jdk8u-dev/compile_commands.json
 !jdk8u-dev/corba/**/build/
 !jdk8u-dev/jdk/**/build/
 !jdk8u-dev/hotspot/**/build/
