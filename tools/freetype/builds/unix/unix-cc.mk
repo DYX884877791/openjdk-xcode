@@ -79,7 +79,7 @@ T := -o$(space)
 #   We use our own FreeType configuration file.
 #
 CPPFLAGS := 
-CFLAGS   := -c -Wall -g -O2 -DDARWIN_NO_CARBON   -I/usr/local/Cellar/libpng/1.6.37/include/libpng16 -I/usr/local/Cellar/harfbuzz/2.8.1/include/harfbuzz -I/usr/local/opt/freetype/include/freetype2 -I/usr/local/Cellar/graphite2/1.3.14/include -I/usr/local/Cellar/glib/2.68.3/include/glib-2.0 -I/usr/local/Cellar/glib/2.68.3/lib/glib-2.0/include -I/usr/local/opt/gettext/include -I/usr/local/Cellar/pcre/8.45/include -DFT_CONFIG_CONFIG_H="<ftconfig.h>"
+CFLAGS   := -c -Wall -g -O2  -I/usr/include/libpng16 -DFT_CONFIG_CONFIG_H="<ftconfig.h>"
 
 # ANSIFLAGS: Put there the flags used to make your compiler ANSI-compliant.
 #
@@ -93,7 +93,7 @@ CC    := $(LIBTOOL) --mode=compile $(CCraw)
 
 # Linker flags.
 #
-LDFLAGS           :=  -lz -lbz2 -L/usr/local/Cellar/libpng/1.6.37/lib -lpng16 -lz -L/usr/local/Cellar/harfbuzz/2.8.1/lib -lharfbuzz
+LDFLAGS           :=  -lz -lpng16 -lz
 LIB_CLOCK_GETTIME :=   # for ftbench
 
 

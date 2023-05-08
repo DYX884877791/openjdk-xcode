@@ -161,10 +161,19 @@ build_ninja() {
 }
 
 build_freetype() {
-	if check_arch  "$TOOL_DIR/freetype/objs/.libs/libfreetype.6.dylib" $BUILD_TARGET_ARCH ; then
+	FREETYPE_NAME=''
+	if $IS_LINUX ; then
+		FREETYPE_NAME=libfreetype.so.6
+	elif $IS_DARWIN ; then
+		FREETYPE_NAME=libfreetype.6.dylib
+	fi
+	if check_arch  "$TOOL_DIR/freetype/objs/.libs/$FREETYPE_NAME" $BUILD_TARGET_ARCH ; then
+		exit 1
 		return 0
 	fi
-	download_and_open https://nongnu.freemirror.org/nongnu/freetype/freetype-2.9.tar.gz "$TOOL_DIR/freetype"
+	if [ ! -e "$TOOL_DIR/freetype" ] ; then
+		download_and_open https://nongnu.freemirror.org/nongnu/freetype/freetype-2.9.tar.gz "$TOOL_DIR/freetype"
+	fi
 	pushd "$TOOL_DIR/freetype"
 	./configure
 	make clean
