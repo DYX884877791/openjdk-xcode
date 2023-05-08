@@ -9,4 +9,9 @@ jdk8u-dev/build.log
 .tags*
 jdk8udev.zip
 tools/
-!jdk8u-dev/corba/make/tools/src/build/
+!jdk8u-dev/corba/**/build/
+!jdk8u-dev/jdk/**/build/
+!jdk8u-dev/hotspot/**/build/
+!jdk8u-dev/jaxp/**/build/
+!jdk8u-dev/jaxws/**/build/
+!jdk8u-dev/langtools/**/build/
