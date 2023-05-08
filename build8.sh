@@ -281,7 +281,7 @@ configurejdk() {
             --disable-zip-debug-info \
             --with-target-bits=64 \
             --with-jvm-variants=server \
-	    --with-native-debug-symbols=internal \
+	     --with-native-debug-symbols=internal \
             --with-jtreg="$BUILD_DIR/tools/jtreg" \
             --with-freetype-include="$TOOL_DIR/freetype/include" \
             --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs $DISABLE_PCH
