@@ -1,6 +1,10 @@
 build/
 dist/
 .idea/
+.github/
+jdk8u-dev/config.log
+jdk8u-dev/configure.log
+jdk8u-dev/build.log
 .DS_Store
 .tags*
 tools/
