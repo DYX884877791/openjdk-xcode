@@ -3,4 +3,5 @@ dist/
 .idea/
 .DS_Store
 .tags*
+tools/
 !jdk8u-dev/corba/make/tools/src/build/
