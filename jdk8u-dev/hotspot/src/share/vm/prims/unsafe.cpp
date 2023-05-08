@@ -1212,11 +1212,19 @@ UNSAFE_END
 
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x))
   UnsafeWrapper("Unsafe_CompareAndSwapInt");
+  // 该方法定义在jniHandles.hpp中：
   oop p = JNIHandles::resolve(obj);
+  // 然后调用index_oop_from_field_offset_long(p, offset);方法，其中offset为修改的字段在对象所占内存中的偏移位置，最终得到的addr就是该字段在内存中的位置，这里可以简单理解为对象地址加上offset。
   jint* addr = (jint *) index_oop_from_field_offset_long(p, offset);
+  // 得到字段地址addr之后就会调用核心的Atomic::cmpxchg方法，该方法定义在atomic.hpp中，除了cmpxchg，还有xchg、cmpxchg_ptr等等
+  // cmpxchg实现在hotspot/src/share/vm/runtime/atomic.cpp中，最终会根据具体的宿主环境内联具体的实现，具体我们参照include的atomic.inline.hpp头文件
+  // 以x86的linux环境为例，其引入的是atomic_linux_x86.inline.hpp头文件
   return (jint)(Atomic::cmpxchg(x, addr, e)) == e;
 UNSAFE_END
 
+/**
+ * 和compareAndSwapInt不一样的是，jlong类型的CAS操作需要判断宿主平台是否支持8字节的CAS操作，也就是通过VM_Version::supports_cx8方法进行判断。该方法定义在vm_version.hpp中：
+ */
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapLong(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jlong e, jlong x))
   UnsafeWrapper("Unsafe_CompareAndSwapLong");
   Handle p (THREAD, JNIHandles::resolve(obj));
@@ -1224,6 +1232,7 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapLong(JNIEnv *env, jobject unsafe, jo
 #ifdef SUPPORTS_NATIVE_CX8
   return (jlong)(Atomic::cmpxchg(x, addr, e)) == e;
 #else
+  // 
   if (VM_Version::supports_cx8())
     return (jlong)(Atomic::cmpxchg(x, addr, e)) == e;
   else {

@@ -91,7 +91,10 @@ inline void*    Atomic::xchg_ptr(void*    exchange_value, volatile void*     des
 
 
 inline jint     Atomic::cmpxchg    (jint     exchange_value, volatile jint*     dest, jint     compare_value) {
+  // 第一步调用了os::is_MP()函数，该函数定义在os.hpp中，主要是判断当前环境是否为多处理器环境：
   int mp = os::is_MP();
+  // 使用__asm__ volatile嵌入汇编代码片段，一个内联汇编表达式分为四个部分，以：进行分隔。
+  // 使用__asm__来声明表达式，volatile则保证指令不会被gcc优化影响。cmpxchgl指令则是x86的比较并交换指令，如果是多处理器会使用lock前缀，关于lock前缀，其可以达到一个内存屏障的效果，也可以参照intel手册。
   __asm__ volatile (LOCK_IF_MP(%4) "cmpxchgl %1,(%3)"
                     : "=a" (exchange_value)
                     : "r" (exchange_value), "a" (compare_value), "r" (dest), "r" (mp)

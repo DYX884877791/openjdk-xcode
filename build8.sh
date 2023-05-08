@@ -6,13 +6,37 @@ BUILD_LOG="LOG=debug"
 BUILD_MODE=dev
 TEST_JDK=false
 BUILD_JAVAFX=false
-BOOT_JDK="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
+
+set_os() {
+	IS_LINUX=false
+	IS_DARWIN=false
+	if [ "`uname`" = "Linux" ] ; then
+		IS_LINUX=true
+	fi
+	IS_DARWIN=false
+	if [ "`uname`" = "Darwin" ] ; then
+		IS_DARWIN=true
+	fi
+}
+
+set_os
+
+BOOT_JDK_MACOS="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
+BOOT_JDK_LINUX=""
+
+if $IS_LINUX ; then
+	BOOT_JDK=$BOOT_JDK_LINUX
+fi
+
+if $IS_DARWIN ; then
+    BOOT_JDK=$BOOT_JDK_MACOS
+fi
 
 # set to true to alway reconfigure the build (recommended that CLEAN_BUILD also be set true)
 RECONFIGURE_BUILD=true
 
 # set to true to always clean the build
-CLEAN_BUILD=true
+CLEAN_BUILD=false
 
 # set to true to always revert patches
 REVERT_PATCHES=false
@@ -22,7 +46,7 @@ export BUILD_TARGET_ARCH=x86_64
 
 # if we're on a macos m1 machine, we can run in x86_64 or native aarch64/arm64 mode.
 # currently the build script only supports building x86_64 binaries and only on x86_64 hosts.
-if [ "`uname`" = "Darwin" ] ; then
+if $IS_DARWIN ; then
 	if [ "`uname -m`" = "arm64" ] ; then
 		echo "building on aarch64 - restarting in x86_64 mode"
 		arch -x86_64 "$0" $@
@@ -34,7 +58,12 @@ fi
 if [ -z $BOOT_JDK ] ; then
 	echo "the boot jdk path is incorrect,please check it"
 	exit $?
-fi 
+elif [ ! -d $BOOT_JDK ] ; then
+	echo "the boot jdk path not exist,please check it"
+	exit $?
+else 
+	echo "the boot jdk path is $BOOT_JDK"
+fi
 
 
 if [ "X$BUILD_MODE" == "X" ] ; then
@@ -60,19 +89,7 @@ BUILD_SCENEBUILDER=$BUILD_JAVAFX
 
 ### no need to change anything below this line unless something went wrong
 
-set_os() {
-	IS_LINUX=false
-	IS_DARWIN=false
-	if [ "`uname`" = "Linux" ] ; then
-		IS_LINUX=true
-	fi
-	IS_DARWIN=false
-	if [ "`uname`" = "Darwin" ] ; then
-		IS_DARWIN=true
-	fi
-}
 
-set_os
 
 if [ "$BUILD_MODE" == "normal" ] ; then
 	JDK_BASE=jdk8u
@@ -263,7 +280,9 @@ configurejdk() {
             --with-conf-name=$JDK_CONF \
             --disable-zip-debug-info \
             --with-target-bits=64 \
-			--with-native-debug-symbols=external \
+            --enable-ccache \
+            --with-jvm-variants=server \
+			--with-native-debug-symbols=internal \
             --with-jtreg="$BUILD_DIR/tools/jtreg" \
             --with-freetype-include="$TOOL_DIR/freetype/include" \
             --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs $DISABLE_PCH

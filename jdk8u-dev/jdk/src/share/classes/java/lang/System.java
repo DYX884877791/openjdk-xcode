@@ -1174,6 +1174,8 @@ public final class System {
 
 
     /**
+     * initializeSystemClass不是给我们调用的，这个方法会在vm线程初始化后被虚拟机调用。其定义在hotspot/src/share/vm/runtime/thread.cpp中：
+     * 
      * Initialize the system class.  Called after thread initialization.
      */
     private static void initializeSystemClass() {

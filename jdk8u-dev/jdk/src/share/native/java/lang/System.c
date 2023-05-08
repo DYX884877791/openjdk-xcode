@@ -462,6 +462,8 @@ Java_java_lang_System_setIn0(JNIEnv *env, jclass cla, jobject stream)
     (*env)->SetStaticObjectField(env,cla,fid,stream);
 }
 
+// 首先获取了java.io.PrintStream类型的out静态成员，这个就是我们java.lang.System类的静态成员out：
+// 然后将stream参数赋值给它，这个stream就是initializeSystemClass方法中通过newPrintStream方法创建的PrintStream 对象。
 JNIEXPORT void JNICALL
 Java_java_lang_System_setOut0(JNIEnv *env, jclass cla, jobject stream)
 {

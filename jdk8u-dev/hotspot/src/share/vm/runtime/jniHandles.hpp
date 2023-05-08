@@ -243,6 +243,7 @@ inline oop JNIHandles::resolve_impl(jobject handle) {
   return result;
 }
 
+// 该方法定义为一个内联函数，没有做什么复杂的事儿，就是把jobject参数转成了oop。
 inline oop JNIHandles::resolve(jobject handle) {
   oop result = NULL;
   if (handle != NULL) {

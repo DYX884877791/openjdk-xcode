@@ -1070,10 +1070,14 @@ static oop create_initial_thread(Handle thread_group, JavaThread* thread, TRAPS)
 }
 
 static void call_initializeSystemClass(TRAPS) {
+  // 首先获取Klass（类元信息在虚拟机中的结构表示，就是一个c++中的类），在hotspot/src/share/vm/classfile/vmSymbols.hpp中找找java_lang_System对应的值：
+  // 可以看到代表的就是java.lang.System类，同时，initializeSystemClass_name也定义在vmSymbols.hpp中：
   Klass* k =  SystemDictionary::resolve_or_fail(vmSymbols::java_lang_System(), true, CHECK);
   instanceKlassHandle klass (THREAD, k);
 
   JavaValue result(T_VOID);
+  // 这里使用JavaCalls::call_static就是调用java.lang.System的静态方法initializeSystemClass。还要再啰嗦一句，call_initializeSystemClass是在何处调用的？
+  // 回到thread.cpp中，进入Threads::create_vm方法，在其中找到了call_initializeSystemClass方法的调用
   JavaCalls::call_static(&result, klass, vmSymbols::initializeSystemClass_name(),
                                          vmSymbols::void_method_signature(), CHECK);
 }
@@ -3377,6 +3381,7 @@ void Threads::threads_do(ThreadClosure* tc) {
   // If CompilerThreads ever become non-JavaThreads, add them here
 }
 
+// 看看Threads::create_vm是在何处调用的，我们进入hotspot/src/share/vm/prims/jni.cpp，找到JNI_CreateJavaVM方法
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   extern void JDK_Version_init();
