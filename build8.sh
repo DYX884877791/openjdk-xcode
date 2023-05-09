@@ -22,10 +22,10 @@ set_os() {
 set_os
 
 BOOT_JDK_MACOS="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
-BOOT_JDK_LINUX=""
+BOOT_JDK_LINUX="/home/dengyouxu/Development/Software/jdk-8u351-linux-x64/jdk1.8.0_351"
 
 if $IS_LINUX ; then
-	BOOT_JDK=$BOOT_JDK_LINUX
+    BOOT_JDK=$BOOT_JDK_LINUX
 fi
 
 if $IS_DARWIN ; then
@@ -280,9 +280,8 @@ configurejdk() {
             --with-conf-name=$JDK_CONF \
             --disable-zip-debug-info \
             --with-target-bits=64 \
-            --enable-ccache \
             --with-jvm-variants=server \
-			--with-native-debug-symbols=internal \
+	     --with-native-debug-symbols=internal \
             --with-jtreg="$BUILD_DIR/tools/jtreg" \
             --with-freetype-include="$TOOL_DIR/freetype/include" \
             --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs $DISABLE_PCH

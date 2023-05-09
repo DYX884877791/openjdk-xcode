@@ -8,7 +8,7 @@ URL: https://freetype.org
 Description: A free, high-quality, and portable font engine.
 Version: 22.0.16
 Requires:
-Requires.private: zlib, libpng, harfbuzz >= 0.9.21
+Requires.private: zlib, libpng
 Libs: -L${libdir} -lfreetype
-Libs.private: -lbz2
+Libs.private: 
 Cflags: -I${includedir}/freetype2

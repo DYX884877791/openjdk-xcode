@@ -12,7 +12,7 @@
 # indicate that you have read the license and understand and accept it
 # fully.
 
-SHELL := /bin/sh
+SHELL := /bin/bash
 
 TOP_DIR := $(shell cd $(TOP_DIR); pwd)
 
@@ -32,7 +32,7 @@ INSTALL         := /usr/bin/install -c
 INSTALL_DATA    := ${INSTALL} -m 644
 INSTALL_PROGRAM := ${INSTALL}
 INSTALL_SCRIPT  := ${INSTALL}
-MKINSTALLDIRS   := /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/tools/freetype/builds/unix/./install-sh -c -d
+MKINSTALLDIRS   := /usr/bin/mkdir -p
 
 CLEAN += $(OBJ_BUILD)/freetype-config \
          $(OBJ_BUILD)/freetype2.pc
@@ -63,10 +63,10 @@ version_info := 22:0:16
 
 # Variables needed for `freetype-config' and `freetype.pc'.
 #
-PKG_CONFIG         := /usr/local/bin/pkg-config
-REQUIRES_PRIVATE   := zlib, libpng, harfbuzz >= 0.9.21
-LIBS_PRIVATE       := -lbz2
-LIBSSTATIC_CONFIG  := -lfreetype -lz -lbz2 -L/usr/local/Cellar/libpng/1.6.37/lib -lpng16 -lz -L/usr/local/Cellar/harfbuzz/2.8.1/lib -L/usr/local/opt/freetype/lib -L/usr/local/Cellar/libpng/1.6.37/lib -L/usr/local/Cellar/graphite2/1.3.14/lib -L/usr/local/Cellar/glib/2.68.3/lib -L/usr/local/opt/gettext/lib -L/usr/local/Cellar/pcre/8.45/lib -lharfbuzz -lm -framework ApplicationServices -lfreetype -lz -lbz2 -lpng16 -lz -lgraphite2 -lglib-2.0 -lintl -Wl,-framework,CoreFoundation -Wl,-framework,Carbon -Wl,-framework,Foundation -Wl,-framework,AppKit -liconv -lm -lpcre -D_THREAD_SAFE -pthread
+PKG_CONFIG         := /usr/bin/pkg-config
+REQUIRES_PRIVATE   := zlib, libpng
+LIBS_PRIVATE       := 
+LIBSSTATIC_CONFIG  := -lfreetype -lz -lpng16 -lm -lz -lm -lz
 build_libtool_libs := 
 ft_version         := 22.0.16
 
