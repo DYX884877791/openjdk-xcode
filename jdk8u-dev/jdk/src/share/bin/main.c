@@ -137,6 +137,7 @@ main(int argc, char **argv)
 #else /* *NIXES */
     // main()函数的第一个参数argc是int类型，用来统计程序运行时发送给main函数的命令行参数的个数；
     // 第二个参数argv是char**类型，可以看作字符串数组，用来存放指向字符串参数的指针数组，数组中的每一个元素指向一个参数。
+    // 这里的FULL_VERSION不是一个变量. 实际是一个宏定义，是使用autoconf工具生成Makefile脚本时传入的，具体位置在jdk8u-dev/common/autoconf/spec.gmk.in文件中
     margc = argc;
     margv = argv;
 #endif /* WIN32 */

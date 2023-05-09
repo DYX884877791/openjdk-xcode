@@ -46,9 +46,9 @@
 
 /**
  * #如果定义了JAVA_ARGS宏，则会把jvm的参数从宏定义中获取
-# 此处参照/openjdk/jdk/make/CompileLaunchers.gmk文件在声明javac的地方，定义了该宏内容
-# -DJAVA_ARGS='{ "-J-ms8m"$(COMMA) "com.sun.tools.javac.Main"$(COMMA) }'))，所以生成的elf文件javac中
-# 会得到该值为{ "-J-ms8m"$(COMMA) "com.sun.tools.javac.Main"$(COMMA) }
+ # 此处参照/openjdk/jdk/make/CompileLaunchers.gmk文件在声明javac的地方，定义了该宏内容
+ # -DJAVA_ARGS='{ "-J-ms8m"$(COMMA) "com.sun.tools.javac.Main"$(COMMA) }'))，所以生成的elf文件javac中
+ # 会得到该值为{ "-J-ms8m"$(COMMA) "com.sun.tools.javac.Main"$(COMMA) }
  */
 #ifdef JAVA_ARGS
 static const char* const_progname = "java";

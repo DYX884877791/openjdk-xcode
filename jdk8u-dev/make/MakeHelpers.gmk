@@ -224,9 +224,15 @@ define ParseLogLevel
 endef
 
 define ParseConfAndSpec
+  # global_targets = help
+  # GetRealTarget = 传入的编译目标,默认是default (没有给参数时,会默认初始化为 default)
+  # 这个if的意思是: 如果在真实目标中存在除 help 这样的默认目标外还有其它目标.则走这里 (一般都满足.会传入真实的编译标)
   ifneq ($$(filter-out $(global_targets),$$(call GetRealTarget)),)
+    # 对上面的 ifneq 的解释. 如果没有其它目标,就不解析了.
     # If we only have global targets, no need to bother with SPEC or CONF
+    # 判断SPEC 变量是否定义
     ifneq ($$(origin SPEC),undefined)
+      # SPEC 有定义. 检查是否设置正常
       # We have been given a SPEC, check that it works out properly
       ifeq ($$(wildcard $$(SPEC)),)
         $$(info Cannot locate spec.gmk, given by SPEC=$$(SPEC))
@@ -242,16 +248,20 @@ define ParseConfAndSpec
       endif
       # ... OK, we're satisfied, we'll use this SPEC later on
     else
+      # 主流程是走这里. 一般我们不会指定SPEC参数.而使用build目录下的默认的spec文件
       # Find all spec.gmk files in the build output directory
       output_dir=$$(root_dir)/build
       all_spec_files=$$(wildcard $$(output_dir)/*/spec.gmk)
+      # 检查我们需要的build目录是否有需要的spec.gmk文件. 如果没有: 报错退出 .同时提醒用户重新运行 ./configure 命令
       ifeq ($$(all_spec_files),)
         $$(info No configurations found for $$(root_dir)! Please run configure to create a configuration.)
         $$(eval $$(call FatalError))
       endif
       # Extract the configuration names from the path
+      # 解析出所有的配置目录, 一般我们只有一个. 比如这里的: macosx-x86_64-normal-server-slowdebug
       all_confs=$$(patsubst %/spec.gmk,%,$$(patsubst $$(output_dir)/%,%,$$(all_spec_files)))
 
+      # 这里是在编译的时候指定了CONF名称的场景, 一般我们不指定. 如果我们有多个编译目标的时候可能会指定此变量.
       ifneq ($$(origin CONF),undefined)
         # User have given a CONF= argument.
         ifeq ($$(CONF),)
@@ -278,6 +288,7 @@ define ParseConfAndSpec
         # Create a SPEC definition. This will contain the path to one or more spec.gmk files.
         SPEC=$$(addsuffix /spec.gmk,$$(addprefix $$(output_dir)/,$$(matching_confs)))
       else
+        # 没有传入 CONF 变量, 使用默认的配置进行解析. 如果只有一个配置目录. 则直接解析这个目录,否则有多个目录的时候必须指定一下CONF名
         # No CONF or SPEC given, check the available configurations
         ifneq ($$(words $$(all_spec_files)),1)
           $$(info No CONF given, but more than one configuration found in $$(output_dir).)
@@ -286,7 +297,7 @@ define ParseConfAndSpec
           $$(info Please retry building with CONF=<config pattern> (or SPEC=<specfile>))
           $$(eval $$(call FatalError))
         endif
-
+        # 默认情况下,我们找到了唯一的一个spec.gmk文件.
         # We found exactly one configuration, use it
         SPEC=$$(strip $$(all_spec_files))
       endif

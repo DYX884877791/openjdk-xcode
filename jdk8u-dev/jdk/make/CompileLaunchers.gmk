@@ -151,6 +151,7 @@ define SetupLauncher
 # call的本质是模板变量的变量值替换. 返回值是替换后的模板本身.(String).
 # 由于这里是直接call,而不是eval一起使用,是因为: 这个call生成的内容是更大的一个模板变量: SetupLauncher 的变量内容的一部分.
 # 因此这个eval的执行,由 SetupLauncher 这个函数的eval调用一起处理.
+
   $(call SetupNativeCompilation,BUILD_LAUNCHER_$1, \
       SRC := $(JDK_TOPDIR)/src/share/bin, \
       INCLUDE_FILES := main.c, \
@@ -221,6 +222,45 @@ ifdef OPENJDK
 else
   JAVA_RC_FLAGS += -i "$(JDK_TOPDIR)/src/closed/windows/native/sun/windows"
 endif
+
+
+# java中提供的bin目录下的java、javac、javap等都不是完全通过c/c++编写实现的，是通过c/c++入口，
+# 启动虚拟机加载class文件实现的相关功能。通过c/c++的main函数入口，创建jvm虚拟机后，通过执行相关功能的java代码实现其功能，
+# 所以java相关的功能如编译、运行、查看jvm信息等功能都是通过启动一个jvm虚拟机或者通过jvmti等实现的。
+# JDK的执行路径下的java命令实际是从编译目录的:/jdk/objs/java_objs/java拷贝而来的.
+# 接下来,我们再找一下objs目录下的java文件是怎么来的.
+
+# 找到了Linking 这个java命令的日志
+# Linking executable java
+# /usr/bin/clang -isysroot "/Applications/Xcode12.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.3.sdk" -iframework"/Applications/Xcode12.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.3.sdk/System/Library/Frameworks" -mmacosx-version-min=10.9.0 -Xlinker -rpath -Xlinker @loader_path/.  -Wl,-all_load /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/libjli_static.a -framework Cocoa -framework Security -framework ApplicationServices -sectcreate __TEXT __info_plist /path/to/jdkroot/jdk8u/jdk/src/macosx/lib/Info-cmdline.plist  -Xlinker -install_name -Xlinker @rpath/java  -o /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o   -pthread -lz
+# 上面这个日志是从mac系统下找到的,因此是clang 编译器编译的.
+
+# 这个可以看出,我们的java命令, 的确是通过 main.o 和其它的库链接在一起编译而来的. 而 main.o 也是在java_objs 目录下, 我们可以大胆猜测一下,他就是我们的main.c编译的产物, 下面从日志中继续寻找来验证一下.
+
+# echo  "Compiling main.c (for java)"
+# echo  "Compiling main.c (for appletviewer)"
+# echo  "Compiling main.c (for extcheck)"
+# Compiling main.c (for java)
+# Compiling main.c (for appletviewer)
+# /usr/bin/gcc -Wall -Wno-parentheses -Wextra -Wno-unused -Wno-unused-parameter -Wformat=2 -pipe -fstack-protector -D_GNU_SOURCE -D_REENTRANT -D_LARGEFILE64_SOURCE -fno-omit-frame-pointer -D_LP64=1 -D_LITTLE_ENDIAN -DLINUX -DARCH='"amd64"' -Damd64 -DDEBUG -DRELEASE='"1.8.0-internal-debug"' -I/home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/include -I/home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/include/linux -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/javavm/export -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/javavm/export -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/native/common -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/native/common -fno-strict-aliasing -g -fPIE -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/bin -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/bin -I/home/lijianhong/sourcecode/jdk8u/jdk/src/linux/bin -DFULL_VERSION='"1.8.0-internal-debug-lijianhong_2022_02_15_20_53-b00"' -DJDK_MAJOR_VERSION='"1"' -DJDK_MINOR_VERSION='"8"' -DLIBARCHNAME='"amd64"' -DLAUNCHER_NAME='"openjdk"' -DPROGNAME='"java"' -DEXPAND_CLASSPATH_WILDCARDS        -g -O0   -DTHIS_FILE='"main.c"' -c -MMD -MF /home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.d -o /home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o /home/lijianhong/sourcecode/jdk8u/jdk/src/share/bin/main.c
+# 上面我们找到了编译main.c的日志, 简单分析日志. 可以得到如下信息:
+#
+# 编译的源文件是: jdk8u/jdk/src/share/bin/main.c
+# 编译的输出目标是: jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o
+# 似乎main函数不只编译了一遍.如上面的日志,就好像一个main会编译很多次一样. 否则上面的日志读起来有些诡异.
+# "Compiling main.c (for java)"
+# "Compiling main.c (for appletviewer)"
+
+
+# 输出目录是一个很特殊的xx_objs,这里是: java_objs , 因为我们从上面的信息得知这个: 目录的内容最终会被链接成 java,且最后会拷贝到各个目标位置, 一个是我们之前分析的:jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/bin; 这个是exported的jdk文件目录之一.
+# 实际上main.c 的确会被编译多次, 我们可以来看一下下面的两个编译参数的对比,可以发现这个main方法的确被编译了多次. 但是不同的时候编译提供的编译参数是有区别的.java命令是使用了:
+
+# -DPROGNAME='"java"'\
+# -DEXPAND_CLASSPATH_WILDCARDS\
+# 而`jar命令则是使用:
+
+# -DPROGNAME='"jar"'\
+# -DJAVA_ARGS='{ "-J-ms8m", "sun.tools.jar.Main", }'\
 
 # On windows, the debuginfo files get the same name as for java.dll. Build
 # into another dir and copy selectively so debuginfo for java.dll isn't
