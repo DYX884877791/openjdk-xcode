@@ -230,10 +230,65 @@ endif
 # JDK的执行路径下的java命令实际是从编译目录的:/jdk/objs/java_objs/java拷贝而来的.
 # 接下来,我们再找一下objs目录下的java文件是怎么来的.
 
-# 找到了Linking 这个java命令的日志
-# Linking executable java
-# /usr/bin/clang -isysroot "/Applications/Xcode12.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.3.sdk" -iframework"/Applications/Xcode12.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX11.3.sdk/System/Library/Frameworks" -mmacosx-version-min=10.9.0 -Xlinker -rpath -Xlinker @loader_path/.  -Wl,-all_load /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/libjli_static.a -framework Cocoa -framework Security -framework ApplicationServices -sectcreate __TEXT __info_plist /path/to/jdkroot/jdk8u/jdk/src/macosx/lib/Info-cmdline.plist  -Xlinker -install_name -Xlinker @rpath/java  -o /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java /path/to/jdkroot/jdk8u/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o   -pthread -lz
+# 在build.log中找到了Linking 这个java命令的日志
+# echo  "Compiling main.c (for java)"
+# /usr/bin/clang -D_LP64=1 -D_LITTLE_ENDIAN -DMACOSX -DARCH='"x86_64"' -Dx86_64 -DDEBUG -DRELEASE='"1.8.0_362-internal-debug"' -D_ALLBSD_SOURCE -D_DARWIN_UNLIMITED_SELECT -DMAC_OS_X_VERSION_MAX_ALLOWED=1090 -mmacosx-version-min=10.9.0 -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/macosx -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/javavm/export -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/javavm/export -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/native/common -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/native/common -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" -iframework"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk/System/Library/Frameworks" -g -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/bin -DFULL_VERSION='"1.8.0_362-internal-debug-root_2023_05_08_09_53-b00"' -DJDK_MAJOR_VERSION='"1"' -DJDK_MINOR_VERSION='"8"' -DLIBARCHNAME='"x86_64"' -DLAUNCHER_NAME='"openjdk"' -DPROGNAME='"java"' -DPACKAGE_PATH='"/opt/local"' -DEXPAND_CLASSPATH_WILDCARDS        -g    -DTHIS_FILE='"main.c"' -c -MMD -MF /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.d -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin/main.c
+# echo  "Linking executable java"
+# /usr/bin/clang -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" -iframework"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk/System/Library/Frameworks" -mmacosx-version-min=10.9.0 -Xlinker -rpath -Xlinker @loader_path/.  -Wl,-all_load /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/libjli_static.a -framework Cocoa -framework Security -framework ApplicationServices -sectcreate __TEXT __info_plist /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/lib/Info-cmdline.plist  -Xlinker -install_name -Xlinker @rpath/java  -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o   -pthread -lz
+# /bin/mkdir -p /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/bin
+# /bin/rm -f /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/bin/java
+# /bin/cp /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/bin/java
 # 上面这个日志是从mac系统下找到的,因此是clang 编译器编译的.
+
+# 重新再找一版本linux环境下的日志, 下面的日志已经被我格式化后以便于理解.
+
+# # Linking java
+#
+# GCC 版本: gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.12)
+#
+# GCC编译参数
+#   -Wl,<arg>               Pass the comma separated arguments in <arg> to the linker:
+#   -Wl.option              此选项传递option给连接程序;如果option中间有逗号,就将option分成多个选项,然后传递给会连接程序.
+#                           把逗号分隔的参数传递给链接器.: 这里是: -Wl,-z,relro -> 解释为: 给链接器两个参数, -z和relro
+
+#   -Xlinker <arg>          Pass <arg> to the linker
+#                           实例:
+#                                -Xlinker --hash-style=both : 这是一个GNU的扩展语法 , 直接把option和参数直接在一个 -Xlinker中传入.
+#                                -Xlinker -z -Xlinker defs  :
+#                                -Xlinker -z -Xlinker noexecstack:
+#                                -Xlinker --allow-shlib-undefined
+#   -pie                    Produce a dynamically linked position independent executable on targets that
+#                           support it. For predictable results, you must also specify the same set of options
+#                           used for compilation (‘-fpie’, ‘-fPIE’, or model suboptions) when you specify
+#                           this linker option.
+#
+#                                -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64/jli
+#                                -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64
+#
+#   -lpthread               : 连接多线程支持. linux下的多线支持库, 可以参考: https://wenku.baidu.com/view/4ed09d3fa46e58fafab069dc5022aaea998f4118.html
+#
+#                                # https://stackoverflow.com/questions/12637841/what-is-the-soname-option-for-building-shared-libraries-for
+#                                -Xlinker -soname=lib.so
+#                                -Xlinker -version-script=/home/user/sourcecode/jdk8u/jdk/make/mapfiles/launchers/mapfile-x86_64
+#   -o                      :
+#                           -o /home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java
+#
+#   /home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o
+#
+#   -L <dir>                Add directory to library search path
+#                           -L/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/lib/amd64/jli
+#   -ljli                   : JVM自己的静态库 libjli.so
+#   -ldl                    : 链接dl库   - 程序中手工加载动态链接库时要用的函数在这个库里面. 需要链接进来: https://www.cnblogs.com/SZxiaochun/p/7718621.html
+#   -lc                     : 链接libc库 - https://blog.csdn.net/qq_38600065/article/details/104729290
+
+Linking executable java
+/usr/bin/gcc -Wl,-z,relro -Xlinker --hash-style=both -Xlinker -z -Xlinker defs -Xlinker -z -Xlinker noexecstack -Xlinker \
+--allow-shlib-undefined -pie -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64/jli -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64   \
+-lpthread -Xlinker -soname=lib.so -Xlinker -version-script=/home/user/sourcecode/jdk8u/jdk/make/mapfiles/launchers/mapfile-x86_64  \
+-o \
+/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java \
+/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o    \
+-L/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/lib/amd64/jli -ljli -ldl -lc
 
 # 这个可以看出,我们的java命令, 的确是通过 main.o 和其它的库链接在一起编译而来的. 而 main.o 也是在java_objs 目录下, 我们可以大胆猜测一下,他就是我们的main.c编译的产物, 下面从日志中继续寻找来验证一下.
 
@@ -243,10 +298,10 @@ endif
 # Compiling main.c (for java)
 # Compiling main.c (for appletviewer)
 # /usr/bin/gcc -Wall -Wno-parentheses -Wextra -Wno-unused -Wno-unused-parameter -Wformat=2 -pipe -fstack-protector -D_GNU_SOURCE -D_REENTRANT -D_LARGEFILE64_SOURCE -fno-omit-frame-pointer -D_LP64=1 -D_LITTLE_ENDIAN -DLINUX -DARCH='"amd64"' -Damd64 -DDEBUG -DRELEASE='"1.8.0-internal-debug"' -I/home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/include -I/home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/include/linux -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/javavm/export -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/javavm/export -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/native/common -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/native/common -fno-strict-aliasing -g -fPIE -I/home/lijianhong/sourcecode/jdk8u/jdk/src/share/bin -I/home/lijianhong/sourcecode/jdk8u/jdk/src/solaris/bin -I/home/lijianhong/sourcecode/jdk8u/jdk/src/linux/bin -DFULL_VERSION='"1.8.0-internal-debug-lijianhong_2022_02_15_20_53-b00"' -DJDK_MAJOR_VERSION='"1"' -DJDK_MINOR_VERSION='"8"' -DLIBARCHNAME='"amd64"' -DLAUNCHER_NAME='"openjdk"' -DPROGNAME='"java"' -DEXPAND_CLASSPATH_WILDCARDS        -g -O0   -DTHIS_FILE='"main.c"' -c -MMD -MF /home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.d -o /home/lijianhong/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o /home/lijianhong/sourcecode/jdk8u/jdk/src/share/bin/main.c
-# 上面我们找到了编译main.c的日志, 简单分析日志. 可以得到如下信息:
+# 编译main.c的日志, 简单分析日志. 可以得到如下信息:
 #
-# 编译的源文件是: jdk8u/jdk/src/share/bin/main.c
-# 编译的输出目标是: jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o
+# 编译的源文件是: jdk/src/share/bin/main.c
+# 编译的输出目标是: build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o
 # 似乎main函数不只编译了一遍.如上面的日志,就好像一个main会编译很多次一样. 否则上面的日志读起来有些诡异.
 # "Compiling main.c (for java)"
 # "Compiling main.c (for appletviewer)"
