@@ -470,6 +470,26 @@ void InterpreterMacroAssembler::dispatch_epilog(TosState state, int step) {
   dispatch_next(state, step);
 }
 
+/**
+ * 比如取一个字节大小的指令（如iconst_0、aload_0等都是一个字节大小的指令），那么InterpreterMacroAssembler::dispatch_next()函数生成的汇编代码如下 ：
+ * // 在generate_fixed_frame()函数中
+ * // 已经让%r13存储了bcp
+ * // %ebx中存储的是字节码的Opcode，也就是操作码
+ * movzbl 0x0(%r13),%ebx
+ *
+ * // $0x7ffff73ba4a0这个地址指向的
+ * // 是对应state状态下的一维数组，长度为256
+ * movabs $0x7ffff73ba4a0,%r10
+ *
+ * // 注意%r10中存储的是常量，根据计算公式
+ * // %r10+%rbx*8来获取指向存储入口地址的地址，
+ * // 通过*(%r10+%rbx*8)获取到入口地址，
+ * // 然后跳转到入口地址执行
+ * jmpq *(%r10,%rbx,8)
+ *
+ * %r10指向的是对应栈顶缓存状态state下的一维数组，长度为256，其中存储的值为opcode
+ *
+ */
 void InterpreterMacroAssembler::dispatch_base(TosState state, // 表示栈顶缓存状态
                                               address* table,
                                               bool verifyoop) {
@@ -534,7 +554,8 @@ void InterpreterMacroAssembler::dispatch_next(TosState state, int step) {
   // load next bytecode (load before advancing r13 to prevent AGI)
   load_unsigned_byte(rbx, Address(r13, step));
   // advance r13
-  // r13指向字节码的首地址，当第1次调用时，参数step的值为0，那么load_unsigned_byte()函数从r13指向的内存中取一个字节的值，取出来的是字节码指令的操作码。增加r13的步长，这样下次执行时就会取出来下一个字节码指令的操作码。
+  // r13指向字节码的首地址，当第1次调用时，参数step的值为0，那么load_unsigned_byte()函数从r13指向的内存中取一个字节的值，取出来的是字节码指令的操作码。
+  // 增加r13的步长，这样下次执行时就会取出来下一个字节码指令的操作码。
 
     // 在当前字节码的位置，指针向前移动step宽度，
     // 获取地址上的值，这个值是Opcode（范围1~202），存储到rbx

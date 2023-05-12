@@ -75,6 +75,7 @@ class DispatchTable VALUE_OBJ_CLASS_SPEC {
   // Attributes
   EntryPoint entry(int i) const;                      // return entry point for a given bytecode i
   void       set_entry(int i, EntryPoint& entry);     // set    entry point for a given bytecode i
+  // address为u_char*类型的别名。_table是一个二维数组的表，维度为栈顶状态（共有9种）和字节码（最多有256个），存储的是每个栈顶状态对应的字节码的入口点
   address*   table_for(TosState state)          { return _table[state]; }
   address*   table_for()                        { return table_for((TosState)0); }
   int        distance_from(address *table)      { return table - table_for(); }

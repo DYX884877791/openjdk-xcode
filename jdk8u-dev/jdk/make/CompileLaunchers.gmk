@@ -230,6 +230,32 @@ endif
 # JDK的执行路径下的java命令实际是从编译目录的:/jdk/objs/java_objs/java拷贝而来的.
 # 接下来,我们再找一下objs目录下的java文件是怎么来的.
 
+# SetupNativeCompilation(BUILD_LAUNCHER_java)
+# [2] SRC := /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin
+# [3] INCLUDE_FILES := main.c
+# [4] LANG := C
+# [5] OPTIMIZATION := $(java_OPTIMIZATION_ARG)
+# [6] CFLAGS := $(java_CFLAGS) -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/bin -DFULL_VERSION='"1.8.0_362-internal-debug-root_2023_05_08_09_53-b00"' -DJDK_MAJOR_VERSION='"1"' -DJDK_MINOR_VERSION='"8"' -DLIBARCHNAME='"x86_64"' -DLAUNCHER_NAME='"openjdk"' -DPROGNAME='"java"' -DPACKAGE_PATH='"/opt/local"' -DEXPAND_CLASSPATH_WILDCARDS
+# [7] CFLAGS_solaris := -KPIC
+# [8] LDFLAGS := -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" -iframework"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk/System/Library/Frameworks" -mmacosx-version-min=10.9.0 -Xlinker -rpath -Xlinker @loader_path/. $(java_LDFLAGS)
+# [9] LDFLAGS_macosx := -Xlinker -install_name -Xlinker @rpath/java
+# [10] LDFLAGS_linux := -lpthread -Xlinker -install_name -Xlinker @rpath/lib.dylib
+# [11] LDFLAGS_solaris := $(java_LDFLAGS_solaris) -Xlinker -install_name -Xlinker @rpath/lib.dylib
+# [12] MAPFILE := $(java_MAPFILE)
+# [13] LDFLAGS_SUFFIX := $(java_LDFLAGS_SUFFIX)
+# [14] LDFLAGS_SUFFIX_posix :=
+# [15] LDFLAGS_SUFFIX_windows := $(java_WINDOWS_JLI_LIB) /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/libjava/java.lib advapi32.lib user32.lib comctl32.lib
+# [16] LDFLAGS_SUFFIX_linux := -L/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/lib/jli -ljli -ldl -lc
+# [17] LDFLAGS_SUFFIX_solaris := -L/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/lib/jli -ljli -lthread -ldl -lc
+# [18] OBJECT_DIR := /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs
+# [19] OUTPUT_DIR := $(java_OUTPUT_DIR_ARG)
+# [20] PROGRAM := java
+# [21] DEBUG_SYMBOLS := true
+# [22] VERSIONINFO_RESOURCE := $(java_VERSION_INFO_RESOURCE)
+# [23] RC_FLAGS := -D "JDK_FNAME=java" -D "JDK_INTERNAL_NAME=java" -D "JDK_FTYPE=0x1L" -i "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/windows/resource/icons"
+# [24] MANIFEST := /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/windows/resource/java.manifest
+# [25] CODESIGN := $(java_CODESIGN)
+
 # 在build.log中找到了Linking 这个java命令的日志
 # echo  "Compiling main.c (for java)"
 # /usr/bin/clang -D_LP64=1 -D_LITTLE_ENDIAN -DMACOSX -DARCH='"x86_64"' -Dx86_64 -DDEBUG -DRELEASE='"1.8.0_362-internal-debug"' -D_ALLBSD_SOURCE -D_DARWIN_UNLIMITED_SELECT -DMAC_OS_X_VERSION_MAX_ALLOWED=1090 -mmacosx-version-min=10.9.0 -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/macosx -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/javavm/export -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/javavm/export -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/native/common -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/native/common -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" -iframework"/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk/System/Library/Frameworks" -g -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/bin -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/macosx/bin -DFULL_VERSION='"1.8.0_362-internal-debug-root_2023_05_08_09_53-b00"' -DJDK_MAJOR_VERSION='"1"' -DJDK_MINOR_VERSION='"8"' -DLIBARCHNAME='"x86_64"' -DLAUNCHER_NAME='"openjdk"' -DPROGNAME='"java"' -DPACKAGE_PATH='"/opt/local"' -DEXPAND_CLASSPATH_WILDCARDS        -g    -DTHIS_FILE='"main.c"' -c -MMD -MF /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.d -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/bin/main.c
@@ -281,14 +307,14 @@ endif
 #   -ldl                    : 链接dl库   - 程序中手工加载动态链接库时要用的函数在这个库里面. 需要链接进来: https://www.cnblogs.com/SZxiaochun/p/7718621.html
 #   -lc                     : 链接libc库 - https://blog.csdn.net/qq_38600065/article/details/104729290
 
-Linking executable java
-/usr/bin/gcc -Wl,-z,relro -Xlinker --hash-style=both -Xlinker -z -Xlinker defs -Xlinker -z -Xlinker noexecstack -Xlinker \
---allow-shlib-undefined -pie -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64/jli -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64   \
--lpthread -Xlinker -soname=lib.so -Xlinker -version-script=/home/user/sourcecode/jdk8u/jdk/make/mapfiles/launchers/mapfile-x86_64  \
--o \
-/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java \
-/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o    \
--L/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/lib/amd64/jli -ljli -ldl -lc
+# Linking executable java
+# /usr/bin/gcc -Wl,-z,relro -Xlinker --hash-style=both -Xlinker -z -Xlinker defs -Xlinker -z -Xlinker noexecstack -Xlinker \
+# --allow-shlib-undefined -pie -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64/jli -Xlinker -rpath -Xlinker \$ORIGIN/../lib/amd64   \
+# -lpthread -Xlinker -soname=lib.so -Xlinker -version-script=/home/user/sourcecode/jdk8u/jdk/make/mapfiles/launchers/mapfile-x86_64  \
+# -o \
+# /home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/java \
+# /home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/objs/java_objs/main.o    \
+# -L/home/user/sourcecode/jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/lib/amd64/jli -ljli -ldl -lc
 
 # 这个可以看出,我们的java命令, 的确是通过 main.o 和其它的库链接在一起编译而来的. 而 main.o 也是在java_objs 目录下, 我们可以大胆猜测一下,他就是我们的main.c编译的产物, 下面从日志中继续寻找来验证一下.
 
@@ -308,12 +334,13 @@ Linking executable java
 
 
 # 输出目录是一个很特殊的xx_objs,这里是: java_objs , 因为我们从上面的信息得知这个: 目录的内容最终会被链接成 java,且最后会拷贝到各个目标位置, 一个是我们之前分析的:jdk8u/build/linux-x86_64-normal-server-slowdebug/jdk/bin; 这个是exported的jdk文件目录之一.
-# 实际上main.c 的确会被编译多次, 我们可以来看一下下面的两个编译参数的对比,可以发现这个main方法的确被编译了多次. 但是不同的时候编译提供的编译参数是有区别的.java命令是使用了:
+# 实际上main.c 的确会被编译多次, 我们可以来看一下下面的两个编译参数的对比,可以发现这个main方法的确被编译了多次. 但是不同的时候编译提供的编译参数是有区别的.
 
+# java命令是使用了:
 # -DPROGNAME='"java"'\
 # -DEXPAND_CLASSPATH_WILDCARDS\
-# 而`jar命令则是使用:
 
+# 而jar命令则是使用:
 # -DPROGNAME='"jar"'\
 # -DJAVA_ARGS='{ "-J-ms8m", "sun.tools.jar.Main", }'\
 

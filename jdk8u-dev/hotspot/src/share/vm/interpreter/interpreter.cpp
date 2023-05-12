@@ -266,7 +266,8 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
 // 那么何时会调用set_entry_for_kind()函数呢，答案就在TemplateInterpreterGenerator::generate_all()函数中，generate_all()函数
 // 会调用generate_method_entry()函数生成每种Java方法的entry_point，每生成一个对应方法类型的entry_point就保存到_entry_table中。
 
-// 在HotSpot启动时就会调用这个函数生成各种Java方法的entry_point。调用栈如下：
+
+// 在HotSpot启动时就会调用generate_all这个函数生成各种Java方法的entry_point。调用栈如下：
 // TemplateInterpreterGenerator::generate_all()   templateInterpreter.cpp
 // InterpreterGenerator::InterpreterGenerator()   templateInterpreter_x86_64.cpp
 // TemplateInterpreter::initialize()              templateInterpreter.cpp

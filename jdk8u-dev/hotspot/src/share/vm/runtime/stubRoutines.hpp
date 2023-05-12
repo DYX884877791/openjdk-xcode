@@ -293,6 +293,12 @@ class StubRoutines: AllStatic {
   // #define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
   // 通过CAST_TO_FN_PTR将_call_stub_entry转换为指针函数CallStub，并传递8个参数给_call_stub_entry代表的调用点
 
+  // CallStub的源代码位置：openjdk/hotspot/src/share/vm/runtime/stubRoutines.hpp
+
+  // 将_call_stub_entry强制转换为unsigned int类型，然后以强制转换为CallStub类型。CallStub是一个函数指针，所以_call_stub_entry应该也是一个函数指针，而不应该是一个普通的无符号整数。
+  // 在call_stub()函数中，_call_stub_entry的定义如下：address StubRoutines::_call_stub_entry = NULL;
+  // _call_stub_entry的初始化在在openjdk/hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp文件下的generate_initial()函数
+
 
   // call_stub()返回了_call_stub_entry例程的地址，例程是啥，我开始时也觉得很难理解，而且“例程”这个名字也取得很奇怪。
   // 其实例程可以理解为用汇编写好的一个方法，和内联汇编差不多，被加载到内存中后，我们就可以直接通过它的首地址来调用执行它。

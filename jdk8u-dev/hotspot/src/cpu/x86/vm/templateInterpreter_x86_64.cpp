@@ -562,6 +562,29 @@ void InterpreterGenerator::lock_method(void) {
 //      r14: pointer to locals 本地变量表指针
 //      r13: sender sp 调用者的栈顶
 //      rdx: cp cache 常量池的地址
+// 对于普通的Java方法来说，生成的汇编代码如下：
+// push   %rax
+// push   %rbp
+// mov    %rsp,%rbp
+// push   %r13
+// pushq  $0x0
+// mov    0x10(%rbx),%r13
+// lea    0x30(%r13),%r13 // lea指令获取内存地址本身
+// push   %rbx
+// mov    0x18(%rbx),%rdx
+// test   %rdx,%rdx
+// je     0x00007fffed01b27d
+// add    $0x90,%rdx
+// push   %rdx
+// mov    0x10(%rbx),%rdx
+// mov    0x8(%rdx),%rdx
+// mov    0x18(%rdx),%rdx
+// push   %rdx
+// push   %r14
+// push   %r13
+// pushq  $0x0
+// mov    %rsp,(%rsp)
+
 void TemplateInterpreterGenerator::generate_fixed_frame(bool native_call) {
   // initialize fixed part of activation frame
     // 把返回地址紧接着局部变量区保存
@@ -1525,7 +1548,8 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   }
 
   // initialize fixed part of activation frame
-    // 生成固定桢，调用完generate_fixed_frame()函数后一些寄存器中保存的值如下：
+  // 函数的位置：hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp
+    // 生成固定帧，调用完generate_fixed_frame()函数后一些寄存器中保存的值如下：
     //
     //rbx：Method*
     //ecx：invocation counter
@@ -1627,6 +1651,7 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   __ notify_method_entry();
 
     // 跳转到目标Java方法的第一条字节码指令，并执行其对应的机器指令
+    // 调用dispatch_next()函数执行Java方法的字节码，其实就是根据字节码找到对应的机器指令片段的入口地址来执行，这段机器码就是根据对应的字节码语义翻译过来的
   __ dispatch_next(vtos);
 
   // invocation counter overflow
@@ -1742,6 +1767,8 @@ address AbstractInterpreterGenerator::generate_method_entry(
     return entry_point;
   }
 
+  // generate_normal_entry()函数会为执行的方法生成堆栈，而堆栈由局部变量表（用来存储传入的参数和被调用方法的局部变量）、Java方法栈帧数据和操作数栈这三大部分组成，
+  // 所以entry_point例程（其实就是一段机器指令片段，英文名为stub）会创建这3部分来辅助Java方法的执行。
   return ig_this->generate_normal_entry(synchronized);
 }
 

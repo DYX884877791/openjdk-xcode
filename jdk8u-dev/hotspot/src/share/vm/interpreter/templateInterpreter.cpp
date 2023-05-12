@@ -157,6 +157,7 @@ EntryPoint DispatchTable::entry(int i) const {
 
 // 这个函数显示了对每个字节码的每个栈顶状态都设置入口地址
 // 其中的参数i就是opcode，各个字节码及对应的opcode可参考https://docs.oracle.com/javase/specs/jvms/se8/html/index.html。
+// _table的一维为栈顶缓存状态，二维为Opcode，通过这2个维度能够找到一段机器指令，这就是根据当前的栈顶缓存状态定位到的字节码需要执行的机器指令片段。
 void DispatchTable::set_entry(int i, EntryPoint& entry) {
   assert(0 <= i && i < length, "index out of bounds");
   assert(number_of_states == 10, "check the code below");
@@ -387,10 +388,14 @@ void TemplateInterpreterGenerator::generate_all() {
     Interpreter::_throw_StackOverflowError_entry             = generate_StackOverflowError_handler();
   }
 
-
+// 普通的、没有native关键字修饰的Java方法生成入口
 // method_entry是一个宏，扩展后如上的method_entry(zerolocals)语句变为如下的形式：
 // Interpreter::_entry_table[Interpreter::zerolocals] = generate_method_entry(Interpreter::zerolocals);
-// _entry_table变量定义在AbstractInterpreter类中
+// _entry_table变量定义在AbstractInterpreter类中，如下
+// static address  _entry_table[number_of_method_entries];
+// 调用generate_method_entry()函数为各种类型的方法生成对应的方法入口
+// InterpreterGenerator::generate_normal_entry()函数最终会返回生成机器码的入口执行地址，然后通过变量_entry_table数组来保存，这样就可以使用方法类型做为数组下标获取对应的方法入口了。
+
 #define method_entry(kind)                                                                    \
   { CodeletMark cm(_masm, "method entry point (kind = " #kind ")");                    \
     Interpreter::_entry_table[Interpreter::kind] = generate_method_entry(Interpreter::kind);  \

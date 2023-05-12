@@ -501,6 +501,8 @@ JavaMain(void * _args)
     ret = 1;
 
     /*
+     * 根据Main-Class指定的类名加载JavaMainClass
+     *
      * 加载java类中main函数所在的类。
      *  * 加载Java程序的main方法，如果没找到则退出
      *
@@ -571,6 +573,7 @@ JavaMain(void * _args)
     CHECK_EXCEPTION_LEAVE(1);
     /*
      * 获取main方法ID
+     * 在JavaMainClass类里找到名为"main"的方法，签名为"([Ljava/lang/String;)V"，修饰符是public的静态方法
      *
      * LoadMainClass不仅加载主类,还将确保主方法的签名正确,这样就不需要再进一步检查了.
      * 这里调用main方法，以便无关的Java堆栈不在应用程序stack trace中.
@@ -592,7 +595,8 @@ JavaMain(void * _args)
 
     /* Invoke main method.
      * 调用main方法.
-     * */
+     * 最终位置是在hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethod函数中
+     **/
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
 
     /*

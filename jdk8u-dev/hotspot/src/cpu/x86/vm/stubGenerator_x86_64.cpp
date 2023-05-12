@@ -242,9 +242,9 @@ class StubGenerator: public StubCodeGenerator {
     const Address r12_save(rbp, r12_off * wordSize);
     const Address rbx_save(rbp, rbx_off * wordSize);
 
-      // 开辟新的栈帧
+    // 开辟新的栈帧
     // stub code
-    // 这两段代码直接生成机器指令，不过为了查看机器指令，我们借助了HSDB工具将其反编译为可读性更强的汇编指令。
+    // 这两段代码直接生成机器指令，不过为了查看机器指令，我们可以借助HSDB工具将其反编译为可读性更强的汇编指令。
       // push   %rbp
       // mov    %rsp,%rbp
       // sub    $0x60,%rsp　
@@ -257,6 +257,33 @@ class StubGenerator: public StubCodeGenerator {
     __ movptr(parameters,   c_rarg5); // parameters
     __ movptr(entry_point,  c_rarg4); // entry_point
 #endif
+
+      // 下面就是将call_helper()传递的6个在寄存器中的参数存储到CallStub()栈帧中了，除了存储这几个参数外，还需要存储其它寄存器中的值，
+      // 因为函数接下来要做的操作是为Java方法准备参数并调用Java方法，我们并不知道Java方法会不会破坏这些寄存器中的值，所以要保存下来，等调用完成后进行恢复。
+      // 生成的汇编代码如下：
+      // mov      %r9,-0x8(%rbp)
+      // mov      %r8,-0x10(%rbp)
+      // mov      %rcx,-0x18(%rbp)
+      // mov      %edx,-0x20(%rbp)
+      // mov      %rsi,-0x28(%rbp)
+      // mov      %rdi,-0x30(%rbp)
+      // mov      %rbx,-0x38(%rbp)
+      // mov      %r12,-0x40(%rbp)
+      // mov      %r13,-0x48(%rbp)
+      // mov      %r14,-0x50(%rbp)
+      // mov      %r15,-0x58(%rbp)
+      // // stmxcsr是将MXCSR寄存器中的值保存到-0x60(%rbp)中
+      // stmxcsr  -0x60(%rbp)
+      // mov      -0x60(%rbp),%eax
+      // and      $0xffc0,%eax // MXCSR_MASK = 0xFFC0
+      // // cmp通过第2个操作数减去第1个操作数的差，根据结果来设置eflags中的标志位。
+      // // 本质上和sub指令相同，但是不会改变操作数的值
+      // cmp      0x1762cb5f(%rip),%eax  # 0x00007fdf5c62d2c4
+      // // 当ZF=1时跳转到目标地址
+      // je       0x00007fdf45000772
+      // // 将m32加载到MXCSR寄存器中
+      // ldmxcsr  0x1762cb52(%rip)      # 0x00007fdf5c62d2c4
+
 
       //  保存寄存器中的值到栈上
     __ movptr(method,       c_rarg3); // method
@@ -298,6 +325,10 @@ class StubGenerator: public StubCodeGenerator {
 
     // Load up thread register
       // 加载线程寄存器
+      // 生成的汇编代码如下：
+      // mov    0x18(%rbp),%r15
+      // mov    0x1764212b(%rip),%r12   # 0x00007fdf5c6428a8
+
     __ movptr(r15_thread, thread);
     __ reinit_heapbase();
 
@@ -315,6 +346,32 @@ class StubGenerator: public StubCodeGenerator {
     // pass parameters if any
     // 如果在调用函数时有参数的话需要传递参数
     // 因为要调用Java方法，所以会为Java方法压入实际的参数，也就是压入parameter size个从parameters开始取的参数
+    // 这里是个循环，用于传递参数，相当于如下代码：
+    // while(%esi){
+    //    rax = *arg
+    //    push_arg(rax)
+    //    arg++;   // ptr++
+    //    %esi--;  // counter--
+    // }
+    // 生成的汇编代码如下：
+    // // 将栈中parameter size送到%ecx中
+    // mov    0x10(%rbp),%ecx
+    // // 做与运算，只有当%ecx中的值为0时才等于0
+    // test   %ecx,%ecx
+    // // 没有参数需要传递，直接跳转到parameters_done即可
+    // je     0x00007fdf4500079a
+    // // -- loop --
+    // // 汇编执行到这里，说明paramter size不为0,需要传递参数
+    // mov    -0x8(%rbp),%rdx
+    // mov    %ecx,%esi
+    // mov    (%rdx),%rax
+    // add    $0x8,%rdx
+    // dec    %esi
+    // push   %rax
+    // // 跳转到loop
+    // jne    0x00007fdf4500078e
+
+
     BLOCK_COMMENT("pass parameters if any");
     Label parameters_done;
       // parameter_size拷贝到c_rarg3即rcx寄存器中
@@ -343,9 +400,26 @@ class StubGenerator: public StubCodeGenerator {
       // 如果参数个数大于0则跳转到loop继续
     __ jcc(Assembler::notZero, loop);
 
+    // 当把需要调用Java方法的参数准备就绪后，接下来就会调用Java方法。这里需要重点提示一下Java解释执行时的方法调用约定，不像C/C++在x86下的调用约定一样，不需要通过寄存器来传递参数，
+    // 而是通过栈来传递参数的，说的更直白一些，是通过局部变量表来传递参数的，所以CallStub()函数栈帧中的argument word1 … argument word n其实是被调用的Java方法局部变量表的一部分。
+
+    // 调用Java方法
     // call Java function
+
+    // 生成的汇编代码如下：
+    // // 将Method*送到%rbx中
+    // mov     -0x18(%rbp),%rbx
+    // // 将entry_point送到%rsi中
+    // mov     -0x10(%rbp),%rsi
+    // // 将调用者的栈顶指针保存到%r13中
+    // mov     %rsp,%r13
+    // // 调用Java方法
+    // callq   *%rsi
+    // 注意调用callq指令后，会将callq指令的下一条指令的地址压栈，再跳转到第1操作数指定的地址，也就是*%rsi表示的地址。压入下一条指令的地址是为了让函数能通过跳转到栈上的地址从子函数返回。
+    // callq指令调用的是entry_point
+
     __ BIND(parameters_done);
-      // 将Method*地址拷贝到rbx中
+      // 将method地址包含的数据即Method*拷贝到rbx中
     __ movptr(rbx, method);             // get Method*
       // 将解释器的入口地址拷贝到c_rarg1寄存器中
     __ movptr(c_rarg1, entry_point);    // get entry_point
@@ -359,7 +433,34 @@ class StubGenerator: public StubCodeGenerator {
     BLOCK_COMMENT("call_stub_return_address:");
     return_address = __ pc();
 
-    // 这里我们要关注result和result_type，result在调用call_helper()函数时就会传递，也就是会指示call_helper()函数将调用Java方法后的返回值存储在哪里。对于类型为JavaValue的result来说，其实在调用之前就已经设置了返回类型，所以如上的result_type变量只需要从JavaValue中获取结果类型即可。例如，调用Java主类的main()方法时，在jni_CallStaticVoidMethod()函数和jni_invoke_static()函数中会设置返回类型为T_VOID，也就是main()方法返回void
+    // 调用Java方法后弹出栈帧及处理返回结果，同时还需要执行退栈操作，也就是将栈恢复到调用Java方法之前的状态
+
+    // 这里我们要关注result和result_type，result在调用call_helper()函数时就会传递，也就是会指示call_helper()函数将调用Java方法后的返回值存储在哪里。
+    // 对于类型为JavaValue的result来说，其实在调用之前就已经设置了返回类型，所以如上的result_type变量只需要从JavaValue中获取结果类型即可。
+    // 例如，调用Java主类的main()方法时，在jni_CallStaticVoidMethod()函数和jni_invoke_static()函数中会设置返回类型为T_VOID，也就是main()方法返回void
+    // 生成的汇编代码如下：
+    // // 栈中的-0x28位置保存result
+    // mov    -0x28(%rbp),%rdi
+    // // 栈中的-0x20位置保存result type
+    // mov    -0x20(%rbp),%esi
+    // cmp    $0xc,%esi         // 是否为T_OBJECT类型
+    // je     0x00007fdf450007f6
+    // cmp    $0xb,%esi         // 是否为T_LONG类型
+    // je     0x00007fdf450007f6
+    // cmp    $0x6,%esi         // 是否为T_FLOAT类型
+    // je     0x00007fdf450007fb
+    // cmp    $0x7,%esi         // 是否为T_DOUBLE类型
+    // je     0x00007fdf45000801
+
+    // // 如果是T_INT类型，直接将返回结果%eax写到栈中-0x28(%rbp)的位置
+    // mov    %eax,(%rdi)
+
+    // // -- exit --
+
+    // // 将rsp_after_call的有效地址拷到rsp中
+    // lea    -0x60(%rbp),%rsp
+
+
 
     // store result depending on type (everything that is not
     // T_OBJECT, T_LONG, T_FLOAT or T_DOUBLE is treated as T_INT)
@@ -391,8 +492,8 @@ class StubGenerator: public StubCodeGenerator {
 
     // pop parameters
       // 将rsp_after_call中保存的有效地址拷贝到rsp中，即将rsp往高地址方向移动了，
-// 原来的方法调用实参argument 1、...、argument n，
-// 相当于从栈中弹出，所以下面语句执行的是退栈操作
+      // 原来的方法调用实参argument 1、...、argument n，
+      // 相当于从栈中弹出，所以下面语句执行的是退栈操作
     __ lea(rsp, rsp_after_call); // lea指令将地址加载到寄存器中
 
 #ifdef ASSERT
@@ -417,6 +518,15 @@ class StubGenerator: public StubCodeGenerator {
       __ movdqu(as_XMMRegister(i), xmm_save(i));
     }
 #endif
+    // 接下来恢复之前保存的caller-save寄存器，这也是调用约定的一部分
+    // 生成的汇编代码如下：
+    // mov      -0x58(%rbp),%r15
+    // mov      -0x50(%rbp),%r14
+    // mov      -0x48(%rbp),%r13
+    // mov      -0x40(%rbp),%r12
+    // mov      -0x38(%rbp),%rbx
+    // ldmxcsr  -0x60(%rbp)
+
     __ movptr(r15, r15_save);
     __ movptr(r14, r14_save);
     __ movptr(r13, r13_save);
@@ -429,6 +539,19 @@ class StubGenerator: public StubCodeGenerator {
 #else
     __ ldmxcsr(mxcsr_save);
 #endif
+    // 在弹出了为调用Java方法保存的实际参数及恢复caller-save寄存器后，继续执行退栈操作
+    // 生成的汇编代码如下：
+    // // %rsp加上0x60，也就是执行退栈操作，也就相
+    // // 当于弹出了callee_save寄存器和压栈的那6个参数
+    // add    $0x60,%rsp
+    // pop    %rbp
+    // // 方法返回，指令中的q表示64位操作数，就是指的栈中存储的return address是64位的
+    // retq
+    // 记得在之前 CallStub新栈帧的创建时，通过如下的汇编完成了新栈帧的创建：
+    // push   %rbp
+    // mov    %rsp,%rbp
+    // sub    $0x60,%rsp
+    // 现在要退出这个栈帧时要在%rsp指向的地址加上$0x60，同时恢复%rbp的指向。然后就是跳转到return address指向的指令继续执行了
 
     // restore rsp
     __ addptr(rsp, -rsp_after_call_off * wordSize);
@@ -436,6 +559,23 @@ class StubGenerator: public StubCodeGenerator {
     // return
     __ pop(rbp);
     __ ret(0);
+
+    // 当Java方法返回int类型时（如果返回char、boolean、short等类型时统一转换为int类型），根据Java方法调用约定，这个返回的int值会存储到%rax中；
+    // 如果返回对象，那么%rax中存储的就是这个对象的地址，那后面到底怎么区分是地址还是int值呢？
+    // 答案是通过返回类型区分即可；如果返回非int，非对象类型的值呢？我们继续看generate_call_stub()函数的实现逻辑：
+    // 对应的汇编代码如下：
+    // // -- is_long --
+    // mov    %rax,(%rdi)
+    // jmp    0x00007fdf450007d4
+    //
+    // // -- is_float --
+    // vmovss %xmm0,(%rdi)
+    // jmp    0x00007fdf450007d4
+    //
+    // // -- is_double --
+    // vmovsd %xmm0,(%rdi)
+    // jmp    0x00007fdf450007d4
+    // 当返回long类型时也存储到%rax中，因为Java的long类型是64位，我们分析的代码也是x86下64位的实现，所以%rax寄存器也是64位，能够容纳64位数；当返回为float或double时，存储到%xmm0中。
 
     // handle return types different from T_INT
     __ BIND(is_long);

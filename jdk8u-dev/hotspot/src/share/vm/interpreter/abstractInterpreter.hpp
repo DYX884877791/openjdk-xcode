@@ -183,6 +183,13 @@ class AbstractInterpreter: AllStatic {
   // Method activation
   static MethodKind method_kind(methodHandle m);
   // 这里直接返回了_entry_table数组中对应方法类型的entry_point地址。
+  // 为了能尽快找到某个Java方法对应的entry_point入口，把这种对应关系保存到了_entry_table中，所以entry_for_kind()函数才能快速的获取到方法对应的entry_point入口。
+  // 给数组中元素赋值专门有个方法：位置在hotspot/src/share/vm/interpreter/interpreter.cpp中
+  // void AbstractInterpreter::set_entry_for_kind(AbstractInterpreter::MethodKind kind, address entry) {
+  //  _entry_table[kind] = entry;
+  // }
+
+
   // 这里涉及到Java方法的类型MethodKind，由于要通过entry_point进入Java世界，执行Java方法相关的逻辑，所以entry_point中一定会为对应的Java方法建立新的栈帧，
   // 但是不同方法的栈帧其实是有差别的，如Java普通方法、Java同步方法、有native关键字的Java方法等，所以就把所有的方法进行了归类，不同类型获取到不同的entry_point入口。
   // 到底有哪些类型，我们可以看一下MethodKind这个枚举类中定义出的枚举常量

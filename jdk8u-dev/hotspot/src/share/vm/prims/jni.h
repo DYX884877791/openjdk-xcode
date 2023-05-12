@@ -273,6 +273,7 @@ struct JNINativeInterface_ {
     void *reserved2;
 
     void *reserved3;
+    // 下面的这些函数定义都是在hotspot/src/share/vm/prims/jni.cpp中
     jint (JNICALL *GetVersion)(JNIEnv *env);
 
     jclass (JNICALL *DefineClass)

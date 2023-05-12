@@ -1317,6 +1317,7 @@ static void jni_invoke_static(JNIEnv *env, JavaValue* result, jobject receiver, 
   // the jni parser
   ResourceMark rm(THREAD);
   int number_of_parameters = method->size_of_parameters();
+  // 这里进一步将要传给Java的参数转换为JavaCallArguments对象传下去
   JavaCallArguments java_args(number_of_parameters);
   args->set_java_argument_object(&java_args);
 
@@ -1328,6 +1329,8 @@ static void jni_invoke_static(JNIEnv *env, JavaValue* result, jobject receiver, 
   result->set_type(args->get_ret_type());
 
   // Invoke the method. Result is returned as oop.
+  // 真正底层实现的开始。这个方法只是层皮，把JavaCalls::call_helper()
+  // 用os::os_exception_wrapper()包装起来，目的是设置HotSpot VM的C++层面的异常处理
   JavaCalls::call(result, method, &java_args, CHECK);
 
   // Convert result
@@ -2508,6 +2511,10 @@ DT_VOID_RETURN_MARK_DECL(CallStaticVoidMethodA
                          , HOTSPOT_JNI_CALLSTATICVOIDMETHODA_RETURN());
 #endif /* USDT2 */
 
+/**
+ * HotSpot VM里对JNI的CallStaticVoidMethod的实现。
+ * 留意要传给Java方法的参数以C的可变长度参数传入，这个函数将其收集打包为JNI_ArgumentPusherVaArg对象
+ */
 JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID methodID, ...))
   JNIWrapper("CallStaticVoidMethod");
 #ifndef USDT2
