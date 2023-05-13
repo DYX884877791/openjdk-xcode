@@ -83,6 +83,10 @@
 #include "utilities/events.hpp"
 #include "utilities/preserveException.hpp"
 #include "utilities/macros.hpp"
+extern "C"
+{
+  #include "utilities/slog.hpp"
+}
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -3384,6 +3388,8 @@ void Threads::threads_do(ThreadClosure* tc) {
 // 看看Threads::create_vm是在何处调用的，我们进入hotspot/src/share/vm/prims/jni.cpp，找到JNI_CreateJavaVM方法
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
+  slog_debug("Threads::create_vm starting...");
+
   extern void JDK_Version_init();
 
   // Preinitialize version info.
@@ -3392,7 +3398,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Check version
     //检查当前JDK版本是否支持代码编译的JDK版本
-  if (!is_supported_jni_version(args->version)) return JNI_EVERSION;
+  if (!is_supported_jni_version(args->version)) {
+    return JNI_EVERSION;
+  }
 
   // Initialize the output stream module
     //流模块的初始化
@@ -3430,7 +3438,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
     //设置系统参数，如是否使用指针压缩，堆内存大小，GC参数等
   jint ergo_result = Arguments::apply_ergo();
-  if (ergo_result != JNI_OK) return ergo_result;
+  if (ergo_result != JNI_OK) {
+    return ergo_result;
+  }
 
   if (PauseAtStartup) {
       //解析启动文件
@@ -3493,6 +3503,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   vm_init_globals();
 
   // Attach the main thread to this os thread
+  slog_debug("Attach the main thread to this os thread");
     //创建一个新的JavaThread并设置相关属性，注意这里并未创建一个新的线程，而是将当前线程同JavaThread对象关联起来，通过JavaThread管理相关属性
   JavaThread* main_thread = new JavaThread();
   main_thread->set_thread_state(_thread_in_vm);
@@ -3549,6 +3560,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Create the VMThread
     // 创建VMThread
+  slog_debug("Start VMThread...");
   { TraceTime timer("Start VMThread", TraceStartupTime);
     VMThread::create();
     Thread* vmthread = VMThread::vm_thread();
@@ -3598,6 +3610,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
     //加载核心Java类文件
   {
+    slog_debug("Initialize java.lang classes...");
     TraceTime timer("Initialize java.lang classes", TraceStartupTime);
 
     if (EagerXrunInit && Arguments::init_libraries_at_startup()) {
@@ -3763,6 +3776,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // initialize compiler(s)
     // c1 和 c2编译器初始化，会创建编译线程
 #if defined(COMPILER1) || defined(COMPILER2) || defined(SHARK)
+  slog_debug("c1 和 c2编译器初始化，会创建编译线程");
   CompileBroker::compilation_init();
 #endif
 

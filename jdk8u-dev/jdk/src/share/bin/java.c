@@ -52,7 +52,6 @@
 
 
 #include "java.h"
-
 /*
  * A NOTE TO DEVELOPERS: For performance reasons it is important that
  * the program image remain relatively small until after SelectVersion
@@ -168,6 +167,17 @@ static jlong threadStackSize    = 0;  /* stack size of the new thread */
 static jlong maxHeapSize        = 0;  /* max heap size */
 static jlong initialHeapSize    = 0;  /* inital heap size */
 
+void greet()
+{
+    /* Get and print slog version */
+    char sVersion[128];
+    slog_version(sVersion, sizeof(sVersion), 0);
+
+    printf("=========================================\n");
+    printf("SLog Version: %s\n", sVersion);
+    printf("=========================================\n");
+}
+
 /*
  * JLI_Launch作为启动器，创建了一个新线程执行JavaMain函数，JLI_Launch所在的线程称为启动线程，执行JavaMain函数的称之为Main线程。JavaMain函数的主要流程如下：
  *
@@ -225,6 +235,11 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     _wc_enabled = cpwildcard;
     _ergo_policy = ergo;
 
+
+    slog_init("java", SLOG_FLAGS_ALL, 0);
+    slog_debug("JLI_Launch start!");
+
+
     /*
      * InitLauncher函数设置调试开关，如果环境变量_JAVA_LAUNCHER_DEBUG有定义则开启Launcher的调试模式，后续调用JLI_IsTraceLauncher函数会返回真（即值1）；
      */
@@ -280,10 +295,12 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     ifn.CreateJavaVM = 0;
     ifn.GetDefaultJavaVMInitArgs = 0;
 
-    if (JLI_IsTraceLauncher()) {
-        start = CounterGet();
-    }
+    // if (JLI_IsTraceLauncher()) {
+    //     start = CounterGet();
+    // }
+    start = CounterGet();
 
+    slog_debug("will LoadJavaVM");
     /*
      * LoadJavaVM函数从JVM动态库获取函数指针；
      *
@@ -295,10 +312,11 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
         return(6);
     }
 
-    if (JLI_IsTraceLauncher()) {
-        end   = CounterGet();
-    }
-
+    // if (JLI_IsTraceLauncher()) {
+    //     end   = CounterGet();
+    // }
+    end   = CounterGet();
+    slog_debug("%ld micro seconds to LoadJavaVM", (long)(jint)Counter2Micros(end-start));
     JLI_TraceLauncher("%ld micro seconds to LoadJavaVM\n",
              (long)(jint)Counter2Micros(end-start));
 
@@ -403,6 +421,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
             ret = 1; \
         } \
         if (JNI_TRUE) { \
+            slog_debug("will DestroyJavaVM..."); \
             (*vm)->DestroyJavaVM(vm); \
             return ret; \
         } \
@@ -432,6 +451,8 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 int JNICALL
 JavaMain(void * _args)
 {
+
+    slog_debug("JavaMain starting...");
     JavaMainArgs *args = (JavaMainArgs *)_args;
     int argc = args->argc;
     char **argv = args->argv;
@@ -454,6 +475,7 @@ JavaMain(void * _args)
 
     /* Initialize the virtual machine */
     start = CounterGet();
+    slog_debug("will InitializeJVM...");
     // InitializeJVM函数进一步初始化JVM，它会调用之前初始化的 ifn 数据结构中的 CreateJavaVM 函数.
     if (!InitializeJVM(&vm, &env, &ifn)) {
         JLI_ReportErrorMessage(JVM_ERROR1);
@@ -481,9 +503,10 @@ JavaMain(void * _args)
     }
 
     FreeKnownVMs();  /* after last possible PrintUsage() */
-
+    end = CounterGet();
+    slog_debug("%ld micro seconds to InitializeJVM",  (long)(jint)Counter2Micros(end-start));
     if (JLI_IsTraceLauncher()) {
-        end = CounterGet();
+        // end = CounterGet();
         JLI_TraceLauncher("%ld micro seconds to InitializeJVM\n",
                (long)(jint)Counter2Micros(end-start));
     }
@@ -541,6 +564,7 @@ JavaMain(void * _args)
      * This method also correctly handles launching existing JavaFX
      * applications that may or may not have a Main-Class manifest entry.
      */
+    slog_debug("will load main class...");
     mainClass = LoadMainClass(env, mode, what);
     CHECK_EXCEPTION_NULL_LEAVE(mainClass);
     /*
@@ -597,6 +621,7 @@ JavaMain(void * _args)
      * 调用main方法.
      * 最终位置是在hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethod函数中
      **/
+    slog_debug("will CallStaticVoidMethod");
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
 
     /*
@@ -606,6 +631,7 @@ JavaMain(void * _args)
      * System.exit) will be non-zero if main threw an exception.
      */
     ret = (*env)->ExceptionOccurred(env) == NULL ? 0 : 1;
+    slog_debug("will LEAVE...");
     LEAVE();
 }
 
@@ -1362,6 +1388,9 @@ ParseArguments(int *pargc, char ***pargv,
 static jboolean
 InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
 {
+
+    slog_debug("InitializeJVM starting...");
+
     // args结构体表示JVM启动选项，全局变量options指向先前TranslateApplicationArgs函数和ParseArguments函数添加或解析的JVM启动选项，另一个全局变量numOptions则保存了选项个数；
 
 
@@ -1386,6 +1415,7 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
                    i, args.options[i].optionString);
     }
 
+    slog_debug("will call CreateJavaVM function in jni.cpp");
     //ifn结构体的CreateJavaVM函数指针即指向JVM动态库中的JNI_CreateJavaVM函数。
     // JNI_CreateJavaVM函数定义在文件hotspot/src/share/vm/prims/jni.cpp中
     r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
@@ -1468,6 +1498,8 @@ NewPlatformStringArray(JNIEnv *env, char **strv, int strc)
 static jclass
 LoadMainClass(JNIEnv *env, int mode, char *name)
 {
+
+    slog_debug("LoadMainClass starting...");
     jmethodID mid;
     jstring str;
     jobject result;
@@ -2198,6 +2230,7 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
                     int mode, char *what, int ret)
 {
 
+    slog_debug("ContinueInNewThread starting...");
     /*
      * 设置线程栈大小
      *

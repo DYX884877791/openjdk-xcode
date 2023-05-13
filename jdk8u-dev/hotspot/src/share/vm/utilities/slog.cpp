@@ -1,42 +1,40 @@
 /*
- * Copyright (c) 2005, 2012, Oracle and/or its affiliates. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ * The MIT License (MIT)
  *
- * This code is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ *  Copyleft (C) 2015-2023  Sun Dro (s.kalatoz@gmail.com)
  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * You should have received a copy of the GNU General Public License version
- * 2 along with this work; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
- * or visit www.oracle.com if you need additional information or have any
- * questions.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE
  */
-
-#include <stdio.h>
-#include <string.h>
-#include <jni.h>
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 
+#include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <errno.h>
 #include <time.h>
+#include "slog.hpp"
 
 #include <pthread.h>
 #ifdef __linux__
@@ -49,116 +47,9 @@
 #include <windows.h>
 #endif
 
-#ifndef PTHREAD_MUTEX_RECURSIVE
+#ifndef PTHREAD_MUTEX_RECURSIVE 
 #define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE_NP
 #endif
-
-#include "jli_util.h"
-
-/*
- * Returns a pointer to a block of at least 'size' bytes of memory.
- * Prints error message and exits if the memory could not be allocated.
- */
-void *
-JLI_MemAlloc(size_t size)
-{
-    void *p = malloc(size);
-    if (p == 0) {
-        perror("malloc");
-        exit(1);
-    }
-    return p;
-}
-
-/*
- * Equivalent to realloc(size).
- * Prints error message and exits if the memory could not be reallocated.
- */
-void *
-JLI_MemRealloc(void *ptr, size_t size)
-{
-    void *p = realloc(ptr, size);
-    if (p == 0) {
-        perror("realloc");
-        exit(1);
-    }
-    return p;
-}
-
-/*
- * Wrapper over strdup(3C) which prints an error message and exits if memory
- * could not be allocated.
- */
-char *
-JLI_StringDup(const char *s1)
-{
-    char *s = strdup(s1);
-    if (s == NULL) {
-        perror("strdup");
-        exit(1);
-    }
-    return s;
-}
-
-/*
- * Very equivalent to free(ptr).
- * Here to maintain pairing with the above routines.
- */
-void
-JLI_MemFree(void *ptr)
-{
-    free(ptr);
-}
-
-/*
- * debug helpers we use
- */
-static jboolean _launcher_debug = JNI_FALSE;
-
-void
-JLI_TraceLauncher(const char* fmt, ...)
-{
-    va_list vl;
-    if (_launcher_debug != JNI_TRUE) return;
-    va_start(vl, fmt);
-    vprintf(fmt,vl);
-    va_end(vl);
-}
-
-void
-JLI_SetTraceLauncher()
-{
-   if (getenv(JLDEBUG_ENV_ENTRY) != 0) {
-        _launcher_debug = JNI_TRUE;
-        JLI_TraceLauncher("----%s----\n", JLDEBUG_ENV_ENTRY);
-   }
-}
-
-void
-JLI_EnableTraceLauncher()
-{
-    _launcher_debug = JNI_TRUE;
-    return;
-}
-
-void
-JLI_DisableTraceLauncher()
-{
-    _launcher_debug = JNI_FALSE;
-    return;
-}
-
-jboolean
-JLI_IsTraceLauncher()
-{
-   return _launcher_debug;
-}
-
-int
-JLI_StrCCmp(const char *s1, const char* s2)
-{
-   return JLI_StrNCmp(s1, s2, JLI_StrLen(s2));
-}
 
 typedef struct slog {
     unsigned int nTdSafe:1;
@@ -468,16 +359,13 @@ static void slog_display_stack(const slog_context_t *pCtx, va_list args)
 
 void slog_display(slog_flag_t eFlag, const char *pFormat, ...)
 {
-
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
     }
-
     if (pFormat == NULL) {
         return;
     }
-
 
     slog_lock(g_slog);
     slog_config_t *pCfg = g_slog->config;
@@ -530,6 +418,7 @@ slog_config_t * slog_config_get() {
 }
 
 void slog_config_set(slog_config_t *pCfg) {
+
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
@@ -546,10 +435,12 @@ void slog_config_set(slog_config_t *pCfg) {
 
 void slog_enable(slog_flag_t eFlag)
 {
+
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
     }
+
     slog_lock(g_slog);
     slog_config_t *pCfg = g_slog->config;
 
@@ -581,7 +472,7 @@ void slog_disable(slog_flag_t eFlag)
     slog_unlock(g_slog);
 }
 
-void slog_separator_set(const char *pFormat, ...) {
+void slog_separator_set(const char *pFormat, ...){
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
@@ -639,10 +530,9 @@ void slog_callback_set(slog_cb_t callback, void *pContext)
 
 void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
 {
-
     /* Set up default values */
-    g_slog = malloc(sizeof(slog_t));
-    g_slog->config = malloc(sizeof(slog_config_t));
+    g_slog = (slog_t*)malloc(sizeof(slog_t));
+    g_slog->config = (slog_config_t*)malloc(sizeof(slog_config_t));
     g_slog->config->eColorFormat = SLOG_COLORING_TAG;
     g_slog->config->eDateControl = SLOG_DATE_FULL;
     g_slog->config->pCallbackCtx = NULL;

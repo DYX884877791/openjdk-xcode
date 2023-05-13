@@ -82,6 +82,7 @@
 #include "utilities/dtrace.hpp"
 #include "utilities/events.hpp"
 #include "utilities/histogram.hpp"
+#include "utilities/slog.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -2524,7 +2525,7 @@ JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID meth
                                          env, cls, (uintptr_t) methodID);
 #endif /* USDT2 */
   DT_VOID_RETURN_MARK(CallStaticVoidMethod);
-
+  slog_trace("jni_CallStaticVoidMethod starting...");
   va_list args;
   va_start(args, methodID);
   JavaValue jvalue(T_VOID);
@@ -5227,6 +5228,9 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
                                  (void **) vm, penv, args);
 #endif /* USDT2 */
 
+  slog_init("hotspot", SLOG_FLAGS_ALL, 0);
+  slog_trace("JNI_CreateJavaVM starting");
+
   jint result = JNI_ERR;
   DT_RETURN_MARK(CreateJavaVM, jint, (const jint&)result);
 
@@ -5280,6 +5284,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
    */
   bool can_try_again = true;
 
+  slog_trace("will call Threads::create_vm");
     //完成JVM的初始化，如果初始化过程中出现不可恢复的异常则can_try_again会被置为false
     // 位于\hotspot\src\share\vm\runtime\目录下的thread.cpp中
   result = Threads::create_vm((JavaVMInitArgs*) args, &can_try_again);
@@ -5313,8 +5318,12 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
 
     // Check if we should compile all classes on bootclasspath
       //根据配置加载类路径中所有的类
-    if (CompileTheWorld) ClassLoader::compile_the_world();
-    if (ReplayCompiles) ciReplay::replay(thread);
+    if (CompileTheWorld) {
+      ClassLoader::compile_the_world();
+    }
+    if (ReplayCompiles) {
+      ciReplay::replay(thread);
+    }
 
     // Some platforms (like Win*) need a wrapper around these test
     // functions in order to properly handle error conditions.
@@ -5395,7 +5404,8 @@ jint JNICALL jni_DestroyJavaVM(JavaVM *vm) {
 #endif /* USDT2 */
   jint res = JNI_ERR;
   DT_RETURN_MARK(DestroyJavaVM, jint, (const jint&)res);
-
+  slog_trace("JNI_DestroyJavaVM starting...");
+  slog_destroy();
   if (!vm_created) {
     res = JNI_ERR;
     return res;

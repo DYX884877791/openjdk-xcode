@@ -37,6 +37,8 @@ static void dummyCallback(void * info) {};
 #endif
  
 #define  BUFFER_SIZE         256
+
+
 // JDK_PATH是编译时指定的宏
 #define  LIB_JVM_PATH        JDK_PATH       "/lib/server/libjvm." LIB_SUFFIX
  

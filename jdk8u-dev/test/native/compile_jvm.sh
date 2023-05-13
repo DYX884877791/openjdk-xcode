@@ -10,6 +10,9 @@ source ./setenv.sh
 
 cd $cur_dir
 make compileJava
+
+echo "编译Java文件成功,即将编译测试用例代码"
+
 $base_dir/common/bin/logger.sh $build_dir/build.log make jvm
 	# -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" \
 	# -framework CoreFoundation
@@ -21,6 +24,8 @@ $base_dir/common/bin/logger.sh $build_dir/build.log make jvm
 	# -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/share/native/common \
 	# -I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/jdk/src/solaris/native/common \
 	# -iframework "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk/System/Library/Frameworks" \
+
+echo "编译测试用例代码成功,即将执行该测试用例"
 
 cd $build_dir
 ./jvm

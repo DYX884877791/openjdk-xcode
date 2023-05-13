@@ -309,6 +309,7 @@ void JavaCalls::call(JavaValue* result, methodHandle method, JavaCallArguments* 
 }
 
 void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArguments* args, TRAPS) {
+  slog_trace("JavaCalls::call_helper starting...");
   // During dumping, Java execution environment is not fully initialized. Also, Java execution
   // may cause undesirable side-effects in the class metadata.
   assert(!DumpSharedSpaces, "must not execute Java bytecodes when dumping");
@@ -368,6 +369,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
   // 这个参数会做为实参传递给StubRoutines::call_stub()函数指针指向的“函数”
   // EntryPoint例程:是从当前要执行的Java方法中获取的： hotspot/src/share/vm/oops/method.hpp
   address entry_point = method->from_interpreted_entry();
+  slog_trace("method entry_point address is %p", entry_point);
   if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
     entry_point = method->interpreter_entry();
   }

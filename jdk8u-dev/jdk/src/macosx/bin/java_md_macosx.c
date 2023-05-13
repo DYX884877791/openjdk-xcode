@@ -24,6 +24,7 @@
  */
 
 #include "java.h"
+#include "jli_util.h"
 #include "jvm_md.h"
 #include <dirent.h>
 #include <dlfcn.h>
@@ -684,6 +685,7 @@ GetJREPath(char *path, jint pathsize, const char * arch, jboolean speculative)
 jboolean
 LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 {
+    slog_trace("LoadJavaVM starting...");
     Dl_info dlinfo;
     void *libjvm;
 
@@ -702,6 +704,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
     }
+    slog_trace("get the JNI_CreateJavaVM function pointer successfully, the address is %p", ifn->CreateJavaVM);
 
     ifn->GetDefaultJavaVMInitArgs = (GetDefaultJavaVMInitArgs_t)
         dlsym(libjvm, "JNI_GetDefaultJavaVMInitArgs");
@@ -870,6 +873,7 @@ void SplashFreeLibrary() {
  */
 int
 ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void * args) {
+    slog_debug("ContinueInNewThread0 starting...");
     int rslt;
     pthread_t tid;
     pthread_attr_t attr;
@@ -881,6 +885,7 @@ ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void
     }
 
     if (pthread_create(&tid, &attr, (void *(*)(void*))continuation, (void*)args) == 0) {
+        slog_debug("pthread_create success...");
       void * tmp;
       pthread_join(tid, &tmp);
       rslt = (int)tmp;
@@ -1037,6 +1042,7 @@ int
 JVMInit(InvocationFunctions* ifn, jlong threadStackSize,
                  int argc, char **argv,
                  int mode, char *what, int ret) {
+    slog_debug("JVMInit starting, sameThread is %d", sameThread);
     if (sameThread) {
         JLI_TraceLauncher("In same thread\n");
         // need to block this thread against the main thread
