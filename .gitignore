@@ -5,6 +5,7 @@ dist/
 jdk8u-dev/config.log
 jdk8u-dev/configure.log
 jdk8u-dev/build.log
+jdk8u-dev/compile_commands.json
 .DS_Store
 .tags*
 jdk8udev.zip
