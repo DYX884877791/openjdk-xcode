@@ -10,6 +10,10 @@
 #include <pthread.h>
 
 #include <jni.h>
+#include <string.h>
+#include <dlfcn.h>
+#include <unistd.h>
+#include <syscall.h>
  
 #ifdef __APPLE__
 #define _DARWIN_BETTER_REALPATH
@@ -22,8 +26,12 @@ static void dummyCallback(void * info) {};
 #define  LIB_SUFFIX "dll"
 #elif __APPLE__
 #define  LIB_SUFFIX "dylib"
+// JDK_PATH是编译时指定的宏
+#define  LIB_JVM_PATH        JDK_PATH       "/lib/server/libjvm." LIB_SUFFIX
 #else
 #define  LIB_SUFFIX "so"
+// JDK_PATH是编译时指定的宏
+#define  LIB_JVM_PATH        JDK_PATH       "/lib/amd64/server/libjvm." LIB_SUFFIX
 #endif
  
 #ifdef  _WINDOWS
@@ -39,8 +47,7 @@ static void dummyCallback(void * info) {};
 #define  BUFFER_SIZE         256
 
 
-// JDK_PATH是编译时指定的宏
-#define  LIB_JVM_PATH        JDK_PATH       "/lib/server/libjvm." LIB_SUFFIX
+
  
 #define  JNI_CREATE_JNI      "JNI_CreateJavaVM"
  
@@ -95,7 +102,7 @@ static void load_jvm(JNIEnv **ppEnv, JavaVM **ppJvm)
     char pJvmPath[BUFFER_SIZE] = {0};
  
     strcpy(pJvmPath, LIB_JVM_PATH);
-    
+    printf("JvmPath is %s\n", pJvmPath);
     g_pLibHandler = LIB_OPEN(pJvmPath, RTLD_NOW | RTLD_GLOBAL);
     if (g_pLibHandler == NULL)
     {
@@ -168,7 +175,7 @@ static void run_java_class()
     g_pJniEnv->CallStaticVoidMethod(g_jMainClass, g_jMainMethod, NULL);
 }
  
-void* thread_function(void* pData)
+void thread_function()
 {
  
     printf("jvm will load\n");
@@ -178,12 +185,16 @@ void* thread_function(void* pData)
 
     run_java_class();
  
-    return NULL;
+    return;
 }
 
 
 int main(const int argc, const char** argv) {
-    thread_function(NULL);
+    thread_function();
     release_for_exit();
+    printf("gettid is %lu\n",(size_t)syscall(__NR_gettid));
+    printf("pthread_self is %lu\n",(size_t)pthread_self());
+    printf("pid is %lu\n",(size_t)getpid());
+    sleep(600);
     return 0;
 }

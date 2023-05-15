@@ -1246,6 +1246,17 @@ class vmIntrinsics: AllStatic {
 
     ID_LIMIT,
     LAST_COMPILER_INLINE = _prefetchWriteStatic,
+    /**
+     * _linkToInterface和_invokeGeneric都是上面的VM_INTRINSICS_DO宏产生的枚举，
+     * 这两个之前的其他枚举如下：
+     * do_intrinsic(_invokeGeneric,            java_lang_invoke_MethodHandle, invoke_name,           star_name, F_RN)        \
+     * do_intrinsic(_invokeBasic,              java_lang_invoke_MethodHandle, invokeBasic_name,      star_name, F_RN)        \
+     * do_intrinsic(_linkToVirtual,            java_lang_invoke_MethodHandle, linkToVirtual_name,    star_name, F_SN)        \
+     * do_intrinsic(_linkToStatic,             java_lang_invoke_MethodHandle, linkToStatic_name,     star_name, F_SN)        \
+     * do_intrinsic(_linkToSpecial,            java_lang_invoke_MethodHandle, linkToSpecial_name,    star_name, F_SN)        \
+     * do_intrinsic(_linkToInterface,          java_lang_invoke_MethodHandle, linkToInterface_name,  star_name, F_SN)        \
+     * _linkToInterface和_invokeGeneric中间的值其实都是MethodKind的合法枚举
+     */
     FIRST_MH_SIG_POLY    = _invokeGeneric,
     FIRST_MH_STATIC      = _linkToVirtual,
     LAST_MH_SIG_POLY     = _linkToInterface,

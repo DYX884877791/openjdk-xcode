@@ -1408,6 +1408,9 @@ static bool register_natives(JNIEnv* env, jclass clazz, const JNINativeMethod* m
 /**
  * This one function is exported, used by NativeLookup.
  */
+ // 该函数的调用点是：hotspot/src/share/vm/prims/nativeLookup.cpp的lookup_special_native_methods数组
+ //  即执行Java_java_lang_invoke_MethodHandleNatives_registerNatives本地方法时，会执行MethodHandles::generate_adapters()方法，
+ //  registerNatives方法是在MethodHandleNatives第一次加载的时候通过static块自动执行的
 JVM_ENTRY(void, JVM_RegisterMethodHandleMethods(JNIEnv *env, jclass MHN_class)) {
   if (!EnableInvokeDynamic) {
     warning("JSR 292 is disabled in this JVM.  Use -XX:+UnlockDiagnosticVMOptions -XX:+EnableInvokeDynamic to enable.");

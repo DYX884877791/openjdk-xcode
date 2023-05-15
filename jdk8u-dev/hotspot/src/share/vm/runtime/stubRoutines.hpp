@@ -92,7 +92,10 @@
 // 4. implement the corresponding generator function in the platform-dependent
 //    stubGenerator_<arch>.cpp file and call the function in generate_all() of that file
 
-
+/**
+ * StubRoutines是一个包含一系列编译程序或者JVM运行时系统使用的关键函数的地址的Holder类，其定义在hotspot src/share/vm/runtime/stubRoutines.hpp中。
+ * 可以通过StubRoutines获取这些函数的内存地址，然后通过指针的方式调用目标函数
+ */
 class StubRoutines: AllStatic {
 
  public:
@@ -244,6 +247,9 @@ class StubRoutines: AllStatic {
 
  public:
   // Initialization/Testing
+  // 重点关注StubRoutines的两个静态初始化方法initialize1和initialize2方法的实现，以此为入口了解该类的用法
+  // 最终都是在init_globals一个方法中调用的，不过initialize1在前，在universe初始化前执行，initialize2在universe初始化完成后执行
+  // 见hotspot/src/share/vm/runtime/init.cpp的init_globals函数
   static void    initialize1();                            // must happen before universe::genesis
   static void    initialize2();                            // must happen after  universe::genesis
 
@@ -268,6 +274,7 @@ class StubRoutines: AllStatic {
 
   // Calls to Java
   // CallStub是一个函数指针，返回类型是void，并且有8个入参
+  // CallStub就是这个函数的别名，这个其实是解释器执行字节码的终极入口
   typedef void (*CallStub)(
           // 连接器
     address   link,

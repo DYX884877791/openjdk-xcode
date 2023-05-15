@@ -30,6 +30,7 @@
 
 #ifndef CC_INTERP
 
+// TemplateInterpreterGenerator的定义位于同目录的templateInterpreterGenerator.hpp中，在AbstractInterpreterGenerator的基础上主要添加了一些protected方法
 class TemplateInterpreterGenerator: public AbstractInterpreterGenerator {
  protected:
 

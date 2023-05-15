@@ -2525,7 +2525,7 @@ JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID meth
                                          env, cls, (uintptr_t) methodID);
 #endif /* USDT2 */
   DT_VOID_RETURN_MARK(CallStaticVoidMethod);
-  slog_trace("jni_CallStaticVoidMethod starting...");
+  slog_trace("jni_CallStaticVoidMethod函数被调用了...");
   va_list args;
   va_start(args, methodID);
   JavaValue jvalue(T_VOID);
@@ -4013,7 +4013,9 @@ static Method* find_prefixed_native(KlassHandle k,
 }
 
 static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, address entry, TRAPS) {
+    //根据方法名和方法签名查找对应的Method
   Method* method = k()->lookup_method(name, signature);
+    //查找失败抛出异常
   if (method == NULL) {
     ResourceMark rm;
     stringStream st;
@@ -4021,6 +4023,7 @@ static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, addr
              Method::name_and_sig_as_C_string(k(), name, signature));
     THROW_MSG_(vmSymbols::java_lang_NoSuchMethodError(), st.as_string(), false);
   }
+    //如果不是本地方法抛出异常
   if (!method->is_native()) {
     // trying to register to a non-native method, see if a JVM TI agent has added prefix(es)
     method = find_prefixed_native(k, name, signature, THREAD);
@@ -4032,13 +4035,15 @@ static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, addr
       THROW_MSG_(vmSymbols::java_lang_NoSuchMethodError(), st.as_string(), false);
     }
   }
-
+    //如果方法调用地址不为空，则设置set_native_function
   if (entry != NULL) {
     method->set_native_function(entry,
       Method::native_bind_event_is_interesting);
   } else {
+      //如果为空，则将其重置成初始状态
     method->clear_native_function();
   }
+    //打印日志
   if (PrintJNIResolving) {
     ResourceMark rm(THREAD);
     tty->print_cr("[Registering JNI native method %s.%s]",
@@ -4055,11 +4060,13 @@ DT_RETURN_MARK_DECL(RegisterNatives, jint
                     , HOTSPOT_JNI_REGISTERNATIVES_RETURN(_ret_ref));
 #endif /* USDT2 */
 
+//  jni_RegisterNatives用于注册本地方法的实现，即完成本地方法与本地实现代码的绑定
 JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
                                     const JNINativeMethod *methods,
                                     jint nMethods))
   JNIWrapper("RegisterNatives");
 #ifndef USDT2
+    // DTRACE_PROBE4和DT_RETURN_MARK都是打印DTRACE日志
   DTRACE_PROBE4(hotspot_jni, RegisterNatives__entry, env, clazz, methods, nMethods);
 #else /* USDT2 */
   HOTSPOT_JNI_REGISTERNATIVES_ENTRY(
@@ -4067,9 +4074,9 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
 #endif /* USDT2 */
   jint ret = 0;
   DT_RETURN_MARK(RegisterNatives, jint, (const jint&)ret);
-
+    //获取方法所属的klass
   KlassHandle h_k(thread, java_lang_Class::as_Klass(JNIHandles::resolve_non_null(clazz)));
-
+    //遍历JNINativeMethod数组
   for (int index = 0; index < nMethods; index++) {
     const char* meth_name = methods[index].name;
     const char* meth_sig = methods[index].signature;
@@ -4078,9 +4085,10 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
     // The class should have been loaded (we have an instance of the class
     // passed in) so the method and signature should already be in the symbol
     // table.  If they're not there, the method doesn't exist.
+      //获取方法名和方法签名在符号表中对应的符号，因为指定方法已经完成加载所以这两个符号都已经存在
     TempNewSymbol  name = SymbolTable::probe(meth_name, meth_name_len);
     TempNewSymbol  signature = SymbolTable::probe(meth_sig, (int)strlen(meth_sig));
-
+    //这两个符号引用任意一个为空则抛出异常
     if (name == NULL || signature == NULL) {
       ResourceMark rm;
       stringStream st;
@@ -4088,9 +4096,10 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
       // Must return negative value on failure
       THROW_MSG_(vmSymbols::java_lang_NoSuchMethodError(), st.as_string(), -1);
     }
-
+      //设置native_function,fnPtr属性就是对应本地方法的入口地址
     bool res = register_native(h_k, name, signature,
                                (address) methods[index].fnPtr, THREAD);
+      //如果register_native执行失败
     if (!res) {
       ret = -1;
       break;
@@ -5229,7 +5238,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
 #endif /* USDT2 */
 
   slog_init("hotspot", SLOG_FLAGS_ALL, 0);
-  slog_trace("JNI_CreateJavaVM starting");
+  slog_trace("JNI_CreateJavaVM函数被调用了...");
 
   jint result = JNI_ERR;
   DT_RETURN_MARK(CreateJavaVM, jint, (const jint&)result);
@@ -5284,7 +5293,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
    */
   bool can_try_again = true;
 
-  slog_trace("will call Threads::create_vm");
+  slog_trace("即将调用Threads::create_vm函数...");
     //完成JVM的初始化，如果初始化过程中出现不可恢复的异常则can_try_again会被置为false
     // 位于\hotspot\src\share\vm\runtime\目录下的thread.cpp中
   result = Threads::create_vm((JavaVMInitArgs*) args, &can_try_again);
@@ -5404,9 +5413,9 @@ jint JNICALL jni_DestroyJavaVM(JavaVM *vm) {
 #endif /* USDT2 */
   jint res = JNI_ERR;
   DT_RETURN_MARK(DestroyJavaVM, jint, (const jint&)res);
-  slog_trace("JNI_DestroyJavaVM starting...");
-  slog_destroy();
+  slog_trace("JNI_DestroyJavaVM函数被调用了...");
   if (!vm_created) {
+    slog_destroy();
     res = JNI_ERR;
     return res;
   }
@@ -5419,6 +5428,7 @@ jint JNICALL jni_DestroyJavaVM(JavaVM *vm) {
   destroyargs.group = NULL;
   res = vm->AttachCurrentThread((void **)&env, (void *)&destroyargs);
   if (res != JNI_OK) {
+    slog_destroy();
     return res;
   }
 
@@ -5429,10 +5439,12 @@ jint JNICALL jni_DestroyJavaVM(JavaVM *vm) {
     // Should not change thread state, VM is gone
     vm_created = false;
     res = JNI_OK;
+    slog_destroy();
     return res;
   } else {
     ThreadStateTransition::transition_and_fence(thread, _thread_in_vm, _thread_in_native);
     res = JNI_ERR;
+    slog_destroy();
     return res;
   }
 }

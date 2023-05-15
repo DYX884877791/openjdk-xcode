@@ -25,6 +25,7 @@
 #ifndef SHARE_VM_RUNTIME_SIMPLETHRESHOLDPOLICY_INLINE_HPP
 #define SHARE_VM_RUNTIME_SIMPLETHRESHOLDPOLICY_INLINE_HPP
 
+//i是invocation_count，b是backedge_count，scale是阈值
 template<CompLevel level>
 bool SimpleThresholdPolicy::call_predicate_helper(int i, int b, double scale) {
   switch(level) {
@@ -39,6 +40,7 @@ bool SimpleThresholdPolicy::call_predicate_helper(int i, int b, double scale) {
   return true;
 }
 
+//i是invocation_count，b是backedge_count，scale是阈值,i没有使用
 template<CompLevel level>
 bool SimpleThresholdPolicy::loop_predicate_helper(int i, int b, double scale) {
   switch(level) {
@@ -53,7 +55,9 @@ bool SimpleThresholdPolicy::loop_predicate_helper(int i, int b, double scale) {
 
 // Simple methods are as good being compiled with C1 as C2.
 // Determine if a given method is such a case.
+//简单方法C1和C2编译的结果是一样的，is_trivial判断某个方法是不是这类方法
 bool SimpleThresholdPolicy::is_trivial(Method* method) {
+    //比如操作属性的get方法
   if (method->is_accessor() ||
       method->is_constant_getter()) {
     return true;

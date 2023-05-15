@@ -129,6 +129,7 @@ inline jdouble  OrderAccess::load_acquire(volatile jdouble* p) { return jdouble_
 
 inline intptr_t OrderAccess::load_ptr_acquire(volatile intptr_t*   p) { return *p; }
 inline void*    OrderAccess::load_ptr_acquire(volatile void*       p) { return *(void* volatile *)p; }
+//load_ptr_acquire先将p转换成指针的指针void* const volatile *,然后再取值
 inline void*    OrderAccess::load_ptr_acquire(const volatile void* p) { return *(void* const volatile *)p; }
 
 inline void     OrderAccess::release_store(volatile jbyte*   p, jbyte   v) { *p = v; }

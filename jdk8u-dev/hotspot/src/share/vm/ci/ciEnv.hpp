@@ -40,6 +40,11 @@ class CompileTask;
 //
 // This class is the top level broker for requests from the compiler
 // to the VM.
+// ciEnv继承自StackObj，其定义位于hotspot/src/share/vm/ci/ciEnv.hpp，相当于执行编译任务的一个中间类，充当编译器，后台编译线程同JVM运行时环境之间的桥梁
+
+//  ciEnv定义的public方法中大部分是读写属性相关的，重点关注用于注册编译结果的register_method方法和ciEnv本身的初始化和析构方法。
+//  ciEnv定义了大量的创建ciObject及其子类实例的私有方法，如get_klass_by_name，get_klass_by_index，get_field_by_index_impl等，
+//  这些私有方法可以被友元类CompileBroker和Dependencies两个类直接调用。
 class ciEnv : StackObj {
   CI_PACKAGE_ACCESS_TO
 
@@ -47,19 +52,33 @@ class ciEnv : StackObj {
   friend class Dependencies;  // for get_object, during logging
 
 private:
+    // 实际指向_ciEnv_arena
   Arena*           _arena;       // Alias for _ciEnv_arena except in init_shared_objects()
+  // 用来执行内存分配
   Arena            _ciEnv_arena;
+  // 系统字典修改计数器
   int              _system_dictionary_modification_counter;
+  // 用来创建ciObject及其子类实例，会借助_ciEnv_arena来获取内存
   ciObjectFactory* _factory;
+  // 用来临时保存被编译方法的oop_recorder
   OopRecorder*     _oop_recorder;
+  // 用来临时保存被编译方法的debug_info
   DebugInformationRecorder* _debug_info;
+  // 用来临时保存被编译方法的dependencies
   Dependencies*    _dependencies;
+  // 失败原因
   const char*      _failure_reason;
+  // 实际是一个枚举值表示方法编译情况，其枚举值有三个MethodCompilable，MethodCompilable_not_at_tier，MethodCompilable_never
   int              _compilable;
+  // 是否在编译时终止
   bool             _break_at_compile;
+  // 内联字节码的个数
   int              _num_inlined_bytecodes;
+  // 指向CompilerThread::task
   CompileTask*     _task;           // faster access to CompilerThread::task
+  // 指向CompilerThread::log
   CompileLog*      _log;            // faster access to CompilerThread::log
+  // 编译的数据
   void*            _compiler_data;  // compiler-specific stuff, if any
 
   char* _name_buffer;
@@ -294,6 +313,10 @@ public:
     MethodCompilable_never
   };
 
+  /**
+   * ciEnv的构造方法有两个，其中ciEnv(Arena* arena);只在编译器相关设施初始化时调用，这里忽略，
+   * 重点关注另外一个ciEnv(CompileTask* task, int system_dictionary_modification_counter);的实现
+   */
   ciEnv(CompileTask* task, int system_dictionary_modification_counter);
   // Used only during initialization of the ci
   ciEnv(Arena* arena);

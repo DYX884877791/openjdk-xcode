@@ -36,6 +36,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 
 
 // Initialization done by VM thread in vm_init_globals()
@@ -94,6 +95,7 @@ void vm_init_globals() {
 // 在init_globals()函数中调用bytecodes_init()函数初始化好字节码指令后会调用interpreter_init()函数初始化解释器。
 // 函数最终会调用到TemplateInterpreter::initialize()函数
 jint init_globals() {
+    slog_trace("init_globals函数被调用了...");
   HandleMark hm;
   management_init();
   bytecodes_init();

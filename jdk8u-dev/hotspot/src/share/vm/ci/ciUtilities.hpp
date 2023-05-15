@@ -35,6 +35,7 @@
 // Add a ci native entry wrapper?
 
 // Bring the compilation thread into the VM state.
+// THREAD不再是通常意义的JavaThread而是后台编译线程CompilerThread。
 #define VM_ENTRY_MARK                       \
   CompilerThread* thread=CompilerThread::current(); \
   ThreadInVMfromNative __tiv(thread);       \

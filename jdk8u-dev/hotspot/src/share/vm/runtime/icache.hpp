@@ -43,10 +43,14 @@
 class AbstractICache : AllStatic {
  public:
   // The flush stub signature
+  // _flush_icache_stub的第一个参数addr表示指令缓存的起始地址，第二个参数lines表示刷新的缓存行的行数，
+  // 第三个参数magic，用来将其作为调用结果，来表示stub正确的执行了。因为_flush_icache_stub的特殊性，
+  // 所以他必须在其他的stub生成前先生成，而且第一次调用_flush_icache_stub也是刷新_flush_icache_stub自身，因为stub还不存在所以第一次调用时不会真实的刷新。
   typedef int (*flush_icache_stub_t)(address addr, int lines, int magic);
 
  protected:
   // The flush stub function address
+  // _flush_icache_stub表示执行指令缓存刷新的stub
   static flush_icache_stub_t _flush_icache_stub;
 
   // Call the flush stub
@@ -58,7 +62,8 @@ class AbstractICache : AllStatic {
     line_size      = 0, // Icache line size in bytes
     log2_line_size = 0  // log2(line_size)
   };
-
+    // AbstractICache定义的方法只有三个，其中initialize用来初始化属性_flush_icache_stub，
+    // 另外两个方法是不同场景下用来刷新指令缓存的，invalidate_word和invalidate_range。
   static void initialize();
   static void invalidate_word(address addr);
   static void invalidate_range(address start, int nbytes);
@@ -88,7 +93,8 @@ class AbstractICache : AllStatic {
 #endif
 
 
-
+// ICacheStubGenerator继承自StubCodeGenerator，用来生成ICache中刷新指令缓存的stub，其定义在icache.hpp中，其定义的方法只有一个generate_icache_flush。
+// ICacheStubGenerator的实现跟特定CPU架构有关，通过configurations.xml指定
 class ICacheStubGenerator : public StubCodeGenerator {
  public:
   ICacheStubGenerator(CodeBuffer *c) : StubCodeGenerator(c) {}

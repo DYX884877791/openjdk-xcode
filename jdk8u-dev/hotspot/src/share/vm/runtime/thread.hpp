@@ -1834,6 +1834,9 @@ inline size_t JavaThread::stack_available(address cur_sp) {
 }
 
 // A thread used for Compilation.
+// CompilerThread表示一个专门执行后台编译的线程，其定义位于hospot/src/share/vm/runtime/thread.hpp中。
+// CompilerThread继承自JavaThread，在JavaThread的基础上添加了若干编译相关的属性。
+// 其定义的方法主要是读写属性的，重点关注其初始化方法
 class CompilerThread : public JavaThread {
   friend class VMStructs;
  private:

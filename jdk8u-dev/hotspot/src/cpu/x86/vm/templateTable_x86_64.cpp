@@ -36,6 +36,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "runtime/synchronizer.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 
 #ifndef CC_INTERP
 
@@ -95,14 +96,18 @@ static inline Address at_rsp() {
 
 // At top of Java expression stack which may be different than esp().  It
 // isn't for category 1 objects.
+//返回栈顶元素的内存地址
 static inline Address at_tos   () {
+  //rsp寄存器保存栈顶地址，expr_offset_in_bytes方法返回偏移量
   return Address(rsp,  Interpreter::expr_offset_in_bytes(0));
 }
 
+//返回栈顶第二个元素的内存地址
 static inline Address at_tos_p1() {
   return Address(rsp,  Interpreter::expr_offset_in_bytes(1));
 }
 
+//返回栈顶第三个元素的内存地址
 static inline Address at_tos_p2() {
   return Address(rsp,  Interpreter::expr_offset_in_bytes(2));
 }
@@ -663,11 +668,19 @@ void TemplateTable::daload() {
 }
 
 void TemplateTable::aaload() {
+  slog_trace("TemplateTable::aaload函数被调用了...");
+  //校验当前Template的itos与atos与指令配置是否相符
+  //aaload指令的栈顶是int类型的，表示待加载的数组索引，对应这里的itos
+  //aaload指令执行完成后栈顶的值是一个对象引用，表示读取的数组元素，对应这里的atos
   transition(itos, atos);
+  //pop_ptr表示把当前栈帧栈顶的值pop出来放到rdx中，因为操作数栈的栈顶在栈顶缓存下就是rax中的值
+  //所以当前栈帧栈顶的值就是一个数组引用
   __ pop_ptr(rdx);
   // eax: index
   // rdx: array
+  //根据数组引用，读取对应的数组长度，判断index是否在小于数组长度，如果否则抛出异常
   index_check(rdx, rax); // kills rbx
+  //根据数组索引，数组引用计算目标元素的位置，然后加载特定内存位置的值到rax中
   __ load_heap_oop(rax, Address(rdx, rax,
                                 UseCompressedOops ? Address::times_4 : Address::times_8,
                                 arrayOopDesc::base_offset_in_bytes(T_OBJECT)));
@@ -953,49 +966,67 @@ void TemplateTable::dastore() {
 }
 
 void TemplateTable::aastore() {
+
   Label is_null, ok_is_subtype, done;
+  //校验当前Template的itos与atos与指令配置是否相符
   transition(vtos, vtos);
   // stack: ..., array, index, value
+  //将栈顶的三个元素复制到寄存器中
   __ movptr(rax, at_tos());    // value
   __ movl(rcx, at_tos_p1()); // index
   __ movptr(rdx, at_tos_p2()); // array
 
+  //获取指定索引的数组元素的内存位置
   Address element_address(rdx, rcx,
                           UseCompressedOops? Address::times_4 : Address::times_8,
                           arrayOopDesc::base_offset_in_bytes(T_OBJECT));
 
+  //校验数组索引是否超过数组长度
   index_check(rdx, rcx);     // kills rbx
   // do array store check - check for NULL value first
+  //rax中的值非空校验，校验失败跳转到is_null标签
   __ testptr(rax, rax);
   __ jcc(Assembler::zero, is_null);
 
   // Move subklass into rbx
+  // 获取rax中的对象的Klass，将其引用放到rbx中
   __ load_klass(rbx, rax);
   // Move superklass into rax
+  // 将rdx中的数组对应的Klass的引用放到rax中
   __ load_klass(rax, rdx);
+  //将数组klass的数组元素的klass的引用放到rax中
   __ movptr(rax, Address(rax,
                          ObjArrayKlass::element_klass_offset()));
   // Compress array + index*oopSize + 12 into a single register.  Frees rcx.
+  //将element_address的内存地址放到rdx中
   __ lea(rdx, element_address);
 
   // Generate subtype check.  Blows rcx, rdi
   // Superklass in rax.  Subklass in rbx.
+  //检查value对应的klass，即rax中的klass引用，是否是数组元素klass即rax中的klass引用的子类型
+  //如果检查通过则跳转到ok_is_subtype
   __ gen_subtype_check(rbx, ok_is_subtype);
 
   // Come here on failure
   // object is at TOS
+  //检查失败，抛出异常
   __ jump(ExternalAddress(Interpreter::_throw_ArrayStoreException_entry));
 
   // Come here on success
+  // 检查成功
   __ bind(ok_is_subtype);
 
   // Get the value we will store
+  // 将栈顶的值即目标value再次拷贝到rax中
   __ movptr(rax, at_tos());
   // Now store using the appropriate barrier
+  //rdx中保存的是存入数组的内存位置，将rax中的值写入到对应的内存位置，会根据不同的BarrierSet类型执行不同操作
   do_oop_store(_masm, Address(rdx, 0), rax, _bs->kind(), true);
+  //完成
   __ jmp(done);
 
   // Have a NULL in rax, rdx=array, ecx=index.  Store NULL at ary[idx]
+  //保存NULL到数组中
   __ bind(is_null);
   __ profile_null_seen(rbx);
 
@@ -1003,7 +1034,9 @@ void TemplateTable::aastore() {
   do_oop_store(_masm, element_address, noreg, _bs->kind(), true);
 
   // Pop stack arguments
+  //操作结束
   __ bind(done);
+  //将rsp向高地址方向移动，即pop掉三个栈顶元素
   __ addptr(rsp, 3 * Interpreter::stackElementSize);
 }
 
@@ -1591,8 +1624,11 @@ void TemplateTable::float_cmp(bool is_float, int unordered_result) {
   __ bind(done);
 }
 
+//
 void TemplateTable::branch(bool is_jsr, bool is_wide) {
+  //将当前栈帧中保存的Method* 拷贝到rcx中
   __ get_method(rcx); // rcx holds method
+  //如果开启了profile则执行分支跳转相关的性能统计
   __ profile_taken_branch(rax, rbx); // rax holds updated MDP, rbx
                                      // holds bumped taken count
 
@@ -1602,21 +1638,27 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
                               InvocationCounter::counter_offset();
 
   // Load up edx with the branch displacement
+  //如果是宽指令
   if (is_wide) {
     __ movl(rdx, at_bcp(1));
   } else {
+    //将当前字节码位置往后偏移1字节处开始的2字节数据读取到rdx中
     __ load_signed_short(rdx, at_bcp(1));
   }
+  //将rdx中的值字节次序变反
   __ bswapl(rdx);
 
   if (!is_wide) {
+    //将rdx中的值右移16位，上述两步就是为了计算跳转分支的偏移量
     __ sarl(rdx, 16);
   }
+  //将rdx中的数据从2字节扩展成4字节
   __ movl2ptr(rdx, rdx);
 
   // Handle all the JSR stuff here, then exit.
   // It's much shorter and cleaner than intermingling with the non-JSR
   // normal-branch stuff occurring below.
+  //如果是jsr指令
   if (is_jsr) {
     // Pre-load the next target bytecode into rbx
     __ load_unsigned_byte(rbx, Address(r13, rdx, Address::times_1, 0));
@@ -1634,10 +1676,12 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
   }
 
   // Normal (non-jsr) branch handling
+  // 正常的分支跳转处理
 
   // Adjust the bcp in r13 by the displacement in rdx
+  //将当前字节码地址加上rdx保存的偏移量，计算跳转的目标地址
   __ addptr(r13, rdx);
-
+  //校验这两个属性必须都为true，即栈上替换必须要求使用UseLoopCounter，这两个默认值都是true
   assert(UseLoopCounter || !UseOnStackReplacement,
          "on-stack-replacement requires loop counters");
   Label backedge_counter_overflow;
@@ -1651,14 +1695,21 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
     // rdx: target offset
     // r13: target bcp
     // r14: locals pointer
+    //校验rdx是否大于0，如果大于0说明是往前跳转，如果小于0说明是往后跳转，如果大于0则跳转到dispatch，即通常的if分支判断
     __ testl(rdx, rdx);             // check if forward or backward branch
     __ jcc(Assembler::positive, dispatch); // count only if backward branch
 
     // check if MethodCounters exists
+    //如果是往回跳转，即通常的循环
+    // 当某个方法往回跳转的次数即循环的次数超过阈值会触发方法的即时编译，并且用编译后的本地代码替换掉原来的字节码指令，
+    // 所谓的栈上替换就是替换调用入口地址，将原来解释器上的变量，monitor等迁移到编译后的本地代码对应的栈帧中。
     Label has_counters;
+    //获取_method_counters属性的地址到rax中，并校验其是否非空
     __ movptr(rax, Address(rcx, Method::method_counters_offset()));
     __ testptr(rax, rax);
+    //如果非空则跳转到has_counters
     __ jcc(Assembler::notZero, has_counters);
+    //如果为空，则通过InterpreterRuntime::build_method_counters方法创建一个新的MethodCounters
     __ push(rdx);
     __ push(rcx);
     __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::build_method_counters),
@@ -1666,19 +1717,24 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
     __ pop(rcx);
     __ pop(rdx);
     __ movptr(rax, Address(rcx, Method::method_counters_offset()));
+    //如果创建失败，则跳转到到dispatch分支
     __ jcc(Assembler::zero, dispatch);
     __ bind(has_counters);
 
+    //如果启用分层编译，server模式下为true
     if (TieredCompilation) {
       Label no_mdo;
       int increment = InvocationCounter::count_increment;
       int mask = ((1 << Tier0BackedgeNotifyFreqLog) - 1) << InvocationCounter::count_shift;
+      //如果开启profile性能收集，server模式下默认为true
       if (ProfileInterpreter) {
         // Are we profiling?
+        // 获取_method_data属性到rbx中，并校验其是否为空，如果为空则跳转到no_mdo
         __ movptr(rbx, Address(rcx, in_bytes(Method::method_data_offset())));
         __ testptr(rbx, rbx);
         __ jccb(Assembler::zero, no_mdo);
         // Increment the MDO backedge counter
+        //_method_data属性不为空，则增加其中的backedge counter计数器，如果超过阈值则跳转到backedge_counter_overflow
         const Address mdo_backedge_counter(rbx, in_bytes(MethodData::backedge_counter_offset()) +
                                            in_bytes(InvocationCounter::counter_offset()));
         __ increment_mask_and_jump(mdo_backedge_counter, increment, mask, rax, false, Assembler::zero,
@@ -1688,32 +1744,42 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       __ bind(no_mdo);
       // Increment backedge counter in MethodCounters*
       __ movptr(rcx, Address(rcx, Method::method_counters_offset()));
+      //增加_method_counters属性中的backedge_counter的调用计数，如果超过阈值则跳转到backedge_counter_overflow
       __ increment_mask_and_jump(Address(rcx, be_offset), increment, mask,
                                  rax, false, Assembler::zero,
                                  UseOnStackReplacement ? &backedge_counter_overflow : NULL);
     } else {
       // increment counter
+      //如果不启用分层编译，client模式下即C1编译下TieredCompilation为false
+      //增加_method_counters属性中backedge counter计数
       __ movptr(rcx, Address(rcx, Method::method_counters_offset()));
       __ movl(rax, Address(rcx, be_offset));        // load backedge counter
       __ incrementl(rax, InvocationCounter::count_increment); // increment counter
       __ movl(Address(rcx, be_offset), rax);        // store counter
 
+      //增加_method_counters属性中invocation counter计数
       __ movl(rax, Address(rcx, inv_offset));    // load invocation counter
 
       __ andl(rax, InvocationCounter::count_mask_value); // and the status bits
       __ addl(rax, Address(rcx, be_offset));        // add both counters
 
+      //C1编译下，CompLevel为3时会开启有限的性能数据收集
       if (ProfileInterpreter) {
         // Test to see if we should create a method data oop
+        //判断rax中的值是否大于InterpreterProfileLimit，如果小于则跳转到dispatch
         __ cmp32(rax,
                  ExternalAddress((address) &InvocationCounter::InterpreterProfileLimit));
         __ jcc(Assembler::less, dispatch);
 
         // if no method data exists, go to profile method
+        //从栈帧中获取methodData的指针，判断其是否为空，如果为空则跳转到profile_method
         __ test_method_data_pointer(rax, profile_method);
 
+        //c1,c2下都为true
         if (UseOnStackReplacement) {
           // check for overflow against ebx which is the MDO taken count
+          //rbx中值在执行profile_taken_branch时，赋值成MDO backward count，判断其是否小于InterpreterBackwardBranchLimit
+          //如果小于则跳转到dispatch
           __ cmp32(rbx,
                    ExternalAddress((address) &InvocationCounter::InterpreterBackwardBranchLimit));
           __ jcc(Assembler::below, dispatch);
@@ -1724,6 +1790,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
           // excessive calls to the overflow routine while the method is
           // being compiled, add a second test to make sure the overflow
           // function is called only once every overflow_frequency.
+          //如果大于InterpreterBackwardBranchLimit，则跳转到backedge_counter_overflow
           const int overflow_frequency = 1024;
           __ andl(rbx, overflow_frequency - 1);
           __ jcc(Assembler::zero, backedge_counter_overflow);
@@ -1733,6 +1800,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
         if (UseOnStackReplacement) {
           // check for overflow against eax, which is the sum of the
           // counters
+          //rax中的值保存的是_method_counters属性两个计数器的累加值，判断其是否大于InterpreterBackwardBranchLimit，如果大于则跳转到backedge_counter_overflow
           __ cmp32(rax,
                    ExternalAddress((address) &InvocationCounter::InterpreterBackwardBranchLimit));
           __ jcc(Assembler::aboveEqual, backedge_counter_overflow);
@@ -1744,17 +1812,20 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
   }
 
   // Pre-load the next target bytecode into rbx
+  //r13已经变成目标跳转地址，这里是加载跳转地址的第一个字节码到rbx中
   __ load_unsigned_byte(rbx, Address(r13, 0));
 
   // continue with the bytecode @ target
   // eax: return bci for jsr's, unused otherwise
   // ebx: target bytecode
   // r13: target bcp
+  //开始执行跳转地址处的字节码,后面的部分除非跳转到对应的标签处，否则不会执行
   __ dispatch_only(vtos);
 
   if (UseLoopCounter) {
     if (ProfileInterpreter) {
       // Out-of-line code to allocate method data oop.
+      // 执行profile_method，执行完成跳转至dispatch
       __ bind(profile_method);
       __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::profile_method));
       __ load_unsigned_byte(rbx, Address(r13, 0));  // restore target bytecode
@@ -1764,14 +1835,19 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
 
     if (UseOnStackReplacement) {
       // invocation counter overflow
+      // 当超过阈值后会跳转到此分支
       __ bind(backedge_counter_overflow);
+      //对rdx中的数取补码
       __ negptr(rdx);
+      //将r13的地址加到rdx上，这两步是计算跳转地址
       __ addptr(rdx, r13); // branch bcp
       // IcoResult frequency_counter_overflow([JavaThread*], address branch_bcp)
+      // 调用方法frequency_counter_overflow([JavaThread*], address branch_bcp)，其中第一个参数JavaThread通过call_vm传递
       __ call_VM(noreg,
                  CAST_FROM_FN_PTR(address,
                                   InterpreterRuntime::frequency_counter_overflow),
                  rdx);
+      //恢复待执行的字节码
       __ load_unsigned_byte(rbx, Address(r13, 0));  // restore target bytecode
 
       // rax: osr nmethod (osr ok) or NULL (osr not possible)
@@ -1779,22 +1855,29 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       // rdx: scratch
       // r14: locals pointer
       // r13: bcp
+      // 校验frequency_counter_overflow方法返回的编译结果是否为空，如果为空则跳转到dispatch，即继续执行字节码
       __ testptr(rax, rax);                        // test result
       __ jcc(Assembler::zero, dispatch);         // no osr if null
       // nmethod may have been invalidated (VM may block upon call_VM return)
+      //如果不为空，即表示方法编译完成，将_entry_bci属性的偏移复制到rcx中
       __ movl(rcx, Address(rax, nmethod::entry_bci_offset()));
+      //如果rcx等于InvalidOSREntryBci，则跳转到dispatch
       __ cmpl(rcx, InvalidOSREntryBci);
       __ jcc(Assembler::equal, dispatch);
+
+      //开始执行栈上替换了
 
       // We have the address of an on stack replacement routine in eax
       // We need to prepare to execute the OSR method. First we must
       // migrate the locals and monitors off of the stack.
-
+      //将rax中的osr的地址拷贝到r13中
       __ mov(r13, rax);                             // save the nmethod
 
+      //调用OSR_migration_begin方法，完成栈帧上变量和monitor的迁移
       call_VM(noreg, CAST_FROM_FN_PTR(address, SharedRuntime::OSR_migration_begin));
 
       // eax is OSR buffer, move it to expected parameter location
+      //将rax中的值拷贝到j_rarg0
       __ mov(j_rarg0, rax);
 
       // We use j_rarg definitions here so that registers don't conflict as parameter
@@ -1805,6 +1888,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       const Register sender_sp = j_rarg1;
 
       // pop the interpreter frame
+      // 从当前调用栈pop出原来解释器的栈帧
       __ movptr(sender_sp, Address(rbp, frame::interpreter_frame_sender_sp_offset * wordSize)); // get sender sp
       __ leave();                                // remove frame anchor
       __ pop(retaddr);                           // get return address
@@ -1819,6 +1903,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       __ push(retaddr);
 
       // and begin the OSR nmethod
+      // 跳转到OSR nmethod，开始执行
       __ jmp(Address(r13, nmethod::osr_entry_point_offset()));
     }
   }

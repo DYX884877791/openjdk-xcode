@@ -179,13 +179,26 @@ extern void StubGenerator_generate(CodeBuffer* code, bool all); // only interfac
 
 void StubRoutines::initialize1() {
   if (_code1 == NULL) {
+      //ResourceMark的作用类似于HandleMark，两者mark的区域不同，一个是ResourceArea，一个是HandleArea
     ResourceMark rm;
+      //跟踪启动时间
     TraceTime timer("StubRoutines generation 1", TraceStartupTime);
+      //创建一个保存不会重定位的本地代码的Blob
     _code1 = BufferBlob::create("StubRoutines (1)", code_size1);
     if (_code1 == NULL) {
+        //创建失败抛出OOM异常
       vm_exit_out_of_memory(code_size1, OOM_MALLOC_ERROR, "CodeCache: no room for StubRoutines (1)");
     }
     CodeBuffer buffer(_code1);
+    //生成字节码解释模板
+    /**
+     * 查看StubGenerator_generate方法的实现时，存在不同CPU架构的实现，我们重点关注x86_64的实现，这是后端CentOS服务器的常用的CPU架构。
+     * 那么编译器编译的时候怎么知道使用哪个文件的实现了？可以全局搜索包含stubGenerator_x86_64.cpp的文件
+     * 在common/nb_native/nbproject/configurations.xml中有一行指定了
+     * <conf name="Linux_64" type="0">
+     * 其下有众多子节点 <item path="xxx"/>
+     * 即 configurations.xml指定了编译Linux-64版本时应该包含哪些文件。
+     */
     StubGenerator_generate(&buffer, false);
     // When new stubs added we need to make sure there is some space left
     // to catch situation when we should increase size again.
@@ -241,6 +254,7 @@ void StubRoutines::initialize2() {
       vm_exit_out_of_memory(code_size2, OOM_MALLOC_ERROR, "CodeCache: no room for StubRoutines (2)");
     }
     CodeBuffer buffer(_code2);
+      //跟initialize1中不同的是，这里传入的true，其他的都一样
     StubGenerator_generate(&buffer, true);
     // When new stubs added we need to make sure there is some space left
     // to catch situation when we should increase size again.

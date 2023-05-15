@@ -148,7 +148,7 @@ PS：linux中提供了相应的函数：basename(s)，用来获取不带路径�
 #define SLOG_INFO_MAX           512
 #define SLOG_NAME_MAX           256
 #define SLOG_DATE_MAX           64
-#define SLOG_TAG_MAX            32
+#define SLOG_TAG_MAX            128
 #define SLOG_COLOR_MAX          16
 
 #define SLOG_FLAGS_CHECK(c, f) (((c) & (f)) == (f))

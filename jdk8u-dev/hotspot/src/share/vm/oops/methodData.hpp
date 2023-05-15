@@ -2038,6 +2038,7 @@ public:
 CC_INTERP_ONLY(class BytecodeInterpreter;)
 class CleanExtraDataClosure;
 
+// MethodData主要用于保存解释器方法执行性能的数据，是C2优化的基础
 class MethodData : public Metadata {
   friend class VMStructs;
   CC_INTERP_ONLY(friend class BytecodeInterpreter;)

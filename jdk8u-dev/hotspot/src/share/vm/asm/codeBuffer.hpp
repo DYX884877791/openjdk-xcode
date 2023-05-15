@@ -193,6 +193,7 @@ class CodeSection VALUE_OBJ_CLASS_SPEC {
   }
 
   // Code emission
+  //在end处写入特定值，然后移动end
   void emit_int8 ( int8_t  x)  { *((int8_t*)  end()) = x; set_end(end() + sizeof(int8_t)); }
   void emit_int16( int16_t x)  { *((int16_t*) end()) = x; set_end(end() + sizeof(int16_t)); }
   void emit_int32( int32_t x)  { *((int32_t*) end()) = x; set_end(end() + sizeof(int32_t)); }

@@ -40,7 +40,8 @@ typedef RegisterImpl* Register;
 inline Register as_Register(int encoding) {
   return (Register)(intptr_t) encoding;
 }
-
+// RegisterImpl的类继承自AbstractRegisterImpl类，其中AbstractRegisterImpl的定义位于同目录下的register.hpp中，
+// RegisterImpl跟CPU架构相关，在register.hpp中通过宏的方式引入特定CPU架构的实现版本
 class RegisterImpl: public AbstractRegisterImpl {
  public:
   enum {
@@ -69,7 +70,7 @@ class RegisterImpl: public AbstractRegisterImpl {
 };
 
 // The integer registers of the ia32/amd64 architecture
-
+// 在register_x86.hpp中定义了x86下的寄存器的常量和枚举
 CONSTANT_REGISTER_DECLARATION(Register, noreg, (-1));
 
 

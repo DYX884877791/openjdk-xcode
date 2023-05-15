@@ -40,31 +40,39 @@
 #include "runtime/signature.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
+#include "utilities/slog.hpp"
 
 // -----------------------------------------------------
 // Implementation of JavaCallWrapper
 
+// 构造方法
 JavaCallWrapper::JavaCallWrapper(methodHandle callee_method, Handle receiver, JavaValue* result, TRAPS) {
   JavaThread* thread = (JavaThread *)THREAD;
   bool clear_pending_exception = true;
 
+    //校验是否是Java线程
   guarantee(thread->is_Java_thread(), "crucial check - the VM thread cannot and must not escape to Java code");
+    //校验当前线程是否有未释放的锁，即本地代码执行Java方法前必须释放所有的锁
   assert(!thread->owns_locks(), "must release all locks when leaving VM");
+    //确保当前线程不是JIT编译线程
   guarantee(!thread->is_Compiler_thread(), "cannot make java calls from the compiler");
   _result   = result;
 
   // Allocate handle block for Java code. This must be done before we change thread_state to _thread_in_Java_or_stub,
   // since it can potentially block.
+    // 分配一个新的JNIHandleBlock
   JNIHandleBlock* new_handles = JNIHandleBlock::allocate_block(thread);
 
   // After this, we are official in JavaCode. This needs to be done before we change any of the thread local
   // info, since we cannot find oops before the new information is set up completely.
+    //将当前线程的状态从_thread_in_vm转换成_thread_in_Java
   ThreadStateTransition::transition(thread, _thread_in_vm, _thread_in_Java);
 
   // Make sure that we handle asynchronous stops and suspends _before_ we clear all thread state
   // in JavaCallWrapper::JavaCallWrapper(). This way, we can decide if we need to do any pd actions
   // to prepare for stop/suspend (flush register windows on sparcs, cache sp, or other state).
   if (thread->has_special_runtime_exit_condition()) {
+      //判断当前线程是否符合特殊的运行时退出条件，如果是则暂停或者终止执行
     thread->handle_special_runtime_exit_condition();
     if (HAS_PENDING_EXCEPTION) {
       clear_pending_exception = false;
@@ -82,19 +90,23 @@ JavaCallWrapper::JavaCallWrapper(methodHandle callee_method, Handle receiver, Ja
 #endif // CHECK_UNHANDLED_OOPS
 
   _thread       = (JavaThread *)thread;
+    //保存当前线程的active_handles
   _handles      = _thread->active_handles();    // save previous handle block & Java frame linkage
 
   // For the profiler, the last_Java_frame information in thread must always be in
   // legal state. We have no last Java frame if last_Java_sp == NULL so
   // the valid transition is to clear _last_Java_sp and then reset the rest of
   // the (platform specific) state.
-
+    //保存当前线程的执行状态
   _anchor.copy(_thread->frame_anchor());
+    //清除当前线程的执行状态
   _thread->frame_anchor()->clear();
 
   debug_only(_thread->inc_java_call_counter());
+    //将新分配的JNIHandleBlock作为线程的active_handles
   _thread->set_active_handles(new_handles);     // install new handle block and reset Java frame linkage
 
+    //校验线程状态不能是_thread_in_native
   assert (_thread->thread_state() != _thread_in_native, "cannot set native pc to NULL");
 
   // clear any pending exception in thread (native calls start with no exception pending)
@@ -103,16 +115,20 @@ JavaCallWrapper::JavaCallWrapper(methodHandle callee_method, Handle receiver, Ja
   }
 
   if (_anchor.last_Java_sp() == NULL) {
-    _thread->record_base_of_stack_pointer();
+      //记录调用栈的基地址
+      _thread->record_base_of_stack_pointer();
   }
 }
 
-
+// 析构方法
 JavaCallWrapper::~JavaCallWrapper() {
+    //校验执行析构的是同一个Java线程
   assert(_thread == JavaThread::current(), "must still be the same thread");
 
   // restore previous handle block & Java frame linkage
+    //获取当前线程的active_handles
   JNIHandleBlock *_old_handles = _thread->active_handles();
+    //恢复方法调用前的active_handles
   _thread->set_active_handles(_handles);
 
   _thread->frame_anchor()->zap();
@@ -125,6 +141,7 @@ JavaCallWrapper::~JavaCallWrapper() {
 
 
   // Old thread-local info. has been restored. We are not back in the VM.
+    //将当前线程的状态恢复成_thread_in_vm
   ThreadStateTransition::transition_from_java(_thread, _thread_in_vm);
 
   // State has been restored now make the anchor frame visible for the profiler.
@@ -133,10 +150,12 @@ JavaCallWrapper::~JavaCallWrapper() {
   // on sparc/ia64 which will catch violations of the reseting of last_Java_frame
   // invariants (i.e. _flags always cleared on return to Java)
 
+    //恢复到方法调用前的线程状态
   _thread->frame_anchor()->copy(&_anchor);
 
   // Release handles after we are marked as being inside the VM again, since this
   // operation might block
+    //释放方法调用中新分配的JNIHandleBlock
   JNIHandleBlock::release_block(_old_handles, _thread);
 }
 
@@ -309,7 +328,7 @@ void JavaCalls::call(JavaValue* result, methodHandle method, JavaCallArguments* 
 }
 
 void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArguments* args, TRAPS) {
-  slog_trace("JavaCalls::call_helper starting...");
+  slog_trace("JavaCalls::call_helper函数被调用了...");
   // During dumping, Java execution environment is not fully initialized. Also, Java execution
   // may cause undesirable side-effects in the class metadata.
   assert(!DumpSharedSpaces, "must not execute Java bytecodes when dumping");
@@ -317,9 +336,13 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
   methodHandle method = *m;
     //线程
   JavaThread* thread = (JavaThread*)THREAD;
+    //校验当前线程是Java线程
   assert(thread->is_Java_thread(), "must be called by a java thread");
+    //校验方法不为空
   assert(method.not_null(), "must have a method to call");
+    //校验当前没有在安全点
   assert(!SafepointSynchronize::is_at_safepoint(), "call to Java code during VM operation");
+    //校验当前线程的handle_area没有执行handle_mark，即GC标记
   assert(!thread->handle_area()->no_handle_mark_active(), "cannot call out to Java here");
 
 
@@ -345,7 +368,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
     // A klass might not be initialized since JavaCall's might be used during the executing of
     // the <clinit>. For example, a Thread.start might start executing on an object that is
     // not fully initialized! (bad Java programming style)
-    assert(holder->is_linked(), "rewritting must have taken place");
+    assert(holder->is_linked(), "rewriting must have taken place");
   }
 #endif
 
@@ -369,7 +392,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
   // 这个参数会做为实参传递给StubRoutines::call_stub()函数指针指向的“函数”
   // EntryPoint例程:是从当前要执行的Java方法中获取的： hotspot/src/share/vm/oops/method.hpp
   address entry_point = method->from_interpreted_entry();
-  slog_trace("method entry_point address is %p", entry_point);
+  slog_trace("获取目标方法的解释模式入口地址=>%p", entry_point);
   if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
     entry_point = method->interpreter_entry();
   }

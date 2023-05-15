@@ -823,7 +823,8 @@ class JavaValue {
 // of stack (in memory) and thus not cached. The atos state corresponds to the itos
 // state when it comes to machine representation but is used separately for (oop)
 // type specific operations (e.g. verification code).
-
+// TosState枚举用来表示字节码指令执行前后栈顶的值的类型，栈顶的值可能保存在一个或者多个CPU寄存器中，需要通过值类型正确的读取值，
+// 将栈顶的值保存到一个或者多个寄存器中的技术就称为栈顶缓存技术，默认情况下栈顶的值保存在rax寄存器中。如果TosState为vtos则表示未使用栈顶缓存。
 enum TosState {         // describes the tos cache contents
   btos = 0,             // byte, bool tos cached
   ztos = 1,             // byte, bool tos cached
@@ -912,12 +913,15 @@ enum JavaThreadState {
 
 
 // Handy constants for deciding which compiler mode to use.
+// MethodCompilation表示方法编译的类型，栈上替换和非栈上替换，其中InvocationEntryBci表示非栈上替换方法编译
 enum MethodCompilation {
   InvocationEntryBci = -1,     // i.e., not a on-stack replacement compilation
   InvalidOSREntryBci = -2
 };
 
 // Enumeration to distinguish tiers of compilation
+// CompLevel表示分级编译的级别，默认情况下是CompLevel_none即解释执行，注释中的C1，C2和Shark都是Hotspot中包含的编译器类型，其中C1只能做简单优化，但是编译快；
+// C2和Shark能够做更复杂的编译优化，但是更耗时，且需要开启profile收集方法执行的性能数据。
 enum CompLevel {
   CompLevel_any               = -1,
   CompLevel_all               = -1,

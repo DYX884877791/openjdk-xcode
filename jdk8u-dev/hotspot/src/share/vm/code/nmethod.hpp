@@ -112,6 +112,19 @@ class ImplicitExceptionTable;
 class AbstractCompiler;
 class xmlStream;
 
+// 热点代码如何判定，热点代码如何完成编译的，如果是循环类的热点代码，如何在编译后完成栈上替换的:见InterpreterGenerator::generate_counter_incr、InterpreterGenerator::generate_counter_overflow函数
+// 热点代码编译完成产生的nmethod都有一个安装的动作，即将其与对应的Method之间完成绑定，让其能够被解释器正常调用，那么安装的动作是哪里完成的了？
+// 对栈上替换的nmethod而言，执行栈上替换就相当于安装，因为栈上替换的nmethod都是方法内部的调用，所以实现相对简单点。
+// 对非栈上替换的nmethod而言，其安装稍微复杂点，需要考虑从Java代码和本地代码中调用nmethod安装完成的方法的情形，
+// Hotspot的实现是通过一个在字节码解释执行的栈帧和本地代码执行的栈帧之间做切换适配的适配器来完成安装，适配器和字节码指令一样都是通过汇编实现的。
+
+// nmethod继承自CodeBlob，其定义位于hotspot/src/share/vm/code/nmethod.hpp中，用于表示一个编译后的Java方法
+// nmethod定义的public方法主要有以下几种：
+//   new_nmethod/new_native_nmethod: 创建nmethod
+//   属性相关的，如dec_hotness_counter，entry_point，is_alive，unloading_next等
+//   获取各部分的起止地址，大小，各部分是否包含某个地址等，如consts_begin，consts_end，consts_size，consts_contains等
+//   ExceptionCache相关的，如exception_cache，release_set_exception_cache，handler_for_exception_and_pc等
+//   GC支持相关的，如oops_do，detect_scavenge_root_oops，preserve_callee_argument_oops等
 class nmethod : public CodeBlob {
   friend class VMStructs;
   friend class NMethodSweeper;
@@ -123,11 +136,15 @@ class nmethod : public CodeBlob {
   static unsigned char _global_unloading_clock;
 
   // Shared fields for all nmethod's
+  // 该nmethod对应的Method
   Method*   _method;
+  // 如果是栈上替换则不等于InvocationEntryBci
   int       _entry_bci;        // != InvocationEntryBci if this nmethod is an on-stack replacement method
+  // 该nmethod对应的Method的jmethodID
   jmethodID _jmethod_id;       // Cache of method()->jmethod_id()
 
   // To support simple linked-list chaining of nmethods:
+  // 取自InstanceKlass::osr_nmethods_head
   nmethod*  _osr_link;         // from InstanceKlass::osr_nmethods_head
 
   union {
@@ -140,14 +157,17 @@ class nmethod : public CodeBlob {
   static nmethod* volatile _oops_do_mark_nmethods;
   nmethod*        volatile _oops_do_mark_link;
 
+  // 编译此方法的编译器引用
   AbstractCompiler* _compiler; // The compiler which compiled this nmethod
 
   // offsets for entry points
+  // 编译后的本地代码的调用入口
   address _entry_point;                      // entry point with class check
   address _verified_entry_point;             // entry point without class check
   address _osr_entry_point;                  // entry point for on stack replacement
 
   // Offsets for different nmethod parts
+  // 各部分的偏移量
   int _exception_offset;
   // All deoptee's will resume execution at this location described by
   // this offset.
@@ -176,7 +196,9 @@ class nmethod : public CodeBlob {
   // pc during a deopt.
   int _orig_pc_offset;
 
+  // 采用了什么类型的编译
   int _compile_id;                           // which compilation made this nmethod
+  // 编译级别
   int _comp_level;                           // compilation level
 
   // protected by CodeCache_lock
@@ -195,6 +217,7 @@ class nmethod : public CodeBlob {
   unsigned int _has_wide_vectors:1;          // Preserve wide vectors at safepoints
 
   // Protected by Patching_lock
+  // 当前nmethod的状态，alive, not_entrant, zombie, unloaded几种
   volatile unsigned char _state;             // {alive, not_entrant, zombie, unloaded}
 
   volatile unsigned char _unloading_clock;   // Incremented after GC unloaded/cleaned the nmethod
@@ -238,6 +261,7 @@ class nmethod : public CodeBlob {
   // counter is decreased (by 1) while sweeping.
   int _hotness_counter;
 
+  // 原Java方法的异常处理代码缓存
   ExceptionCache * volatile _exception_cache;
   PcDescCache     _pc_desc_cache;
 
@@ -316,6 +340,7 @@ class nmethod : public CodeBlob {
 
  public:
   // create nmethod with entry_bci
+  // 创建nmethod
   static nmethod* new_nmethod(methodHandle method,
                               int compile_id,
                               int entry_bci,

@@ -41,12 +41,16 @@
 
 AbstractAssembler::AbstractAssembler(CodeBuffer* code) {
   if (code == NULL)  return;
+    //获取CodeBuffer中的inst 指令section
   CodeSection* cs = code->insts();
+    //将原有的mark清除
   cs->clear_mark();   // new assembler kills old mark
   if (cs->start() == NULL)  {
+      //如果inst section未初始化
     vm_exit_out_of_memory(0, OOM_MMAP_ERROR, err_msg("CodeCache: no room for %s",
                                      code->name()));
   }
+    //设置对应属性
   _code_section = cs;
   _oop_recorder= code->oop_recorder();
   DEBUG_ONLY( _short_branch_delta = 0; )
@@ -105,7 +109,9 @@ void AbstractAssembler::end_a_const(CodeSection* cs) {
   set_code_section(cs);
 }
 
+//StubCodeMark销毁时调用的flush方法，MacroAssembler使用AbstractAssembler的实现
 void AbstractAssembler::flush() {
+    //ICache提供了汇编指令缓存的相关功能，这里实际是刷新指令缓存
   ICache::invalidate_range(addr_at(0), offset());
 }
 

@@ -1803,7 +1803,9 @@ void Assembler::movl(Register dst, int32_t imm32) {
 
 void Assembler::movl(Register dst, Register src) {
   int encode = prefix_and_encode(dst->encoding(), src->encoding());
+    //0x8B表示汇编指令movl
   emit_int8((unsigned char)0x8B);
+    //movl的操作数
   emit_int8((unsigned char)(0xC0 | encode));
 }
 

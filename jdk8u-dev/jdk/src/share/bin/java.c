@@ -309,6 +309,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      *
      */
     if (!LoadJavaVM(jvmpath, &ifn)) {
+        slog_destroy();
         return(6);
     }
 
@@ -341,6 +342,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
         /* Preprocess wrapper arguments */
         TranslateApplicationArgs(jargc, jargv, &argc, &argv);
         if (!AddApplicationOptions(appclassc, appclassv)) {
+            slog_destroy();
             return(1);
         }
     } else {
@@ -365,6 +367,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      */
     if (!ParseArguments(&argc, &argv, &mode, &what, &ret, jrepath))
     {
+        slog_destroy();
         return(ret);
     }
 
@@ -479,6 +482,7 @@ JavaMain(void * _args)
     // InitializeJVM函数进一步初始化JVM，它会调用之前初始化的 ifn 数据结构中的 CreateJavaVM 函数.
     if (!InitializeJVM(&vm, &env, &ifn)) {
         JLI_ReportErrorMessage(JVM_ERROR1);
+        slog_destroy();
         exit(1);
     }
 
@@ -2269,6 +2273,7 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
        * simply return that, otherwise we return the value of
        * the callee
        */
+      slog_destroy();
       return (ret != 0) ? ret : rslt;
     }
 }

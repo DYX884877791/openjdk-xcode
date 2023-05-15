@@ -70,6 +70,9 @@
 //------------------------------------------------------------------------------------------------------------------------
 // The C++ interface to the bytecode interpreter(s).
 
+//  AbstractInterpreter的定义位于hotspot src/share/vm/interpreter/abstractInterpreter.hpp中，
+// 是CppInterpreter和TemplateInterpreter共同的基类，用来抽象平台独立的解释器相关的属性和方法。AbstractInterpreter定义的属性都是protected
+
 // 抽象解释器,这个抽象解释器描述了解释器的基本骨架:
 // 所有的解释器(C++字节码解释器，模板解释器)都有这些例程和属性，然后子类的解释器还可以再扩展一些例程
 // hotspot有一个C++字节码解释器，还有一个模板解释器 ，默认使用的是模板解释器的实现。这两个有什么区别呢？
@@ -106,6 +109,13 @@ class AbstractInterpreter: AllStatic {
   friend class Interpreter;
   friend class CppInterpreterGenerator;
  public:
+    // AbstractInterpreter定义了一个表示方法类型的枚举MethodKind，每个类型都对应_entry_table中一个数组元素，即一个处理该类型方法的方法调用的入口地址
+    // 枚举在C/C++中其实就是一个int常量，默认情况下枚举值从0开始，依次往下递增，上述method_handle_invoke_LAST的定义比较特殊，
+    // 正常method_handle_invoke_LAST应该比method_handle_invoke_FIRST大1，上述定义下就大vmIntrinsics::LAST_MH_SIG_POLY - vmIntrinsics::FIRST_MH_SIG_POLY，
+    // 即method_handle_invoke_FIRST和method_handle_invoke_LAST之间实际还有几个未定义的但是合法的枚举值。
+
+    // 为啥需要区分这么多种MethodKind了？主要是为了对特殊的MethodKind的方法做特殊处理，以获取最大的执行性能力，如这里的数学运算方法java.lang.Math.sin，
+    // 计算文件签名的CRC32.update方法，可以直接使用汇编代码实现。
   enum MethodKind {
       // 普通的方法
     zerolocals,                                                 // method needs locals initialization
@@ -152,28 +162,43 @@ class AbstractInterpreter: AllStatic {
   };
 
  protected:
-    // 队列
+    // 队列,用来保存生成的汇编代码的
   static StubQueue* _code;                                      // the interpreter code (codelets)
-
+    // 是否激活了安全点机制
   static bool       _notice_safepoints;                         // true if safepoints are activated
 
+  // JIT编译器产生的本地代码在内存中的起始位置
   static address    _native_entry_begin;                        // Region for native entry code
+  // JIT编译器产生的本地代码在内存中的终止位置
   static address    _native_entry_end;
 
   // method entry points
+  // _entry_table是AbstractInterpreter定义的一个protected address数组，数组长度是MethodKind的枚举值number_of_method_entries，
+  // 即每个MethodKind都会有一个对应的表示方法执行入口地址的address。_entry_table属性的初始化就在TemplateInterpreterGenerator::generate_all()方法中完成
+
+  // address数组，处理不同类型的方法的方法调用的入口地址，数组的长度就是枚举number_of_method_entries的值
   // number_of_method_entries表示方法类型的总数，使用方法类型做为数组下标就可以获取对应的方法入口
   // _entry_table也是个重要的属性，这个数组表示方法的例程，比如普通方法是入口点1_entry_table[0],带synchronized的方法是入口点2_entry_table[1]，
   // 这些_entry_table[0],_entry_table[1]指向的就是之前_code队列里面的小块例程
   static address    _entry_table[number_of_method_entries];     // entry points for a given method
+  // address数组，处理不同类型的本地方法调用返回值的入口地址，数组的长度是枚举number_of_result_handlers的值，目前为10
   static address    _native_abi_to_tosca[number_of_result_handlers];  // for native method result handlers
+  // 本地方法生成签名的入口地址
   static address    _slow_signature_handler;                              // the native method generic (slow) signature handler
 
+  // 重新抛出异常的入口地址
   static address    _rethrow_exception_entry;                   // rethrows an activation in previous frame
 
   friend class      AbstractInterpreterGenerator;
   friend class              InterpreterGenerator;
   friend class      InterpreterMacroAssembler;
 
+  // AbstractInterpreter定义的public方法可以分为以下几种：
+    //
+    // 方法类型操作相关的，如method_kind，entry_for_kind，set_entry_for_kind等
+    // 解释器运行时支持相关的，如deopt_entry，deopt_continue_after_entry，deopt_reexecute_entry等
+    // 本地方法调用支持相关的，如slow_signature_handler，result_handler，in_native_entry等
+    // 解释器工具方法，如local_offset_in_bytes，oop_addr_in_slot，long_in_slot，set_long_in_slot等
  public:
   // Initialization/debugging
   static void       initialize();
@@ -194,7 +219,12 @@ class AbstractInterpreter: AllStatic {
   // 但是不同方法的栈帧其实是有差别的，如Java普通方法、Java同步方法、有native关键字的Java方法等，所以就把所有的方法进行了归类，不同类型获取到不同的entry_point入口。
   // 到底有哪些类型，我们可以看一下MethodKind这个枚举类中定义出的枚举常量
   //
-  static address    entry_for_kind(MethodKind k)                { assert(0 <= k && k < number_of_method_entries, "illegal kind"); return _entry_table[k]; }
+  static address    entry_for_kind(MethodKind k)                {
+      //校验MethodKind是否合法，MethodKind是一个枚举，这里是检查枚举值
+      assert(0 <= k && k < number_of_method_entries, "illegal kind");
+      return _entry_table[k];
+  }
+    // 该方法完整的定义是static address    entry_for_method(methodHandle m)，用来获取解释器执行某个方法m的入口地址
   // 首先通过method_kind()函数拿到方法对应的类型，然后调用entry_for_kind()函数根据方法类型获取方法对应的入口entry_point
   static address    entry_for_method(methodHandle m)            { return entry_for_kind(method_kind(m)); }
 
@@ -333,6 +363,9 @@ class AbstractInterpreter: AllStatic {
 // The interpreter generator.
 
 class Template;
+//  AbstractInterpreterGenerator的定义位于同目录下的abstractInterpreter.hpp中，只有一个属性InterpreterMacroAssembler* _masm，
+//  即用来生成字节码的Assembler实例。AbstractInterpreterGenerator定义的方法都是protected方法
+//  重点关注其构造方法和generate_all方法的实现
 class AbstractInterpreterGenerator: public StackObj {
  protected:
   InterpreterMacroAssembler* _masm;

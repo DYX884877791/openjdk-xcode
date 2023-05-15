@@ -880,8 +880,9 @@ IRT_END
 //------------------------------------------------------------------------------------------------------------------------
 // Miscellaneous
 
-
+// 热点代码编译实际上是通过该函数来完成的，该方法实际通过CompilationPolicy:event触发方法编译，如果是需要栈上替换的方法则event方法返回包含编译代码的nmethod实例，否则返回NULL。
 nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, address branch_bcp) {
+    //非OSR，即非栈上替换方法，永远返回null，即不会立即执行编译，而是提交任务给后台编译线程编译
   nmethod* nm = frequency_counter_overflow_inner(thread, branch_bcp);
   assert(branch_bcp != NULL || nm == NULL, "always returns null for non OSR requests");
   if (branch_bcp != NULL && nm != NULL) {
@@ -890,6 +891,7 @@ nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, addr
     // nm could have been unloaded so look it up again.  It's unsafe
     // to examine nm directly since it might have been freed and used
     // for something else.
+      //目标方法是一个需要栈上替换的方法，因为frequency_counter_overflow_inner返回的nm没有加载，所以需要再次查找
     frame fr = thread->last_frame();
     Method* method =  fr.interpreter_frame_method();
     int bci = method->bci_from(fr.interpreter_frame_bcp());
@@ -906,6 +908,7 @@ nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, addr
   return nm;
 }
 
+//branch_bcp表示调用计数超过阈值时循环跳转的地址
 IRT_ENTRY(nmethod*,
           InterpreterRuntime::frequency_counter_overflow_inner(JavaThread* thread, address branch_bcp))
   // use UnlockFlagSaver to clear and restore the _do_not_unlock_if_synchronized
@@ -913,12 +916,16 @@ IRT_ENTRY(nmethod*,
   UnlockFlagSaver fs(thread);
 
   frame fr = thread->last_frame();
+    //验证当前方法是解释执行方法
   assert(fr.is_interpreted_frame(), "must come from interpreter");
+    //获取当前解释执行的方法
   methodHandle method(thread, fr.interpreter_frame_method());
+    //branch_bcp非空则获取其相对于方法字节码起始地址code_base的偏移，否则等于InvocationEntryBci，InvocationEntryBci表明这是非栈上替换的方法编译
   const int branch_bci = branch_bcp != NULL ? method->bci_from(branch_bcp) : InvocationEntryBci;
   const int bci = branch_bcp != NULL ? method->bci_from(fr.interpreter_frame_bcp()) : InvocationEntryBci;
-
+    //校验是否发生异常
   assert(!HAS_PENDING_EXCEPTION, "Should not have any exceptions pending");
+    //如果要求栈上替换则返回该方法对应的nmethod，否则返回空，然后提交一个方法编译的任务给后台编译线程
   nmethod* osr_nm = CompilationPolicy::policy()->event(method, method, branch_bci, bci, CompLevel_none, NULL, thread);
   assert(!HAS_PENDING_EXCEPTION, "Event handler should not throw any exceptions");
 
@@ -929,6 +936,7 @@ IRT_ENTRY(nmethod*,
     // unbiasing of all monitors in the activation now (even though
     // the OSR nmethod might be invalidated) because we don't have a
     // safepoint opportunity later once the migration begins.
+      //如果使用偏向锁，则将当前栈帧持有的所有偏向锁都释放调用，因为这些偏向锁在栈上替换的时候需要迁移
     if (UseBiasedLocking) {
       ResourceMark rm;
       GrowableArray<Handle>* objects_to_revoke = new GrowableArray<Handle>();
@@ -1299,18 +1307,22 @@ address                  SignatureHandlerLibrary::_buffer       = NULL;
 
 IRT_ENTRY(void, InterpreterRuntime::prepare_native_call(JavaThread* thread, Method* method))
   methodHandle m(thread, method);
+    //校验是本地方法
   assert(m->is_native(), "sanity check");
   // lookup native function entry point if it doesn't exist
   bool in_base_library;
+    //如果尚未绑定，则完成方法绑定
   if (!m->has_native_function()) {
     NativeLookup::lookup(m, in_base_library, CHECK);
   }
   // make sure signature handler is installed
+    //安装方法签名解析代码（signature handler）
   SignatureHandlerLibrary::add(m);
   // The interpreter entry point checks the signature handler first,
   // before trying to fetch the native entry point and klass mirror.
   // We must set the signature handler last, so that multiple processors
   // preparing the same method will be sure to see non-null entry & mirror.
+    //解释器调用本地方法前会先检查signature handle是否存在，因此应该最后处理，多处理器下可以看到非null的signature handler
 IRT_END
 
 #if defined(IA32) || defined(AMD64) || defined(ARM) || defined(AARCH64)

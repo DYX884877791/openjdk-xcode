@@ -209,6 +209,12 @@ class RegisterOrConstant VALUE_OBJ_CLASS_SPEC {
 // The Abstract Assembler: Pure assembler doing NO optimizations on the
 // instruction level; i.e., what you write is what you get.
 // The Assembler is generating code into a CodeBuffer.
+// AbstractAssembler定义了生成汇编代码的抽象公共基础方法，如获取关联CodeBuffer的当前内存位置的pc()方法，
+// 将汇编指令全部刷新的CodeBuffer中的flush()方法，绑定跳转标签的bind方法等。其定义位于hotspot src/share/vm/asm/assembler.hpp中。
+
+// assembler.hpp中除定义AbstractAssembler外，还定义了用来表jmp跳转指令用到的标签的Label类，
+// 调用bind方法后就会将当前Label实例绑定到指令流中一个特定的位置，比如jmp指令接收Lable参数，就会跳转到对应的位置处开始执行，可用于实现循环或者条件判断等控制流操作。
+//  Assembler的定义跟CPU架构有关，通过assembler.hpp中的宏包含特定CPU下的Assembler实现
 class AbstractAssembler : public ResourceObj  {
   friend class Label;
 
@@ -322,6 +328,8 @@ class AbstractAssembler : public ResourceObj  {
   CodeSection*  code_section() const   { return _code_section; }
   CodeBuffer*   code()         const   { return code_section()->outer(); }
   int           sect()         const   { return code_section()->index(); }
+    //StubCodeMark会为准备生成的stub创建一个新的StubCodeDesc，此过程会调用pc方法获取MacroAssembler准备写入指令的地址
+    //即stub的起始地址
   address       pc()           const   { return code_section()->end();   }
   int           offset()       const   { return code_section()->size();  }
   int           locator()      const   { return CodeBuffer::locator(offset(), sect()); }

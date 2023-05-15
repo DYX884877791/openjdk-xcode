@@ -48,6 +48,10 @@
 // the distinction between `Klass*' and `Klass' are not
 // reflected in the interface and instead the Klass hierarchy
 // is directly modeled as the subclasses of ciKlass.
+// ciBaseObject是ciObject的基类，还有其子类ciMetadata等；
+// 还有直接继承自ResourceObj的ciField，ciMethodBlocks，ciSignature等类，这些类全部位于hotspot/src/share/vm/ci目录下
+// 这些类的意义在于将后台编译与GC隔离开来，允许这两者可以不需要任何接口交互，独立的互不干扰的进行。
+// 其实现也比较简单就是保存一个指向保存特定类oop的handler的指针，并保存该实例的部分关键属性
 class ciBaseObject : public ResourceObj {
   CI_PACKAGE_ACCESS
   friend class ciEnv;

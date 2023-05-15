@@ -39,6 +39,7 @@
 
 class EntryPoint VALUE_OBJ_CLASS_SPEC {
  private:
+    // number_of_states是枚举TosState中表示state个数的枚举值
   address _entry[number_of_states];
 
  public:
@@ -61,6 +62,7 @@ class EntryPoint VALUE_OBJ_CLASS_SPEC {
 
 class DispatchTable VALUE_OBJ_CLASS_SPEC {
  public:
+    // BitsPerByte表示一个字节多少位，固定值8。
  // BitsPerByte的值为8
   enum { length = 1 << BitsPerByte };                 // an entry point for each byte value (also for undefined bytecodes)
 
@@ -85,6 +87,13 @@ class DispatchTable VALUE_OBJ_CLASS_SPEC {
   bool operator == (DispatchTable& y);                // for debugging only
 };
 
+// TemplateInterpreter继承自AbstractInterpreter，其定义在同目录下的templateInterpreter.hpp中。
+// TemplateInterpreter在此基础上增加了很多的完成特定功能的函数的调用入口
+// TemplateInterpreter新增的方法主要有以下几种：
+//
+//  1. 获取特定TosState的调用入口相关的，如continuation，dispatch_table，invoke_return_entry_table等
+//  2. 逆向优化相关的，如deopt_continue_after_entry，bytecode_should_reexecute等
+// TemplateInterpreter中定义的都是平台无关的部分，跟平台相关的部分通过宏的方式引入
 class TemplateInterpreter: public AbstractInterpreter {
   friend class VMStructs;
   friend class InterpreterMacroAssembler;
@@ -117,6 +126,7 @@ class TemplateInterpreter: public AbstractInterpreter {
   static address    _remove_activation_preserving_args_entry;   // continuation address when current frame is being popped
 #endif // HOTSWAP
 
+// EntryPoint就是一个address的数组的包装类
 #ifndef PRODUCT
   static EntryPoint _trace_code;
 #endif // !PRODUCT
@@ -129,7 +139,7 @@ class TemplateInterpreter: public AbstractInterpreter {
   static address _invoke_return_entry[number_of_return_addrs];           // for invokestatic, invokespecial, invokevirtual return entries
   static address _invokeinterface_return_entry[number_of_return_addrs];  // for invokeinterface return entries
   static address _invokedynamic_return_entry[number_of_return_addrs];    // for invokedynamic return entries
-
+// DispatchTable是一个address二维数组的包装类
   static DispatchTable _active_table;                           // the active    dispatch table (used by the interpreter for dispatch)
   static DispatchTable _normal_table;                           // the normal    dispatch table (used to set the active table in normal mode)
   static DispatchTable _safept_table;                           // the safepoint dispatch table (used to set the active table for safepoints)
@@ -161,6 +171,7 @@ class TemplateInterpreter: public AbstractInterpreter {
   static address    trace_code    (TosState state)              { return _trace_code.entry(state); }
 #endif // !PRODUCT
   static address    continuation  (TosState state)              { return _continuation_entry.entry(state); }
+  // 看下TemplateInterpreter的_active_table属性是如何初始化的，相关代码在TemplateInterpreter::initialize()中
   // 在_active_table中获取对应栈顶缓存状态的入口地址，_active_table变量定义在TemplateInterpreter类中
   static address*   dispatch_table(TosState state)              { return _active_table.table_for(state); }
   static address*   dispatch_table()                            { return _active_table.table_for(); }

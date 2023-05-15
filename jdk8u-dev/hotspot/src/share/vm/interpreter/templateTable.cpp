@@ -26,6 +26,7 @@
 #include "gc_interface/collectedHeap.hpp"
 #include "interpreter/templateTable.hpp"
 #include "runtime/timer.hpp"
+#include "utilities/slog.hpp"
 
 
 #ifdef CC_INTERP
@@ -49,6 +50,7 @@ void Template::initialize(int flags, TosState tos_in, TosState tos_out, generato
 
 
 Bytecodes::Code Template::bytecode() const {
+    //通过当前Template的地址在_template_table中的位置反算出对应的字节码
   int i = this - TemplateTable::_template_table;
   if (i < 0 || i >= Bytecodes::number_of_codes) i = this - TemplateTable::_template_table_wide;
   return Bytecodes::cast(i);
@@ -56,11 +58,14 @@ Bytecodes::Code Template::bytecode() const {
 
 
 void Template::generate(InterpreterMacroAssembler* masm) {
+    slog_trace("Template::generate函数被调用了,生成汇编代码...");
   // parameter passing
   TemplateTable::_desc = this;
   TemplateTable::_masm = masm;
   // code generation
+    //调用gen生成字节码模板
   _gen(_arg);
+    //刷新指令缓存
   masm->flush();
 }
 
@@ -133,6 +138,7 @@ void TemplateTable::double_cmp(int unordered_result) {
 
 void TemplateTable::_goto() {
   transition(vtos, vtos);
+  // branch方法不仅用于goto指令的实现，而是几乎所有的分支跳转指令的基础，branch方法的实现跟CPU相关，重点关注templateTable_x86_64.cpp中的实现
   branch(false, false);
 }
 
@@ -178,6 +184,7 @@ BarrierSet*                TemplateTable::_bs;
 
 
 void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState out, void (*gen)(), char filler) {
+    //校验filter为' '
   assert(filler == ' ', "just checkin'");
   def(code, flags, in, out, (Template::generator)gen, 0);
 }
@@ -201,6 +208,7 @@ void TemplateTable::def(Bytecodes::Code code, // 字节码指令
     // 表示是否为wide指令
   const int iswd = 1 << Template::wide_bit;
   // determine which table to use
+    // 判断是否是宽字节指令
     // 如果是允许在字节码指令前加wide字节码指令的一些指令，那么
     // 会使用_template_table_wild模板数组进行字节码转发，否则
     // 使用_template_table模板数组进行转发
@@ -258,11 +266,14 @@ void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState o
 #endif // TEMPLATE_TABLE_BUG
 
 void TemplateTable::initialize() {
+    slog_trace("TemplateTable::initialize函数被调用了...");
+    //如果已经初始化则返回
   if (_is_initialized) return;
 
   // Initialize table
   TraceTime timer("TemplateTable initialization", TraceStartupTime);
 
+    //设置bs
   _bs = Universe::heap()->barrier_set();
 
   // For better readability
@@ -272,6 +283,12 @@ void TemplateTable::initialize() {
   const int  disp = 1 << Template::does_dispatch_bit;
   const int  clvm = 1 << Template::calls_vm_bit;
   const int  iswd = 1 << Template::wide_bit;
+    //nop等是TemplateTable的静态私有方法，in表示字节码执行前栈顶值的类型，out表示字节码执行后栈顶值的类型
+    //generator表示生成字节码方法的函数，argument表示生成字节码模板的参数
+    //初始化_template_table数组和_template_table_wide中的Template元素
+    // 具体哪个字节码                        字节码模板属性       in    out   generator             argument
+    //包含Bytecodes定义所有的指令，不同的指令调用不同的def重载版本
+
   // 调用def()将所有字节码的目标代码生成函数和参数保存在_template_table或_template_table_wide（wide指令）模板数组中
   // 除了虚拟机规范本身定义的字节码指令外，HotSpot虚拟机也定义了一些字节码指令，这些指令为了辅助虚拟机进行更好的功能实现，例如Bytecodes::_return_register_finalizer等
   // 可以更好的实现finalizer类型对象的注册功能。
@@ -337,6 +354,8 @@ void TemplateTable::initialize() {
   def(Bytecodes::_laload              , ____|____|____|____, itos, ltos, laload              ,  _           );
   def(Bytecodes::_faload              , ____|____|____|____, itos, ftos, faload              ,  _           );
   def(Bytecodes::_daload              , ____|____|____|____, itos, dtos, daload              ,  _           );
+  // 字节码指令的实现跟CPU架构相关，我们重点关注x86_64下的实现，通过configurations.xml文件来引入特定CPU架构的实现文件。
+  // 以aaload指令和aastore指令为例说明字节码指令的实现方式
   def(Bytecodes::_aaload              , ____|____|____|____, itos, atos, aaload              ,  _           );
   def(Bytecodes::_baload              , ____|____|____|____, itos, itos, baload              ,  _           );
   def(Bytecodes::_caload              , ____|____|____|____, itos, itos, caload              ,  _           );

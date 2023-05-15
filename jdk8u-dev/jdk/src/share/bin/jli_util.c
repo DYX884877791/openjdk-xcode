@@ -41,6 +41,7 @@
 #include <pthread.h>
 #ifdef __linux__
 #include <syscall.h>
+#include <bits/syscall.h>
 #endif
 
 #include <sys/time.h>
@@ -298,14 +299,27 @@ void slog_get_date(slog_date_t *pDate)
  * https://easeapi.com/blog/158-thread-id.html
  * http://javagoo.com/linux/gettid.html
  * http://javagoo.com/linux/gettid2.html
+ * https://cloud.tencent.com/developer/article/2064467
  */
 static size_t slog_get_tid()
 {
-#ifdef __linux__
-    return (size_t)syscall(__NR_gettid);
-#else
     return (size_t)pthread_self();
-#endif
+}
+
+/**
+ * 获取内核级线程ID
+ * @return
+ */
+static size_t slog_get_kernel_tid()
+{
+    /**
+     * 也可以使用SYS_gettid宏
+     * SYS_gettid：在<bits/syscall.h>中有以下内容：#define SYS_gettid __NR_gettid
+     * 用户线程与内核线程之间的区别：见https://easeapi.com/blog/158-thread-id.html。
+     * pthread_self(): 用户态线程id
+     * __NR_gettid: 内核线程id
+     */
+    return (size_t)syscall(__NR_gettid);
 }
 
 static size_t slog_get_pid()
@@ -347,7 +361,7 @@ static void slog_create_tid(char *pOut, int nSize, uint8_t nTraceTid)
     if (!nTraceTid) {
         pOut[0] = SLOG_NUL;
     } else {
-        snprintf(pOut, nSize, "[thread-id:0x%x] ", slog_get_tid());
+        snprintf(pOut, nSize, "[user-thread-id:0x%zx,kernel-thread-id:0x%lx] ", slog_get_tid(), slog_get_kernel_tid());
     }
 }
 
@@ -679,7 +693,6 @@ void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
 
 void slog_destroy() {
     if (g_slog == NULL) {
-        fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
     }
     slog_lock(g_slog);

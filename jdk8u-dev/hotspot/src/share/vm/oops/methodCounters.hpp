@@ -27,14 +27,18 @@
 
 #include "oops/metadata.hpp"
 #include "interpreter/invocationCounter.hpp"
-
+// MethodCounters用于热点代码跟踪中的方法调用计数，MethodData用于保存JIT编译器为了优化代码而收集的方法执行性能相关数据，初始化为null。
+// 两者都定义了两个InvocationCounter的属性，且属性名一样
+// MethodCounters主要用于保存方法调用计数相关
 class MethodCounters: public MetaspaceObj {
  friend class VMStructs;
  private:
   int               _interpreter_invocation_count; // Count of times invoked (reused as prev_event_count in tiered)
   u2                _interpreter_throwout_count; // Count of times method was exited via exception while interpreting
   u2                _number_of_breakpoints;      // fullspeed debugging support
+  // 记录方法调用的次数
   InvocationCounter _invocation_counter;         // Incremented before each activation of the method - used to trigger frequency-based optimizations
+  // 记录循环跳转的次数
   InvocationCounter _backedge_counter;           // Incremented before each backedge taken - used to trigger frequencey-based optimizations
 
 #ifdef TIERED

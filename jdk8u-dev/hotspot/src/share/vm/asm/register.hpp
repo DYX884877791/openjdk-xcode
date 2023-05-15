@@ -82,6 +82,7 @@ class AbstractRegisterImpl {
 
 #define AS_REGISTER(type,name)         ((type)name##_##type##EnumValue)
 
+// REGISTER_DECLARATION和CONSTANT_REGISTER_DECLARATION宏的意思是将name和type两者关联起来
 #define CONSTANT_REGISTER_DECLARATION(type, name, value) \
 extern const type name;                                  \
 enum { name##_##type##EnumValue = (value) }

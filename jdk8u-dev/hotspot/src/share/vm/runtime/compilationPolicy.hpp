@@ -37,11 +37,22 @@
 class CompileTask;
 class CompileQueue;
 
+// CompilationPolicy的定义位于hotspot/src/share/vm/runtime/compilationPolicy.hpp中，表示编译策略，即决定那个方法应该编译和用什么类型的编译器编译。
+// CompilationPolicy继承自CHeapObj，其定义的属性比较简单
+// CompilationPolicy定义的方法有两类，静态方法和实例的虚方法，静态方法都是工具类方法，
+// 如must_be_compiled，can_be_compiled，can_be_osr_compiled等判断某个方法能否编译；
+// 实例的虚方法都是通过CompilationPolicy::policy()获取运行时的CompilationPolicy实例来调用的，如disable_compilation用来禁用某个方法的编译，
+// select_task方法用来从CompileQueue队列中选取一个编译任务CompileTask，重点关注其initialize方法和event方法的实现。
+
+// 通过hotspot/src/share/vm/runtime/init.cpp中的init_globals函数调用了compilationPolicy_init方法完成CompilationPolicy的初始化
+// 默认开启分层编译的情形下，默认采用AdvancedThresholdPolicy策略。
 class CompilationPolicy : public CHeapObj<mtCompiler> {
+    // 运行时使用的CompilationPolicy
   static CompilationPolicy* _policy;
   // Accumulated time
+  // 用于统计编译耗时
   static elapsedTimer       _accumulated_time;
-
+    // 是否正在VM启动中
   static bool               _in_vm_startup;
 public:
   static  void set_in_vm_startup(bool in_vm_startup) { _in_vm_startup = in_vm_startup; }

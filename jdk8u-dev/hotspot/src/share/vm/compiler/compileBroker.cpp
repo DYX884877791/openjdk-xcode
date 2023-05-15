@@ -46,6 +46,7 @@
 #include "runtime/sweeper.hpp"
 #include "utilities/dtrace.hpp"
 #include "utilities/events.hpp"
+#include "utilities/slog.hpp"
 #ifdef COMPILER1
 #include "c1/c1_Compiler.hpp"
 #endif
@@ -229,6 +230,7 @@ void compileBroker_init() {
 
 CompileTaskWrapper::CompileTaskWrapper(CompileTask* task) {
   CompilerThread* thread = CompilerThread::current();
+    //将task置为当前编译线程的编译任务
   thread->set_task(task);
   CompileLog*     log  = thread->log();
   if (log != NULL)  task->log_task_start(log);
@@ -239,19 +241,23 @@ CompileTaskWrapper::~CompileTaskWrapper() {
   CompileTask* task = thread->task();
   CompileLog*  log  = thread->log();
   if (log != NULL)  task->log_task_done(log);
+    //相关属性置为NULL
   thread->set_task(NULL);
   task->set_code_handle(NULL);
   thread->set_env(NULL);
   if (task->is_blocking()) {
     MutexLocker notifier(task->lock(), thread);
+      //标记编译任务已完成
     task->mark_complete();
     // Notify the waiting thread that the compilation has completed.
+      //通知等待线程编译任务已完成，即解除block状态
     task->lock()->notify_all();
   } else {
     task->mark_complete();
 
     // By convention, the compiling thread is responsible for
     // recycling a non-blocking CompileTask.
+      //任务已完成，释放task
     CompileTask::free(task);
   }
 }
@@ -264,15 +270,19 @@ int CompileTask::_num_allocated_tasks = 0;
 /**
  * Allocate a CompileTask, from the free list if possible.
  */
+ // allocate方法是和initialize方法配合使用的，其调用方只有一个CompileBroker::create_compile_task
 CompileTask* CompileTask::allocate() {
+     //获取锁CompileTaskAlloc_lock
   MutexLocker locker(CompileTaskAlloc_lock);
   CompileTask* task = NULL;
 
+     //_task_free_list不为空，则取头元素
   if (_task_free_list != NULL) {
     task = _task_free_list;
     _task_free_list = task->next();
     task->set_next(NULL);
   } else {
+      //_task_free_list为空，则创建一个新的
     task = new CompileTask();
     DEBUG_ONLY(_num_allocated_tasks++;)
     assert (_num_allocated_tasks < 10000, "Leaking compilation tasks?");
@@ -280,6 +290,7 @@ CompileTask* CompileTask::allocate() {
     task->set_is_free(true);
   }
   assert(task->is_free(), "Task must be free.");
+     //将free置为false标识已经被占用
   task->set_is_free(false);
   return task;
 }
@@ -289,13 +300,16 @@ CompileTask* CompileTask::allocate() {
  * Add a task to the free list.
  */
 void CompileTask::free(CompileTask* task) {
+    //获取锁CompileTaskAlloc_lock
   MutexLocker locker(CompileTaskAlloc_lock);
   if (!task->is_free()) {
+      //将code置为null
     task->set_code(NULL);
     assert(!task->lock()->is_locked(), "Should not be locked when freed");
+      //将jobject包含的对象指针销毁
     JNIHandles::destroy_global(task->_method_holder);
     JNIHandles::destroy_global(task->_hot_method_holder);
-
+      //free置为true，插入到_task_free_list链表前面
     task->set_is_free(true);
     task->set_next(_task_free_list);
     _task_free_list = task;
@@ -311,9 +325,10 @@ void CompileTask::initialize(int compile_id,
                              const char* comment,
                              bool is_blocking) {
   assert(!_lock->is_locked(), "bad locking");
-
+    //初始化各属性
   _compile_id = compile_id;
   _method = method();
+    //method所属的klass
   _method_holder = JNIHandles::make_global(method->method_holder()->klass_holder());
   _osr_bci = osr_bci;
   _is_blocking = is_blocking;
@@ -332,6 +347,7 @@ void CompileTask::initialize(int compile_id,
   _failure_reason = NULL;
 
   if (LogCompilation) {
+      //elapsed_counter返回从进程启动到现在的累计时间
     _time_queued = os::elapsed_counter();
     if (hot_method.not_null()) {
       if (hot_method == method) {
@@ -355,7 +371,9 @@ nmethod* CompileTask::code() const {
 }
 void CompileTask::set_code(nmethod* nm) {
   if (_code_handle == NULL && nm == NULL)  return;
+    //校验_code_handle不为空
   guarantee(_code_handle != NULL, "");
+    //nmethodLocker的方法
   _code_handle->set_code(nm);
   if (nm == NULL)  _code_handle = NULL;  // drop the handle also
 }
@@ -629,16 +647,20 @@ void CompileTask::log_task_done(CompileLog* log) {
 
 /**
  * Add a CompileTask to a CompileQueue
+ *  add方法往队列中添加任务，remove方法往队列中移除任务，这两个的实现都是简单的队列操作。
  */
 void CompileQueue::add(CompileTask* task) {
+    //必须已经获取锁
   assert(lock()->owned_by_self(), "must own lock");
+    //没有禁用编译
   assert(!CompileBroker::is_compilation_disabled_forever(), "Do not add task if compilation is turned off forever");
-
+    //将这两个置空，方便后面插入到链表中
   task->set_next(NULL);
   task->set_prev(NULL);
-
+    //空链表
   if (_last == NULL) {
     // The compile queue is empty.
+      //插入到链表的后面
     assert(_first == NULL, "queue is empty");
     _first = task;
     _last = task;
@@ -652,15 +674,18 @@ void CompileQueue::add(CompileTask* task) {
   ++_size;
 
   // Mark the method as being in the compile queue.
+    //method的_access_flags打标成该方法已经在编译队列中等待编译
   task->method()->set_queued_for_compilation();
 
   NOT_PRODUCT(print();)
 
   if (LogCompilation && xtty != NULL) {
+      //打印日志
     task->log_task_queued();
   }
 
   // Notify CompilerThreads that a task is available.
+    //通知CompilerThreads添加了一个新的CompileTask
   lock()->notify_all();
 }
 
@@ -696,35 +721,45 @@ void CompileQueue::free_all() {
 // CompileQueue::get
 //
 // Get the next CompileTask from a CompileQueue
+// CompileQueue::get()用于根据CompilationPolicy从编译任务队列中获取一个编译任务，获取成功需要将该任务从队列中移除，在执行新获取的编译任务前会优先处理之前未处理的历史任务，
 CompileTask* CompileQueue::get() {
+    //NMethodSweeper用来清理不再活跃的nmethod，以释放CodeCache空间
   NMethodSweeper::possibly_sweep();
-
+    //获取锁
   MutexLocker locker(lock());
   // If _first is NULL we have no more compile jobs. There are two reasons for
   // having no compile jobs: First, we compiled everything we wanted. Second,
   // we ran out of code cache so compilation has been disabled. In the latter
   // case we perform code cache sweeps to free memory such that we can re-enable
   // compilation.
+    //_first为NULL，有两种情形，一种是所有编译任务都已完成，一种是CodeCache被耗尽了导致编译任务被禁止了，这种情形需要清理nmethod以释放CodeCache内存
   while (_first == NULL) {
     // Exit loop if compilation is disabled forever
+      //如果永远禁用编译
     if (CompileBroker::is_compilation_disabled_forever()) {
       return NULL;
     }
 
+      //第二种情形
     if (UseCodeCacheFlushing && !CompileBroker::should_compile_new_jobs()) {
       // Wait a certain amount of time to possibly do another sweep.
       // We must wait until stack scanning has happened so that we can
       // transition a method's state from 'not_entrant' to 'zombie'.
+        //等待一段时间执行possibly_sweep方法，必须等待直到栈扫描结束，这样才能将nmethod的状态从not_entrant改成zombie
+        //等待的时间，默认是5s
       long wait_time = NmethodSweepCheckInterval * 1000;
+        //如果是默认值
       if (FLAG_IS_DEFAULT(NmethodSweepCheckInterval)) {
         // Only one thread at a time can do sweeping. Scale the
         // wait time according to the number of compiler threads.
         // As a result, the next sweep is likely to happen every 100ms
         // with an arbitrary number of threads that do sweeping.
+          //则根据编译线程数计算等待时间，因为同一时刻只有一个线程执行nmethod清理，所以这里需要乘以编译线程数
         wait_time = 100 * CICompilerCount;
       }
       bool timeout = lock()->wait(!Mutex::_no_safepoint_check_flag, wait_time);
       if (timeout) {
+          //获取锁
         MutexUnlocker ul(lock());
         NMethodSweeper::possibly_sweep();
       }
@@ -738,10 +773,12 @@ CompileTask* CompileQueue::get() {
       // We need a timed wait here, since compiler threads can exit if compilation
       // is disabled forever. We use 5 seconds wait time; the exiting of compiler threads
       // is not critical and we do not want idle compiler threads to wake up too often.
+        //第一种情形，等待5s，看能否有新的任务，如果一直空闲则让编译线程退出
       lock()->wait(!Mutex::_no_safepoint_check_flag, 5*1000);
     }
   }
 
+    //如果永远禁用编译
   if (CompileBroker::is_compilation_disabled_forever()) {
     return NULL;
   }
@@ -749,11 +786,14 @@ CompileTask* CompileQueue::get() {
   CompileTask* task;
   {
     No_Safepoint_Verifier nsv;
+      //通过CompilationPolicy从队列中选择一个任务
     task = CompilationPolicy::policy()->select_task(this);
   }
   if (task != NULL) {
+      //从队列中移除该任务
     remove(task);
   }
+    //清除所有stale即一段时间内不再被调用的任务并将其释放
   purge_stale_tasks(); // may temporarily release MCQ lock
   return task;
 }
@@ -771,6 +811,7 @@ void CompileQueue::purge_stale_tasks() {
     _first_stale = NULL;
     {
       MutexUnlocker ul(lock());
+        //遍历所有的stale任务，通过CompileTaskWrapper将其释放掉
       for (CompileTask* task = head; task != NULL; ) {
         CompileTask* next_task = task->next();
         CompileTaskWrapper ctw(task); // Frees the task
@@ -782,19 +823,24 @@ void CompileQueue::purge_stale_tasks() {
 }
 
 void CompileQueue::remove(CompileTask* task) {
+    //必须获取锁
    assert(lock()->owned_by_self(), "must own lock");
+    //存在前一个元素
   if (task->prev() != NULL) {
+      //把目标task移除
     task->prev()->set_next(task->next());
   } else {
     // max is the first element
+      //目标元素是第一个元素
     assert(task == _first, "Sanity");
     _first = task->next();
   }
-
+    //存在下一个元素
   if (task->next() != NULL) {
     task->next()->set_prev(task->prev());
   } else {
     // max is the last element
+      //目标元素是最后一个元素
     assert(task == _last, "Sanity");
     _last = task->prev();
   }
@@ -802,10 +848,13 @@ void CompileQueue::remove(CompileTask* task) {
 }
 
 void CompileQueue::remove_and_mark_stale(CompileTask* task) {
+    //校验当前线程获取锁
   assert(lock()->owned_by_self(), "must own lock");
+    //从任务队列中移除
   remove(task);
 
   // Enqueue the task for reclamation (should be done outside MCQ lock)
+    //将新的task插入到_first_stale的前面
   task->set_next(_first_stale);
   task->set_prev(NULL);
   _first_stale = task;
@@ -881,24 +930,30 @@ CompilerCounters::CompilerCounters(const char* thread_name, int instance, TRAPS)
 // CompileBroker::compilation_init
 //
 // Initialize the Compilation object
+//  compilation_init方法负责初始化编译相关组件，包括编译器实现，编译线程，计数器等
 void CompileBroker::compilation_init() {
   _last_method_compiled[0] = '\0';
 
   // No need to initialize compilation system if we do not use it.
+    //如果不使用编译
   if (!UseCompiler) {
     return;
   }
+    //通常情况是定义COMPILER1和COMPILER2，不会定义SHARK
 #ifndef SHARK
   // Set the interface to the current compiler(s).
+    //最终返回CompilationPolicy中c1_count和c2_count属性的值，参考AdvancedThresholdPolicy::initialize()的实现
   int c1_count = CompilationPolicy::policy()->compiler_count(CompLevel_simple);
   int c2_count = CompilationPolicy::policy()->compiler_count(CompLevel_full_optimization);
 #ifdef COMPILER1
+    //初始化Compiler
   if (c1_count > 0) {
     _compilers[0] = new Compiler();
   }
 #endif // COMPILER1
 
 #ifdef COMPILER2
+    //初始化C2Compiler
   if (c2_count > 0) {
     _compilers[1] = new C2Compiler();
   }
@@ -912,10 +967,12 @@ void CompileBroker::compilation_init() {
 #endif // SHARK
 
   // Start the CompilerThreads
+    //初始化CompilerThreads和CompileQueue
   init_compiler_threads(c1_count, c2_count);
   // totalTime performance counter is always created as it is required
   // by the implementation of java.lang.management.CompilationMBean.
   {
+      //初始化性能统计相关计数器
     EXCEPTION_MARK;
     _perf_total_compilation =
                  PerfDataManager::create_counter(JAVA_CI, "totalTime",
@@ -1019,17 +1076,20 @@ void CompileBroker::compilation_init() {
 CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQueue* queue, CompilerCounters* counters,
                                                     AbstractCompiler* comp, TRAPS) {
   CompilerThread* compiler_thread = NULL;
-
+    //获取java.lang.Thread对应的Klass
   Klass* k =
     SystemDictionary::resolve_or_fail(vmSymbols::java_lang_Thread(),
                                       true, CHECK_0);
   instanceKlassHandle klass (THREAD, k);
   instanceHandle thread_oop = klass->allocate_instance_handle(CHECK_0);
+    //创建一个java.lang.String
   Handle string = java_lang_String::create_from_str(name, CHECK_0);
 
   // Initialize thread_oop to put it into the system threadGroup
+    //获取system threadGroup 对应的Handle
   Handle thread_group (THREAD,  Universe::system_thread_group());
   JavaValue result(T_VOID);
+    //实际调用Thread(ThreadGroup group, String name)构造方法创建一个新的Thread实例，实例保存到thread_oop
   JavaCalls::call_special(&result, thread_oop,
                        klass,
                        vmSymbols::object_initializer_name(),
@@ -1039,7 +1099,9 @@ CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQue
                        CHECK_0);
 
   {
+      //获取锁Threads_lock
     MutexLocker mu(Threads_lock, THREAD);
+      //创建一个新的CompilerThread
     compiler_thread = new CompilerThread(queue, counters);
     // At this point the new CompilerThread data-races with this startup
     // thread (which I believe is the primoridal thread and NOT the VM
@@ -1052,40 +1114,44 @@ CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQue
     // JavaThread due to lack of memory. We would have to throw an exception
     // in that case. However, since this must work and we do not allow
     // exceptions anyway, check and abort if this fails.
-
+      //创建CompilerThread失败
     if (compiler_thread == NULL || compiler_thread->osthread() == NULL){
       vm_exit_during_initialization("java.lang.OutOfMemoryError",
                                     "unable to create new native thread");
     }
-
+      //将新创建的compiler_thread同Java Thread实例关联
     java_lang_Thread::set_thread(thread_oop(), compiler_thread);
 
     // Note that this only sets the JavaThread _priority field, which by
     // definition is limited to Java priorities and not OS priorities.
     // The os-priority is set in the CompilerThread startup code itself
-
+      // 设置Java Thread的优先级
     java_lang_Thread::set_priority(thread_oop(), NearMaxPriority);
 
     // Note that we cannot call os::set_priority because it expects Java
     // priorities and we are *explicitly* using OS priorities so that it's
     // possible to set the compiler thread priority higher than any Java
     // thread.
-
+      //CompilerThreadPriority表示编译线程运行的优先级，如果是-1则表示采用默认优先级
     int native_prio = CompilerThreadPriority;
     if (native_prio == -1) {
+        //UseCriticalCompilerThreadPriority表示使用特定的调度优先级，默认为false，是实验属性
       if (UseCriticalCompilerThreadPriority) {
         native_prio = os::java_to_os_priority[CriticalPriority];
       } else {
         native_prio = os::java_to_os_priority[NearMaxPriority];
       }
     }
+      //设置编译线程的优先级
     os::set_native_priority(compiler_thread, native_prio);
-
+      //设置后台线程
     java_lang_Thread::set_daemon(thread_oop());
 
     compiler_thread->set_threadObj(thread_oop());
     compiler_thread->set_compiler(comp);
+      //Threads用于记录所有激活的线程
     Threads::add(compiler_thread);
+      //启动编译线程，开始执行指定的方法
     Thread::start(compiler_thread);
   }
 
@@ -1099,11 +1165,14 @@ CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQue
 void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler_count) {
   EXCEPTION_MARK;
 #if !defined(ZERO) && !defined(SHARK)
+    //非SHARK且非ZERO编译模式下，要求c2_compiler_count或者c1_compiler_count大于0
   assert(c2_compiler_count > 0 || c1_compiler_count > 0, "No compilers?");
 #endif // !ZERO && !SHARK
   // Initialize the compilation queue
   if (c2_compiler_count > 0) {
+      //初始化CompileQueue
     _c2_compile_queue  = new CompileQueue("C2 CompileQueue",  MethodCompileQueue_lock);
+      //设置编译线程数量
     _compilers[1]->set_num_compiler_threads(c2_compiler_count);
   }
   if (c1_compiler_count > 0) {
@@ -1112,7 +1181,7 @@ void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler
   }
 
   int compiler_count = c1_compiler_count + c2_compiler_count;
-
+    //初始化CompilerThread数组
   _compiler_threads =
     new (ResourceObj::C_HEAP, mtCompiler) GrowableArray<CompilerThread*>(compiler_count, true);
 
@@ -1122,6 +1191,7 @@ void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler
     sprintf(name_buffer, "C2 CompilerThread%d", i);
     CompilerCounters* counters = new CompilerCounters("compilerThread", i, CHECK);
     // Shark and C2
+      //初始化指定数量的C2编译线程，将其添加到CompilerThread数组中
     CompilerThread* new_thread = make_compiler_thread(name_buffer, _c2_compile_queue, counters, _compilers[1], CHECK);
     _compiler_threads->append(new_thread);
   }
@@ -1131,6 +1201,7 @@ void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler
     sprintf(name_buffer, "C1 CompilerThread%d", i);
     CompilerCounters* counters = new CompilerCounters("compilerThread", i, CHECK);
     // C1
+      //初始化指定数量的C1编译线程，将其添加到CompilerThread数组中
     CompilerThread* new_thread = make_compiler_thread(name_buffer, _c1_compile_queue, counters, _compilers[0], CHECK);
     _compiler_threads->append(new_thread);
   }
@@ -1169,17 +1240,18 @@ void CompileBroker::compile_method_base(methodHandle method,
                                         const char* comment,
                                         Thread* thread) {
   // do nothing if compiler thread(s) is not available
+    // CompileBroker未初始化
   if (!_initialized) {
     return;
   }
-
+    //校验参数
   guarantee(!method->is_abstract(), "cannot compile abstract methods");
   assert(method->method_holder()->oop_is_instance(),
          "sanity check");
   assert(!method->method_holder()->is_not_initialized(),
          "method holder must be initialized");
   assert(!method->is_method_handle_intrinsic(), "do not enqueue these guys");
-
+    //打印日志
   if (CIPrintRequests) {
     tty->print("request: ");
     method->print_short_name(tty);
@@ -1201,6 +1273,7 @@ void CompileBroker::compile_method_base(methodHandle method,
   // A request has been made for compilation.  Before we do any
   // real work, check to see if the method has been compiled
   // in the meantime with a definitive result.
+    //如果编译已完成
   if (compilation_is_complete(method, osr_bci, comp_level)) {
     return;
   }
@@ -1216,6 +1289,7 @@ void CompileBroker::compile_method_base(methodHandle method,
 
   // If this method is already in the compile queue, then
   // we do not block the current thread.
+  //如果该方法已经在编译队列中
   if (compilation_is_in_queue(method)) {
     // We may want to decay our counter a bit here to prevent
     // multiple denied requests for compilation.  This is an
@@ -1233,6 +1307,7 @@ void CompileBroker::compile_method_base(methodHandle method,
   // the pending list lock or a 3-way deadlock may occur
   // between the reference handler thread, a GC (instigated
   // by a compiler thread), and compiled method registration.
+    // 如果当前线程拥有pending_list_lock，为了避免死锁
   if (InstanceRefKlass::owns_pending_list_lock(JavaThread::current())) {
     return;
   }
@@ -1240,6 +1315,7 @@ void CompileBroker::compile_method_base(methodHandle method,
   if (TieredCompilation) {
     // Tiered policy requires MethodCounters to exist before adding a method to
     // the queue. Create if we don't have them yet.
+      //如果启用分层编译，则必须使用method_counters，如果没有则创建一个
     method->get_method_counters(thread);
   }
 
@@ -1250,11 +1326,13 @@ void CompileBroker::compile_method_base(methodHandle method,
 
   // Acquire our lock.
   {
+      //获取队列的锁
     MutexLocker locker(queue->lock(), thread);
 
     // Make sure the method has not slipped into the queues since
     // last we checked; note that those checks were "fast bail-outs".
     // Here we need to be more careful, see 14012000 below.
+      //最后一遍检查该方法是否已添加到队列中，因为其他编译线程可能将其添加了
     if (compilation_is_in_queue(method)) {
       return;
     }
@@ -1262,6 +1340,7 @@ void CompileBroker::compile_method_base(methodHandle method,
     // We need to check again to see if the compilation has
     // completed.  A previous compilation may have registered
     // some result.
+      // 如果已编译完成
     if (compilation_is_complete(method, osr_bci, comp_level)) {
       return;
     }
@@ -1269,6 +1348,7 @@ void CompileBroker::compile_method_base(methodHandle method,
     // We now know that this compilation is not pending, complete,
     // or prohibited.  Assign a compile_id to this compilation
     // and check to see if it is in our [Start..Stop) range.
+      //分配compile_id
     int compile_id = assign_compile_id(method, osr_bci);
     if (compile_id == 0) {
       // The compilation falls outside the allowed range.
@@ -1276,6 +1356,7 @@ void CompileBroker::compile_method_base(methodHandle method,
     }
 
     // Should this thread wait for completion of the compile?
+      //编译时是否需要阻塞，通过参数BackgroundCompilation控制，默认是true，则不阻塞
     blocking = is_compile_blocking();
 
     // We will enter the compilation in the queue.
@@ -1316,6 +1397,7 @@ void CompileBroker::compile_method_base(methodHandle method,
     // and in that case it's best to protect both the testing (here) of
     // these bits, and their updating (here and elsewhere) under a
     // common lock.
+      //创建编译任务，将其添加到编译队列中
     task = create_compile_task(queue,
                                compile_id, method,
                                osr_bci, comp_level,
@@ -1324,16 +1406,18 @@ void CompileBroker::compile_method_base(methodHandle method,
   }
 
   if (blocking) {
+      //阻塞当前线程等待其编译完成，编译完成后会释放task
     wait_for_completion(task);
   }
 }
 
-
+// CompileBroker::compile_method用于提交编译任务，是接受编译请求的终极入口，默认配置下提交完后会立即返回不等待编译完成
 nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
                                        int comp_level,
                                        methodHandle hot_method, int hot_count,
                                        const char* comment, Thread* THREAD) {
   // make sure arguments make sense
+    //校验方法入参
   assert(method->method_holder()->oop_is_instance(), "not an instance method");
   assert(osr_bci == InvocationEntryBci || (0 <= osr_bci && osr_bci < method->code_size()), "bci out of range");
   assert(!method->is_abstract() && (osr_bci == InvocationEntryBci || !method->is_native()), "cannot compile abstract/native methods");
@@ -1344,20 +1428,23 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
 
   // lock, make sure that the compilation
   // isn't prohibited in a straightforward way.
+    // 如果该编译级别对应的编译器不存在或者无法编译
   AbstractCompiler *comp = CompileBroker::compiler(comp_level);
   if (comp == NULL || !comp->can_compile_method(method) ||
       compilation_is_prohibited(method, osr_bci, comp_level)) {
     return NULL;
   }
-
+    //如果是非栈上替换方法
   if (osr_bci == InvocationEntryBci) {
     // standard compilation
     nmethod* method_code = method->code();
     if (method_code != NULL) {
+        //如果编译完成
       if (compilation_is_complete(method, osr_bci, comp_level)) {
         return method_code;
       }
     }
+      //如果被禁用编译
     if (method->is_not_compilable(comp_level)) {
       return NULL;
     }
@@ -1369,13 +1456,17 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
            "all OSR compiles are assumed to be at a single compilation lavel");
 #endif // TIERED
     // We accept a higher level osr method
+      // 栈上替换方法的编译
+      // 从osr链上查找大于等于目标编译级别的nmethod
     nmethod* nm = method->lookup_osr_nmethod_for(osr_bci, comp_level, false);
     if (nm != NULL) return nm;
+      //如果被禁用编译
     if (method->is_not_osr_compilable(comp_level)) return NULL;
   }
 
   assert(!HAS_PENDING_EXCEPTION, "No exception should be present");
   // some prerequisites that are compiler specific
+    //C2编译下，加载该方法依赖的所有类
   if (comp->is_c2() || comp->is_shark()) {
     method->constants()->resolve_string_constants(CHECK_AND_CLEAR_NULL);
     // Resolve all classes seen in the signature of the method
@@ -1389,12 +1480,14 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
   //
   // Note: A native method implies non-osr compilation which is
   //       checked with an assertion at the entry of this method.
+    // 如果是本地方法，且不是MethodHandle相关方法，则调用NativeLookup加载对应的本地代码
   if (method->is_native() && !method->is_method_handle_intrinsic()) {
     bool in_base_library;
     address adr = NativeLookup::lookup(method, in_base_library, THREAD);
     if (HAS_PENDING_EXCEPTION) {
       // In case of an exception looking up the method, we just forget
       // about it. The interpreter will kick-in and throw the exception.
+        //如果加载本地代码异常，则将其标记为没有编译，并清除异常
       method->set_not_compilable(); // implies is_not_osr_compilable()
       CLEAR_PENDING_EXCEPTION;
       return NULL;
@@ -1409,18 +1502,21 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
 
   // JVMTI -- post_compile_event requires jmethod_id() that may require
   // a lock the compiling thread can not acquire. Prefetch it here.
+    //提前计算获取jmethodId, 为了后面的JVMTI发布事件使用
   if (JvmtiExport::should_post_compiled_method_load()) {
     method->jmethod_id();
   }
 
   // do the compilation
   if (method->is_native()) {
+      //PreferInterpreterNativeStubs表示是否总是使用解释器的stub调用本地方法，默认值为false
     if (!PreferInterpreterNativeStubs || method->is_method_handle_intrinsic()) {
       // To properly handle the appendix argument for out-of-line calls we are using a small trampoline that
       // pops off the appendix argument and jumps to the target (see gen_special_dispatch in SharedRuntime).
       //
       // Since normal compiled-to-compiled calls are not able to handle such a thing we MUST generate an adapter
       // in this case.  If we can't generate one and use it we can not execute the out-of-line method handle calls.
+        // 为本地方法调用生成适配器
       AdapterHandlerLibrary::create_native_wrapper(method);
     } else {
       return NULL;
@@ -1428,10 +1524,12 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
   } else {
     // If the compiler is shut off due to code cache getting full
     // fail out now so blocking compiles dont hang the java thread
+      // 如果因为CodeCache满了则延缓编译
     if (!should_compile_new_jobs()) {
       CompilationPolicy::policy()->delay_compilation(method());
       return NULL;
     }
+      //执行编译
     compile_method_base(method, osr_bci, comp_level, hot_method, hot_count, comment, THREAD);
   }
 
@@ -1445,21 +1543,27 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
 // CompileBroker::compilation_is_complete
 //
 // See if compilation of this method is already complete.
+//判断是否编译完成
 bool CompileBroker::compilation_is_complete(methodHandle method,
                                             int          osr_bci,
                                             int          comp_level) {
   bool is_osr = (osr_bci != standard_entry_bci);
+    //如果是osr
   if (is_osr) {
+      //如果该级别下被禁用编译
     if (method->is_not_osr_compilable(comp_level)) {
       return true;
     } else {
+        //从osr链表中查找是否存在大于等于目标编译级别的nmethod，如果找到则不会为空
       nmethod* result = method->lookup_osr_nmethod_for(osr_bci, comp_level, true);
       return (result != NULL);
     }
   } else {
+      //如果该级别下被禁用编译
     if (method->is_not_compilable(comp_level)) {
       return true;
     } else {
+        //如果code属性不为空，且等于目标编译级别
       nmethod* result = method->code();
       if (result == NULL) return false;
       return comp_level == result->comp_level();
@@ -1611,18 +1715,20 @@ void CompileBroker::wait_for_completion(CompileTask* task) {
   assert(task->is_blocking(), "can only wait on blocking task");
 
   JavaThread* thread = JavaThread::current();
+    //打标，当前线程阻塞在编译上
   thread->set_blocked_on_compilation(true);
 
   methodHandle method(thread, task->method());
   {
     MutexLocker waiter(task->lock(), thread);
-
+    //等待编译完成
     while (!task->is_complete() && !is_compilation_disabled_forever()) {
       task->lock()->wait();
     }
   }
 
   thread->set_blocked_on_compilation(false);
+    //如果因为CodeCache内存不足导致编译被禁用
   if (is_compilation_disabled_forever()) {
     CompileTask::free(task);
     return;
@@ -1630,6 +1736,7 @@ void CompileBroker::wait_for_completion(CompileTask* task) {
 
   // It is harmless to check this status without the lock, because
   // completion is a stable property (until the task object is recycled).
+    //校验task的状态
   assert(task->is_complete(), "Compilation should have completed");
   assert(task->code_handle() == NULL, "must be reset");
 
@@ -1649,6 +1756,7 @@ bool CompileBroker::init_compiler_runtime() {
   CompilerThread* thread = CompilerThread::current();
   AbstractCompiler* comp = thread->compiler();
   // Final sanity check - the compiler object must exist
+    //校验compiler不为空
   guarantee(comp != NULL, "Compiler object must exist");
 
   int system_dictionary_modification_counter;
@@ -1659,7 +1767,9 @@ bool CompileBroker::init_compiler_runtime() {
 
   {
     // Must switch to native to allocate ci_env
+      //为了初始化ci_env，将JavaThread转换成本地的Thread
     ThreadToNativeFromVM ttn(thread);
+      //初始化ciEnv
     ciEnv ci_env(NULL, system_dictionary_modification_counter);
     // Cache Jvmti state
     ci_env.cache_jvmti_state();
@@ -1667,25 +1777,31 @@ bool CompileBroker::init_compiler_runtime() {
     ci_env.cache_dtrace_flags();
 
     // Switch back to VM state to do compiler initialization
+      //为了comp的初始化，将其转化回JavaThread
     ThreadInVMfromNative tv(thread);
     ResetNoHandleMark rnhm;
 
 
     if (!comp->is_shark()) {
       // Perform per-thread and global initializations
+        // comp初始化，如果是C1编译器会在初始化过程中创建一个新的buffer blob并设置到编译线程中
       comp->initialize();
     }
   }
-
+    //编译器初始化失败
   if (comp->is_failed()) {
+      //永久禁用编译
     disable_compilation_forever();
     // If compiler initialization failed, no compiler thread that is specific to a
     // particular compiler runtime will ever start to compile methods.
+      //释放相关资源，设置标识只使用解释执行
     shutdown_compiler_runtime(comp, thread);
+      //返回false后编译线程退出
     return false;
   }
 
   // C1 specific check
+    // 如果是C1编译器，检查编译线程的buffer blob是否为空
   if (comp->is_c1() && (thread->get_buffer_blob() == NULL)) {
     warning("Initialization of %s thread failed (no space to run compilers)", thread->name());
     return false;
@@ -1703,6 +1819,7 @@ void CompileBroker::shutdown_compiler_runtime(AbstractCompiler* comp, CompilerTh
   // Free buffer blob, if allocated
   if (thread->get_buffer_blob() != NULL) {
     MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
+      //释放BufferBlob
     CodeCache::free(thread->get_buffer_blob());
   }
 
@@ -1717,6 +1834,7 @@ void CompileBroker::shutdown_compiler_runtime(AbstractCompiler* comp, CompilerTh
     comp->set_shut_down();
 
     // Delete all queued compilation tasks to make compiler threads exit faster.
+      //释放C1和C2编译队列
     if (_c1_compile_queue != NULL) {
       _c1_compile_queue->free_all();
     }
@@ -1726,6 +1844,7 @@ void CompileBroker::shutdown_compiler_runtime(AbstractCompiler* comp, CompilerTh
     }
 
     // Set flags so that we continue execution with using interpreter only.
+      //设置标识，只使用解释执行
     UseCompiler    = false;
     UseInterpreter = true;
 
@@ -1739,17 +1858,21 @@ void CompileBroker::shutdown_compiler_runtime(AbstractCompiler* comp, CompilerTh
 // CompileBroker::compiler_thread_loop
 //
 // The main loop run by a CompilerThread.
+// CompileBroker::compiler_thread_loop就是编译线程启动后自动执行的方法，循环的从编译任务队列中取出编译任务执行编译，方法编译完成后编译器会调用ciEnv::register_method方法将编译结果安装
 void CompileBroker::compiler_thread_loop() {
+    slog_trace("CompileBroker::compiler_thread_loop函数被调用了,编译线程启动后自动执行该方法...");
   CompilerThread* thread = CompilerThread::current();
   CompileQueue* queue = thread->queue();
   // For the thread that initializes the ciObjectFactory
   // this resource mark holds all the shared objects
+    //编译过程会通过Area分配内存，通过ResourceMark来管理分配过程
   ResourceMark rm;
 
   // First thread to get here will initialize the compiler interface
 
   if (!ciObjectFactory::is_initialized()) {
     ASSERT_IN_VM;
+      //获取锁，初始化ciObjectFactory
     MutexLocker only_one (CompileThread_lock, thread);
     if (!ciObjectFactory::is_initialized()) {
       ciObjectFactory::initialize();
@@ -1758,10 +1881,12 @@ void CompileBroker::compiler_thread_loop() {
 
   // Open a log.
   if (LogCompilation) {
+      //初始化CompileLog，打印编译相关日志
     init_compiler_thread_log();
   }
   CompileLog* log = thread->log();
   if (log != NULL) {
+      //打印编译线程启动日志
     log->begin_elem("start_compile_thread name='%s' thread='" UINTX_FORMAT "' process='%d'",
                     thread->name(),
                     os::current_thread_id(),
@@ -1771,6 +1896,7 @@ void CompileBroker::compiler_thread_loop() {
   }
 
   // If compiler thread/runtime initialization fails, exit the compiler thread
+    //初始化编译相关运行时组件
   if (!init_compiler_runtime()) {
     return;
   }
@@ -1780,15 +1906,20 @@ void CompileBroker::compiler_thread_loop() {
   // compiler runtimes. This, in turn, should not happen. The only known case
   // when compiler runtime initialization fails is if there is not enough free
   // space in the code cache to generate the necessary stubs, etc.
+    //只有编译器初始化时因为CodeCache内存不足导致初始化失败这一种情形，编译会被禁用
+    //编译器初始化完成后，在JVM整个的运行期，编译器就会不断从编译任务队列中拉取新的编译任务
+    //如果没有禁用编译，初始化正常，该方法永远返回false
   while (!is_compilation_disabled_forever()) {
     // We need this HandleMark to avoid leaking VM handles.
+      //通过HandleMark管理各种Handle
     HandleMark hm(thread);
-
+      //如果分配CodeCache剩余内存不足了
     if (CodeCache::unallocated_capacity() < CodeCacheMinimumFreeSpace) {
       // the code cache is really full
+        //打印日志或者警告，清理CodeCache
       handle_full_code_cache();
     }
-
+    //从编译队列中获取一个新的任务，如果没有新的编译任务，则get方法等待5s
     CompileTask* task = queue->get();
     if (task == NULL) {
       continue;
@@ -1796,6 +1927,7 @@ void CompileBroker::compiler_thread_loop() {
 
     // Give compiler threads an extra quanta.  They tend to be bursty and
     // this helps the compiler to finish up the job.
+      //CompilerThreadHintNoPreempt只限于Solaris下使用
     if( CompilerThreadHintNoPreempt )
       os::hint_no_preempt();
 
@@ -1805,25 +1937,32 @@ void CompileBroker::compiler_thread_loop() {
 
     // Assign the task to the current thread.  Mark this compilation
     // thread as active for the profiler.
+      //通过CompileTaskWrapper的构造方法将task置为当前准备编译的task
     CompileTaskWrapper ctw(task);
+      //初始化nmethodLocker，nmethodLocker中的nmethod是在编译完成后根据编译结果创建的
     nmethodLocker result_handle;  // (handle for the nmethod produced by this task)
     task->set_code_handle(&result_handle);
     methodHandle method(thread, task->method());
 
     // Never compile a method if breakpoints are present in it
+      //被编译方法不能有断点
     if (method()->number_of_breakpoints() == 0) {
       // Compile the method.
+        //如果启用编译
       if ((UseCompiler || AlwaysCompileLoopMethods) && CompileBroker::should_compile_new_jobs()) {
         invoke_compiler_on_method(task);
       } else {
         // After compilation is disabled, remove remaining methods from queue
+          //method打标，已经从编译队列中移除
         method->clear_queued_for_compilation();
+          //设置编译失败原因
         task->set_failure_reason("compilation is disabled");
       }
     }
   }
 
   // Shut down compiler runtime
+    //禁用编译后
   shutdown_compiler_runtime(thread->compiler(), thread);
 }
 
@@ -1965,12 +2104,14 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
     assert(!method->is_native(), "no longer compile natives");
 
     // Save information about this method in case of failure.
+      //记录最近一次编译的相关信息，调试用
     set_last_compile(thread, method, is_osr, task_level);
 
     DTRACE_METHOD_COMPILE_BEGIN_PROBE(method, compiler_name(task_level));
   }
 
   // Allocate a new set of JNI handles.
+    //创建一个新的JNIHandleBlock，将其置为当前线程激活的
   push_jni_handle_block();
   Method* target_handle = task->method();
   int compilable = ciEnv::MethodCompilable;
@@ -1983,7 +2124,7 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
 
     NoHandleMark  nhm;
     ThreadToNativeFromVM ttn(thread);
-
+      //初始化ciEnv
     ciEnv ci_env(task, system_dictionary_modification_counter);
     if (should_break) {
       ci_env.set_break_at_compile(true);
@@ -2004,14 +2145,15 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
 
     TraceTime t1("compilation", &time);
     EventCompilation event;
-
+    //根据编译级别获取对应的编译器
     AbstractCompiler *comp = compiler(task_level);
     if (comp == NULL) {
       ci_env.record_method_not_compilable("no compiler", !TieredCompilation);
     } else {
+        //执行方法编译
       comp->compile_method(&ci_env, target, osr_bci);
     }
-
+    //编译失败
     if (!ci_env.failing() && task->code() == NULL) {
       //assert(false, "compiler should always document failure");
       // The compiler elected, without comment, not to register a result.
@@ -2023,6 +2165,7 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
     compilable = ci_env.compilable();
 
     if (ci_env.failing()) {
+        //编译失败，记录失败原因，打印日志
       const char* failure_reason = ci_env.failure_reason();
       const char* retry_message = ci_env.retry_message();
       task->set_failure_reason(failure_reason);
@@ -2052,27 +2195,32 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
         }
       }
     } else {
+        //编译成功
       task->mark_success();
+        //记录编译的字节码数量
       task->set_num_inlined_bytecodes(ci_env.num_inlined_bytecodes());
       if (_compilation_log != NULL) {
         nmethod* code = task->code();
         if (code != NULL) {
+            //打印编译后的结果
           _compilation_log->log_nmethod(thread, code);
         }
       }
     }
     // simulate crash during compilation
+      //发布事件
     assert(task->compile_id() != CICrashAt, "just as planned");
     if (event.should_commit()) {
       post_compilation_event(&event, task);
     }
   }
+    //恢复线程原来的JNIHandleBlock
   pop_jni_handle_block();
 
   methodHandle method(thread, task->method());
 
   DTRACE_METHOD_COMPILE_END_PROBE(method, compiler_name(task_level), task->is_success());
-
+    //收集统计数据
   collect_statistics(thread, time, task);
 
   if (PrintCompilation && PrintCompilation2) {
@@ -2090,13 +2238,14 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
 
   // Disable compilation, if required.
   switch (compilable) {
+      //该方法不需要编译，则禁用该方法的编译
   case ciEnv::MethodCompilable_never:
     if (is_osr)
       method->set_not_osr_compilable_quietly();
     else
       method->set_not_compilable_quietly();
     break;
-  case ciEnv::MethodCompilable_not_at_tier:
+  case ciEnv::MethodCompilable_not_at_tier: //该方法不支持分层编译
     if (is_osr)
       method->set_not_osr_compilable_quietly(task_level);
     else
@@ -2111,6 +2260,7 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
   // queue lock to get this task off the compile queue; thus (to belabour
   // the point somewhat) our clearing of the bits must be occurring
   // only after the setting of the bits. See also 14012000 above.
+    // 将该方法标记为已从队列中移除
   method->clear_queued_for_compilation();
 
 #ifdef ASSERT
@@ -2129,7 +2279,9 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
  */
 void CompileBroker::handle_full_code_cache() {
   UseInterpreter = true;
+    //如果使用编译
   if (UseCompiler || AlwaysCompileLoopMethods ) {
+      //xtty是一个xmlStream*，用来打印日志
     if (xtty != NULL) {
       ResourceMark rm;
       stringStream s;
@@ -2154,21 +2306,26 @@ void CompileBroker::handle_full_code_cache() {
       vm_direct_exit(CompileTheWorld ? 0 : 1);
     }
 #endif
+    //如果允许清理CodeCache
     if (UseCodeCacheFlushing) {
       // Since code cache is full, immediately stop new compiles
+        //设置标识，停止编译，默认是run_compilation
       if (CompileBroker::set_should_compile_new_jobs(CompileBroker::stop_compilation)) {
         NMethodSweeper::log_sweep("disable_compiler");
       }
       // Switch to 'vm_state'. This ensures that possibly_sweep() can be called
       // without having to consider the state in which the current thread is.
+        //调用possibly_sweep执行CodeCache清理
       ThreadInVMfromUnknown in_vm;
       NMethodSweeper::possibly_sweep();
     } else {
+        //不允许清理CodeCache下禁用编译
       disable_compilation_forever();
     }
 
     // Print warning only once
     if (should_print_compiler_warning()) {
+        //打印警告日志
       warning("CodeCache is full. Compiler has been disabled.");
       warning("Try increasing the code cache size using -XX:ReservedCodeCacheSize=");
       codecache_print(/* detailed= */ true);

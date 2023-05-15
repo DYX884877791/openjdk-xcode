@@ -37,7 +37,7 @@
 #include "runtime/biasedLocking.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/thread.inline.hpp"
-
+#include "utilities/slog.hpp"
 
 // Implementation of InterpreterMacroAssembler
 
@@ -275,11 +275,15 @@ void InterpreterMacroAssembler::get_cache_entry_pointer_at_bcp(Register cache,
 void InterpreterMacroAssembler::get_method_counters(Register method,
                                                     Register mcs, Label& skip) {
   Label has_counters;
+    //获取当前Method的_method_counters属性
   movptr(mcs, Address(method, Method::method_counters_offset()));
+    //校验_method_counters属性是否非空，如果不为空则跳转到has_counters
   testptr(mcs, mcs);
   jcc(Assembler::notZero, has_counters);
+    //如果为空，则调用build_method_counters方法创建一个新的MethodCounters
   call_VM(noreg, CAST_FROM_FN_PTR(address,
           InterpreterRuntime::build_method_counters), method);
+    //将新的MethodCounters的地址放入mcs中，校验其是否为空，如果为空则跳转到skip
   movptr(mcs, Address(method,Method::method_counters_offset()));
   testptr(mcs, mcs);
   jcc(Assembler::zero, skip); // No MethodCounters allocated, OutOfMemory
@@ -385,6 +389,7 @@ void InterpreterMacroAssembler::push_d(XMMRegister r) {
 }
 
 void InterpreterMacroAssembler::pop(TosState state) {
+    //根据不同的栈顶值类型从栈帧中pop一个对应类型的变量放到rax中
   switch (state) {
   case atos: pop_ptr();                 break;
   case btos:
@@ -493,7 +498,9 @@ void InterpreterMacroAssembler::dispatch_epilog(TosState state, int step) {
 void InterpreterMacroAssembler::dispatch_base(TosState state, // 表示栈顶缓存状态
                                               address* table,
                                               bool verifyoop) {
+    //64位下是空实现
   verify_FPU(1, state);
+    //校验栈帧size
   if (VerifyActivationFrameSize) {
     Label L;
     mov(rcx, rbp);
@@ -506,13 +513,16 @@ void InterpreterMacroAssembler::dispatch_base(TosState state, // 表示栈顶缓
     stop("broken stack frame");
     bind(L);
   }
+    //如果栈顶缓存是对象，则校验对象
   if (verifyoop) {
     verify_oop(rax, state);
   }
     // 获取当前栈顶状态字节码转发表的地址，保存到rscratch1
+    //将table的地址拷贝到rscratch1寄存器中，这时的table地址实际上是DispatchTable的二维数组_table属性的第一维数组的地址
   lea(rscratch1, ExternalAddress((address)table));
     // 跳转到字节码对应的入口执行机器码指令
     // address = rscratch1 + rbx * 8
+    //此时rbx是待执行的字节码，即跳转到对应字节码的汇编指令上，DispatchTable的二维数组_table属性的第二维就是字节码，即在rscratch1地址上偏移rbx*8个字节就可以找到对应的字节码指令实现了
   jmp(Address(rscratch1, rbx, Address::times_8));
 }
 
@@ -528,6 +538,7 @@ void InterpreterMacroAssembler::dispatch_only_noverify(TosState state) {
   dispatch_base(state, Interpreter::normal_table(state), false);
 }
 
+// 执行字节码流的核心方法
 // 调用dispatch_next()函数执行Java方法的字节码，其实就是根据字节码找到对应的机器指令片段的入口地址来执行，这段机器码就是根据对应的字节码语义翻译过来的，
 
 // 从generate_fixed_frame()函数生成Java方法调用栈帧的时候，
@@ -550,8 +561,13 @@ void InterpreterMacroAssembler::dispatch_only_noverify(TosState state) {
 // 然后跳转到入口地址执行
 // jmpq *(%r10,%rbx,8)
 
+// InterpreterMacroAssembler::dispatch_next开始执行第一个字节码的汇编指令，那么是如何跳转到下一个字节码指令了？
+// 答案在set_entry_points_for_all_bytes()方法调用的TemplateInterpreterGenerator::set_short_entry_points方法实现里，
+// 该方法用来实际生成_normal_table中各个字节码的调用入口地址
 void InterpreterMacroAssembler::dispatch_next(TosState state, int step) {
+    slog_trace("InterpreterMacroAssembler::dispatch_next函数被调用了,执行Java字节码...");
   // load next bytecode (load before advancing r13 to prevent AGI)
+    //r13保存的就是方法的字节码的内存位置，step表示跳过的字节数，第一次调用时没有传step，step默认为0
   load_unsigned_byte(rbx, Address(r13, step));
   // advance r13
   // r13指向字节码的首地址，当第1次调用时，参数step的值为0，那么load_unsigned_byte()函数从r13指向的内存中取一个字节的值，取出来的是字节码指令的操作码。
@@ -561,6 +577,7 @@ void InterpreterMacroAssembler::dispatch_next(TosState state, int step) {
     // 获取地址上的值，这个值是Opcode（范围1~202），存储到rbx
     // step的值由字节码指令和它的操作数共同决定
     // 自增r13供下一次字节码分派使用
+    //将r13中的地址自增step
   increment(r13, step);
     // 返回当前栈顶状态的所有字节码入口点
   dispatch_base(state, Interpreter::dispatch_table(state));
@@ -1589,13 +1606,19 @@ void InterpreterMacroAssembler::increment_mask_and_jump(Address counter_addr,
                                                         int increment, int mask,
                                                         Register scratch, bool preloaded,
                                                         Condition cond, Label* where) {
+    //preloaded一般传false
   if (!preloaded) {
+      //将_counter属性的值复制到scratch，即rcx中
     movl(scratch, counter_addr);
   }
+    //将_counter属性增加increment
   incrementl(scratch, increment);
+    //将scratch寄存器中的值写入到_counter属性
   movl(counter_addr, scratch);
+    //将mask与scratch中的值做且运算
   andl(scratch, mask);
   if (where != NULL) {
+      //如果且运算的结果是0，即达到阈值的时候，则跳转到where，即overflow处
     jcc(cond, *where);
   }
 }

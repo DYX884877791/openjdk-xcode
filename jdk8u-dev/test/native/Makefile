@@ -19,7 +19,8 @@ jvm: jvm.c
 	-I${openjdk_home}/include/linux \
 	-DJDK_PATH=\"${openjdk_home}\" \
 	-DCLASS_PATH=\"${java_target_dir}\" \
-	-DJAVA_MAIN_CLASS=\"${java_main_class}\"
+	-DJAVA_MAIN_CLASS=\"${java_main_class}\" \
+	-ldl
 	@echo "\nbuild success at $(shell date '+%Y%m%d %H:%M:%S')\n"
 
 .PHONY: clean

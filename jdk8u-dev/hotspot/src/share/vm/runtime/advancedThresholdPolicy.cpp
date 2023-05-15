@@ -39,25 +39,32 @@ void AdvancedThresholdPolicy::print_specific(EventType type, methodHandle mh, me
 
 }
 
+// AdvancedThresholdPolicy::initialize就是AdvancedThresholdPolicy的初始化方法
 void AdvancedThresholdPolicy::initialize() {
   // Turn on ergonomic compiler count selection
+    //CICompilerCountPerCPU默认值为false，表示是否每个CPU对应1个后台编译线程，CICompilerCount表示后台编译线程的数量，默认值3
+    //当这两个都是默认值时，将CICompilerCountPerCPU置为true
   if (FLAG_IS_DEFAULT(CICompilerCountPerCPU) && FLAG_IS_DEFAULT(CICompilerCount)) {
     FLAG_SET_DEFAULT(CICompilerCountPerCPU, true);
   }
   int count = CICompilerCount;
   if (CICompilerCountPerCPU) {
     // Simple log n seems to grow too slowly for tiered, try something faster: log n * log log n
+      //考虑机器的CPU数量，计算总的后台编译线程数
     int log_cpu = log2_int(os::active_processor_count());
     int loglog_cpu = log2_int(MAX2(log_cpu, 1));
     count = MAX2(log_cpu * loglog_cpu, 1) * 3 / 2;
   }
-
+    //计算C1,C2编译线程的数量
   set_c1_count(MAX2(count / 3, 1));
   set_c2_count(MAX2(count - c1_count(), 1));
+    //重置CICompilerCount
   FLAG_SET_ERGO(intx, CICompilerCount, c1_count() + c2_count());
 
   // Some inlining tuning
 #if defined(X86) || defined(AARCH64)
+    //InlineSmallCode表示只有当方法代码大小小于该值时才会使用内联编译的方式，x86下默认是1000
+    //这里是将其调整为2000
   if (FLAG_IS_DEFAULT(InlineSmallCode)) {
     FLAG_SET_DEFAULT(InlineSmallCode, 2000);
   }
@@ -77,31 +84,40 @@ void AdvancedThresholdPolicy::initialize() {
 void AdvancedThresholdPolicy::update_rate(jlong t, Method* m) {
   // Skip update if counters are absent.
   // Can't allocate them since we are holding compile queue lock.
+    // 如果没有MethodCounters
   if (m->method_counters() == NULL)  return;
 
+    //运行时间长，调用次数多的方法
   if (is_old(m)) {
     // We don't remove old methods from the queue,
     // so we can just zero the rate.
+      //rate是MethodCounters的一个属性，用来记录每毫秒调用次数的增量，编译线程选择编译任务时优先选择rate最大的方法
     m->set_rate(0);
     return;
   }
 
   // We don't update the rate if we've just came out of a safepoint.
   // delta_s is the time since last safepoint in milliseconds.
+    //delta_s表示自上一次safepoint的时间
   jlong delta_s = t - SafepointSynchronize::end_of_last_safepoint();
+    //delta_t表示自上一次measurement即计算rate的时间
   jlong delta_t = t - (m->prev_time() != 0 ? m->prev_time() : start_time()); // milliseconds since the last measurement
   // How many events were there since the last time?
   int event_count = m->invocation_count() + m->backedge_count();
+    //获取调用次数的增量
   int delta_e = event_count - m->prev_event_count();
 
   // We should be running for at least 1ms.
+    //更新时间间隔大于最低间隔，默认1ms，即rate 1ms内更新一次
   if (delta_s >= TieredRateUpdateMinTime) {
     // And we must've taken the previous point at least 1ms before.
     if (delta_t >= TieredRateUpdateMinTime && delta_e > 0) {
+        //计算rate，更新prev_time和prev_event_count
       m->set_prev_time(t);
       m->set_prev_event_count(event_count);
       m->set_rate((float)delta_e / (float)delta_t); // Rate is events per millisecond
     } else {
+        //如果没有新增调用，则rate置为0，TieredRateUpdateMaxTime是最大时间间隔，默认25ms
       if (delta_t > TieredRateUpdateMaxTime && delta_e == 0) {
         // If nothing happened for 25ms, zero the rate. Don't modify prev values.
         m->set_rate(0);
@@ -112,11 +128,13 @@ void AdvancedThresholdPolicy::update_rate(jlong t, Method* m) {
 
 // Check if this method has been stale from a given number of milliseconds.
 // See select_task().
+// 在一段时间timeout内，调用次数没有变化，即该方法不再被调用，被认为是stale
 bool AdvancedThresholdPolicy::is_stale(jlong t, jlong timeout, Method* m) {
   jlong delta_s = t - SafepointSynchronize::end_of_last_safepoint();
   jlong delta_t = t - m->prev_time();
   if (delta_t > timeout && delta_s > timeout) {
     int event_count = m->invocation_count() + m->backedge_count();
+      //计算调用次数的增量
     int delta_e = event_count - m->prev_event_count();
     // Return true if there were no events.
     return delta_e == 0;
@@ -150,6 +168,7 @@ bool AdvancedThresholdPolicy::compare_methods(Method* x, Method* y) {
 }
 
 // Is method profiled enough?
+//判断某个方法是否已经full profile
 bool AdvancedThresholdPolicy::is_method_profiled(Method* method) {
   MethodData* mdo = method->method_data();
   if (mdo != NULL) {
@@ -161,31 +180,41 @@ bool AdvancedThresholdPolicy::is_method_profiled(Method* method) {
 }
 
 // Called with the queue locked and with at least one element
+// select_task方法用于从编译任务队列中挑选一个rate最大的任务执行，在遍历任务队列的过程中如果CompileTask对应的方法在一段时间内不再被调用则将其添加到_first_stale链表中，并对对应的方法标记成已从编译队列移除。
 CompileTask* AdvancedThresholdPolicy::select_task(CompileQueue* compile_queue) {
   CompileTask *max_task = NULL;
   Method* max_method = NULL;
+    //获取当前系统时间
   jlong t = os::javaTimeMillis();
   // Iterate through the queue and find a method with a maximum rate.
+    //遍历整个队列找到rate即单位时间内调用次数最大的一个CompileTask
   for (CompileTask* task = compile_queue->first(); task != NULL;) {
     CompileTask* next_task = task->next();
     Method* method = task->method();
+      //重新计算rate
     update_rate(t, method);
     if (max_task == NULL) {
+        //初始化
       max_task = task;
       max_method = method;
     } else {
       // If a method has been stale for some time, remove it from the queue.
+        //如果该方法在一段时间内不再被调用，且不是old方法
       if (is_stale(t, TieredCompileTaskTimeout, method) && !is_old(method)) {
         if (PrintTieredEvents) {
           print_event(REMOVE_FROM_QUEUE, method, method, task->osr_bci(), (CompLevel)task->comp_level());
         }
+          //将其从编译队列移除，并标记成stale
         compile_queue->remove_and_mark_stale(task);
+          //method的_access_flags打标，该方法已从编译队列移除
         method->clear_queued_for_compilation();
+          //遍历下一个方法
         task = next_task;
         continue;
       }
 
       // Select a method with a higher rate
+        //选择一个rate更大的method
       if (compare_methods(method, max_method)) {
         max_task = task;
         max_method = method;
@@ -193,7 +222,7 @@ CompileTask* AdvancedThresholdPolicy::select_task(CompileQueue* compile_queue) {
     }
     task = next_task;
   }
-
+    //如果已经收集了足够的profile信息，将编译级别置为有限的profile
   if (max_task->comp_level() == CompLevel_full_profile && TieredStopAtLevel > CompLevel_full_profile
       && is_method_profiled(max_method)) {
 
@@ -216,7 +245,9 @@ CompileTask* AdvancedThresholdPolicy::select_task(CompileQueue* compile_queue) {
 }
 
 double AdvancedThresholdPolicy::threshold_scale(CompLevel level, int feedback_k) {
+    //获取队列长度
   double queue_size = CompileBroker::queue_size(level);
+    //获取编译线程的数量
   int comp_count = compiler_count(level);
   double k = queue_size / (feedback_k * comp_count) + 1;
 
@@ -225,6 +256,7 @@ double AdvancedThresholdPolicy::threshold_scale(CompLevel level, int feedback_k)
   // The main intention is to keep enough free space for C2 compiled code
   // to achieve peak performance if the code cache is under stress.
   if ((TieredStopAtLevel == CompLevel_full_optimization) && (level != CompLevel_full_optimization))  {
+      //获取CodeCache的剩余可用空间，如果不足，则增加阈值，从而为C2编译保留足够的空间
     double current_reverse_free_ratio = CodeCache::reverse_free_ratio();
     if (current_reverse_free_ratio > _increase_threshold_at_ratio) {
       k *= exp(current_reverse_free_ratio - _increase_threshold_at_ratio);
@@ -239,6 +271,7 @@ double AdvancedThresholdPolicy::threshold_scale(CompLevel level, int feedback_k)
 // Tier?LoadFeedback is basically a coefficient that determines of
 // how many methods per compiler thread can be in the queue before
 // the threshold values double.
+//计算是否超过调整编译级别的阈值
 bool AdvancedThresholdPolicy::loop_predicate(int i, int b, CompLevel cur_level) {
   switch(cur_level) {
   case CompLevel_none:
@@ -255,6 +288,7 @@ bool AdvancedThresholdPolicy::loop_predicate(int i, int b, CompLevel cur_level) 
   }
 }
 
+//计算是否超过调整编译级别的阈值
 bool AdvancedThresholdPolicy::call_predicate(int i, int b, CompLevel cur_level) {
   switch(cur_level) {
   case CompLevel_none:
@@ -274,6 +308,7 @@ bool AdvancedThresholdPolicy::call_predicate(int i, int b, CompLevel cur_level) 
 // If a method is old enough and is still in the interpreter we would want to
 // start profiling without waiting for the compiled method to arrive.
 // We also take the load on compilers into the account.
+//如果一个方法运行很久了依然是解释执行，则需要开启profile，而不等待其触发编译了
 bool AdvancedThresholdPolicy::should_create_mdo(Method* method, CompLevel cur_level) {
   if (cur_level == CompLevel_none &&
       CompileBroker::queue_size(CompLevel_full_optimization) <=
@@ -301,18 +336,43 @@ bool AdvancedThresholdPolicy::should_not_inline(ciEnv* env, ciMethod* callee) {
 void AdvancedThresholdPolicy::create_mdo(methodHandle mh, JavaThread* THREAD) {
   if (mh->is_native() || mh->is_abstract() || mh->is_accessor()) return;
   if (mh->method_data() == NULL) {
+      //初始化Method的MethodData
     Method::build_interpreter_method_data(mh, CHECK_AND_CLEAR);
   }
 }
 
 
 /*
+ *  AdvancedThresholdPolicy支持5个级别的编译:
+ *
  * Method states:
  *   0 - interpreter (CompLevel_none)
  *   1 - pure C1 (CompLevel_simple)
  *   2 - C1 with invocation and backedge counting (CompLevel_limited_profile)
  *   3 - C1 with full profiling (CompLevel_full_profile)
  *   4 - C2 (CompLevel_full_optimization)
+ *
+ * 其中0,2,3三个级别下都会周期性的通知 AdvancedThresholdPolicy某个方法的方法调用计数即invocation counters and循环调用计数即backedge counters，不同级别下通知的频率不同。这些通知用来决定如何调整编译级别。
+ *
+ *     某个方法刚开始执行时是通过解释器解释执行的，即level 0，然后AdvancedThresholdPolicy会综合如下两个因素和调用计数将编译级别调整为2或者3：
+ *
+ * C2编译任务队列的长度决定了下一个编译级别。据观察，level 2级别下的编译比level 3级别下的编译快30%，因此我们应该在只有已经收集了充分的profile信息后才采用level 3编译，从而尽可能缩短level 3级别下编译的耗时。
+ *  当C2的编译任务队列太长的时候，如果选择level 3则编译会被卡住直到C2将之前的编译任务处理完成，这时如果选择Level 2编译则很快完成编译。当C2的编译压力逐步减小，就可以重新在level 3下编译并且开始收集profile信息。
+ * 根据C1编译任务队列的长度用来动态的调整阈值，在编译器过载时，会将已经编译完成但是不在使用的方法从编译队列中移除。
+ *      当level 3下profile信息收集完成后就会转换成level 4了，可根据C2编译任务队列的长度来动态调整转换的阈值。当经过C1编译完成后，基于方法的代码块的数量，循环的数量等信息可以判断一个方法是否是琐碎（trivial）的，
+ *      这类方法在C2编译下会产生和C1编译一样的代码，因此这时会用level 1的编译代替level 4的编译。
+ *
+ *      当C1和C2的编译任务队列的长度足够短，也可在level 0下开启profile信息收集。编译队列通过优先级队列实现，每个添加到编译任务队列的方法都会周期的计算其在单位时间内增加的调用次数，每次从编译队列中获取任务时，
+ *      都选择单位时间内调用次数最大的一个。基于此，我们也可以将那些编译完成后不再使用，调用次数不再增加的方法从编译任务队列中移除。跟编译级别转换相关的命令行参数及其转换逻辑可以参考AdvancedThresholdPolicy的注释。
+ *
+ *       常见的各级别转换路径如下：
+ *
+ * 0 -> 3 -> 4，最常见的转换路径，需要注意这种情况下profile可以从level 0开始，level3结束。
+ * 0 -> 2 -> 3 -> 4，当C2的编译压力较大会发生这种情形，本来应该从0直接转换成3，为了减少编译耗时就从0转换成2，等C2的编译压力降低再转换成3
+ * 0 -> (3->2) -> 4，这种情形下已经把方法加入到3的编译队列中了，但是C1队列太长了导致在0的时候就开启了profile，然后就调整了编译策略按level 2来编译，即时还是3的队列中，这样编译更快
+ * 0 -> 3 -> 1 or 0 -> 2 -> 1，当一个方法被C1编译后，被标记成trivial的，因为这类方法C2编译的代码和C1编译的代码是一样的，所以不使用4，改成1
+ * 0 -> 4，一个方法C1编译失败且一直在收集profile信息，就从0切换到4
+ *
  *
  * Common state transition patterns:
  * a. 0 -> 3 -> 4.
@@ -349,13 +409,16 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
   CompLevel next_level = cur_level;
   int i = method->invocation_count();
   int b = method->backedge_count();
-
+    //trivial方法切换成CompLevel_simple
   if (is_trivial(method)) {
     next_level = CompLevel_simple;
   } else {
+      //非trivial方法
     switch(cur_level) {
+        //根据当前级别的不同处理不同
     case CompLevel_none:
       // If we were at full profile level, would we switch to full opt?
+        //如果处于CompLevel_full_profile并且超过阈值则切换成CompLevel_full_optimization
       if (common(p, method, CompLevel_full_profile, disable_feedback) == CompLevel_full_optimization) {
         next_level = CompLevel_full_optimization;
       } else if ((this->*p)(i, b, cur_level)) {
@@ -366,6 +429,7 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
         // we introduce a feedback on the C2 queue size. If the C2 queue is sufficiently long
         // we choose to compile a limited profiled version and then recompile with full profiling
         // when the load on C2 goes down.
+          // 如果C2的队列过长
         if (!disable_feedback && CompileBroker::queue_size(CompLevel_full_optimization) >
                                  Tier3DelayOn * compiler_count(CompLevel_full_optimization)) {
           next_level = CompLevel_limited_profile;
@@ -375,13 +439,16 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
       }
       break;
     case CompLevel_limited_profile:
+        //如果已经full profile了
       if (is_method_profiled(method)) {
         // Special case: we got here because this method was fully profiled in the interpreter.
         next_level = CompLevel_full_optimization;
       } else {
         MethodData* mdo = method->method_data();
         if (mdo != NULL) {
+            //该方法能够开启profile
           if (mdo->would_profile()) {
+              //如果C2队列的长度比较小且超过阈值
             if (disable_feedback || (CompileBroker::queue_size(CompLevel_full_optimization) <=
                                      Tier3DelayOff * compiler_count(CompLevel_full_optimization) &&
                                      (this->*p)(i, b, cur_level))) {
@@ -400,6 +467,7 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
           if (mdo->would_profile()) {
             int mdo_i = mdo->invocation_count_delta();
             int mdo_b = mdo->backedge_count_delta();
+              //判断MethodData中profile超过阈值了
             if ((this->*p)(mdo_i, mdo_b, cur_level)) {
               next_level = CompLevel_full_optimization;
             }
@@ -416,13 +484,16 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
 
 // Determine if a method should be compiled with a normal entry point at a different level.
 CompLevel AdvancedThresholdPolicy::call_event(Method* method, CompLevel cur_level) {
+    //获取osr循环代码的编译level
   CompLevel osr_level = MIN2((CompLevel) method->highest_osr_comp_level(),
                              common(&AdvancedThresholdPolicy::loop_predicate, method, cur_level, true));
+    //获取普通方法的编译level
   CompLevel next_level = common(&AdvancedThresholdPolicy::call_predicate, method, cur_level);
 
   // If OSR method level is greater than the regular method level, the levels should be
   // equalized by raising the regular method level in order to avoid OSRs during each
   // invocation of the method.
+    //取osr_level和cur_level的最大值，从而避免osr循环的编译级别高于外层方法的编译级别
   if (osr_level == CompLevel_full_optimization && cur_level == CompLevel_full_profile) {
     MethodData* mdo = method->method_data();
     guarantee(mdo != NULL, "MDO should not be NULL");
@@ -441,6 +512,7 @@ CompLevel AdvancedThresholdPolicy::loop_event(Method* method, CompLevel cur_leve
   if (cur_level == CompLevel_none) {
     // If there is a live OSR method that means that we deopted to the interpreter
     // for the transition.
+      // 该方法已经编译过了
     CompLevel osr_level = MIN2((CompLevel)method->highest_osr_comp_level(), next_level);
     if (osr_level > CompLevel_none) {
       return osr_level;
@@ -459,12 +531,15 @@ void AdvancedThresholdPolicy::submit_compile(methodHandle mh, int bci, CompLevel
 // Handle the invocation event.
 void AdvancedThresholdPolicy::method_invocation_event(methodHandle mh, methodHandle imh,
                                                       CompLevel level, nmethod* nm, JavaThread* thread) {
+    //如果需要开启profile，则初始化方法的mdo
   if (should_create_mdo(mh(), level)) {
     create_mdo(mh, thread);
   }
+    //如果开启方法编译，且该方法不再编译队列中
   if (is_compilation_enabled() && !CompileBroker::compilation_is_in_queue(mh)) {
     CompLevel next_level = call_event(mh(), level);
     if (next_level != level) {
+        //执行方法编译
       compile(mh, InvocationEntryBci, next_level, thread);
     }
   }
@@ -474,6 +549,7 @@ void AdvancedThresholdPolicy::method_invocation_event(methodHandle mh, methodHan
 // with a regular entry from here.
 void AdvancedThresholdPolicy::method_back_branch_event(methodHandle mh, methodHandle imh,
                                                        int bci, CompLevel level, nmethod* nm, JavaThread* thread) {
+    // 如果需要开启profile，则初始化方法的mdo
   if (should_create_mdo(mh(), level)) {
     create_mdo(mh, thread);
   }
@@ -483,9 +559,12 @@ void AdvancedThresholdPolicy::method_back_branch_event(methodHandle mh, methodHa
   }
 
   if (is_compilation_enabled()) {
+      //获取下一个编译级别
     CompLevel next_osr_level = loop_event(imh(), level);
+      //获取曾经有的最高编译级别
     CompLevel max_osr_level = (CompLevel)imh->highest_osr_comp_level();
     // At the very least compile the OSR version
+      //如果该方法不再编译队列中且编译级别变了
     if (!CompileBroker::compilation_is_in_queue(imh) && (next_osr_level != level)) {
       compile(imh, bci, next_osr_level, thread);
     }
@@ -493,13 +572,16 @@ void AdvancedThresholdPolicy::method_back_branch_event(methodHandle mh, methodHa
     // Use loop event as an opportunity to also check if there's been
     // enough calls.
     CompLevel cur_level, next_level;
+      //如果有内联方法
     if (mh() != imh()) { // If there is an enclosing method
       guarantee(nm != NULL, "Should have nmethod here");
+        //外层方法的当前编译级别和下一个编译级别
       cur_level = comp_level(mh());
       next_level = call_event(mh(), cur_level);
-
+        //如果已经是最高编译级别了
       if (max_osr_level == CompLevel_full_optimization) {
         // The inlinee OSRed to full opt, we need to modify the enclosing method to avoid deopts
+          //如果内联的osr方法已经是最高优化级别，为了避免逆向优化需要去除nmethod
         bool make_not_entrant = false;
         if (nm->is_osr_method()) {
           // This is an osr method, just make it not entrant and recompile later if needed
@@ -517,11 +599,13 @@ void AdvancedThresholdPolicy::method_back_branch_event(methodHandle mh, methodHa
             int osr_bci = nm->is_osr_method() ? nm->osr_entry_bci() : InvocationEntryBci;
             print_event(MAKE_NOT_ENTRANT, mh(), mh(), osr_bci, level);
           }
+            //去掉nmethod
           nm->make_not_entrant();
         }
       }
       if (!CompileBroker::compilation_is_in_queue(mh)) {
         // Fix up next_level if necessary to avoid deopts
+          //编译外层方法
         if (next_level == CompLevel_limited_profile && max_osr_level == CompLevel_full_profile) {
           next_level = CompLevel_full_profile;
         }
@@ -530,6 +614,7 @@ void AdvancedThresholdPolicy::method_back_branch_event(methodHandle mh, methodHa
         }
       }
     } else {
+        //imh()和mh()一样则只编译imh即可
       cur_level = comp_level(imh());
       next_level = call_event(imh(), cur_level);
       if (!CompileBroker::compilation_is_in_queue(imh) && (next_level != cur_level)) {

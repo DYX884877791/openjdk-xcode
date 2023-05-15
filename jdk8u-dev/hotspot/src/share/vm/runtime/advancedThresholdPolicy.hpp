@@ -157,7 +157,9 @@ class CompileQueue;
  *   to be zero if no events occurred in TieredRateUpdateMaxTime.
  */
 
-
+// AdvancedThresholdPolicy继承自SimpleThresholdPolicy，SimpleThresholdPolicy在CompilationPolicy的基础上添加了两个属性_c1_count, _c2_count，
+// 表示C1和C2编译线程的数量。AdvancedThresholdPolicy添加了_start_time和_increase_threshold_at_ratio两个属性，前者表示启动时间，
+// 后者表示当CodeCache已使用了指定比例时提升C1编译的阈值。
 class AdvancedThresholdPolicy : public SimpleThresholdPolicy {
   jlong _start_time;
 
@@ -206,6 +208,7 @@ class AdvancedThresholdPolicy : public SimpleThresholdPolicy {
 protected:
   void print_specific(EventType type, methodHandle mh, methodHandle imh, int bci, CompLevel level);
 
+    //IncreaseFirstTierCompileThresholdAt默认是50%，当CodeCache的已使用量大于50%时就会开始提高触发C1编译的阈值
   void set_increase_threshold_at_ratio() { _increase_threshold_at_ratio = 100 / (100 - (double)IncreaseFirstTierCompileThresholdAt); }
   void set_start_time(jlong t) { _start_time = t;    }
   jlong start_time() const     { return _start_time; }

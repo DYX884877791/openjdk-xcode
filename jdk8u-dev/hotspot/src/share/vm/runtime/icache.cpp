@@ -31,12 +31,15 @@ AbstractICache::flush_icache_stub_t AbstractICache::_flush_icache_stub = NULL;
 
 void AbstractICache::initialize() {
   // Making this stub must be FIRST use of assembler
+    //当此方法结束回调ResourceMark的析构函数时，通过析构函数最终调用_flush_icache_stub
+    //从而实现处理器的指令缓存刷新，这是第一次使用
   ResourceMark rm;
 
   BufferBlob* b = BufferBlob::create("flush_icache_stub", ICache::stub_size);
   CodeBuffer c(b);
 
   ICacheStubGenerator g(&c);
+    //通过ICacheStubGenerator生成_flush_icache_stub
   g.generate_icache_flush(&_flush_icache_stub);
 
   // The first use of flush_icache_stub must apply it to itself.
@@ -52,10 +55,12 @@ void AbstractICache::call_flush_stub(address start, int lines) {
   // We cannot call the flush stub when generating the flush stub
   // because it isn't there yet.  So, the stub also returns its third
   // parameter.  This is a cheap check that the stub was really executed.
+    //生成_flush_icache_stub时不能调用它自己
   static int magic = 0xbaadbabe;
 
   int auto_magic = magic; // Make a local copy to avoid race condition
   int r = (*_flush_icache_stub)(start, lines, auto_magic);
+    //如果返回值等于auto_magic，即第三个参数，说明flush stub未执行
   guarantee(r == auto_magic, "flush stub routine did not execute");
   ++magic;
 }
@@ -81,6 +86,7 @@ void AbstractICache::invalidate_word(address addr) {
 void AbstractICache::invalidate_range(address start, int nbytes) {
   static bool firstTime = true;
   if (firstTime) {
+      //第一次调用时，start就等于_flush_icache_stub
     guarantee(start == CAST_FROM_FN_PTR(address, _flush_icache_stub),
               "first flush should be for flush stub");
     firstTime = false;
@@ -91,6 +97,7 @@ void AbstractICache::invalidate_range(address start, int nbytes) {
   }
   // Align start address to an icache line boundary and transform
   // nbytes to an icache line count.
+    //计算缓存行的位置
   const uint line_offset = mask_address_bits(start, ICache::line_size-1);
   if (line_offset != 0) {
     start -= line_offset;

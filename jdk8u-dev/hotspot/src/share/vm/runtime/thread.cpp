@@ -1611,15 +1611,19 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
   }
     //初始化JavaThread自有的各种属性
   initialize();
+    //正常的Java线程都是_not_attaching_via_jni，只有本地线程才是_attached_via_jni
   _jni_attach_state = _not_attaching_via_jni;
+    //设置线程的调用方法
     //entry_point就是执行的run方法
   set_entry_point(entry_point);
   // Create the native thread itself.
   // %note runtime_23
+    //判断ThreadType
   os::ThreadType thr_type = os::java_thread;
     //是否编译线程，编译线程也是JavaThread，但是对应的os::ThreadType类型不同
   thr_type = entry_point == &compiler_thread_entry ? os::compiler_thread :
                                                      os::java_thread;
+    //创建一个新的线程
     //创建一个原生线程，底层通过pthread_create创建，创建成功后将其设置到Thread的_osthread属性中，然后等待其初始化完成
     //，初始化结束后在startThread_lock上等待被唤醒
     //如果内存不足导致创建失败，则该属性为NULL
@@ -3297,12 +3301,15 @@ Klass* JavaThread::security_get_caller_class(int depth) {
 }
 
 static void compiler_thread_entry(JavaThread* thread, TRAPS) {
+    //校验当前线程必须是CompilerThread
   assert(thread->is_Compiler_thread(), "must be compiler thread");
+    //循环的从编译队列中获取编译任务执行编译
   CompileBroker::compiler_thread_loop();
 }
 
 // Create a CompilerThread
 CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
+//这里的compiler_thread_entry是一个方法指针，是该线程启动后自动执行的方法
 : JavaThread(&compiler_thread_entry) {
   _env   = NULL;
   _log   = NULL;
@@ -3314,6 +3321,7 @@ CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
   _compiler = NULL;
 
   // Compiler uses resource area for compilation, let's bias it to mtCompiler
+    //设置ResourceArea的类型
   resource_area()->bias_to(mtCompiler);
 
 #ifndef PRODUCT
@@ -3388,7 +3396,7 @@ void Threads::threads_do(ThreadClosure* tc) {
 // 看看Threads::create_vm是在何处调用的，我们进入hotspot/src/share/vm/prims/jni.cpp，找到JNI_CreateJavaVM方法
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
-  slog_debug("Threads::create_vm starting...");
+  slog_debug("Threads::create_vm函数被调用了...");
 
   extern void JDK_Version_init();
 
@@ -3503,7 +3511,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   vm_init_globals();
 
   // Attach the main thread to this os thread
-  slog_debug("Attach the main thread to this os thread");
+  slog_debug("创建一个新的JavaThread并设置相关属性，注意这里并未创建一个新的线程，而是将当前线程同JavaThread对象关联起来，通过JavaThread管理相关属性...");
     //创建一个新的JavaThread并设置相关属性，注意这里并未创建一个新的线程，而是将当前线程同JavaThread对象关联起来，通过JavaThread管理相关属性
   JavaThread* main_thread = new JavaThread();
   main_thread->set_thread_state(_thread_in_vm);
@@ -3535,6 +3543,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Initialize global modules
     //全局模块初始化，如Management模块，Bytecodes模块，ClassLoader模块，CodeCache模块，StubRoutines模块，Universe模块，Interpreter模块等
+    slog_trace("即将调用init_globals函数,进行全局模块初始化");
   jint status = init_globals();
   if (status != JNI_OK) {
     delete main_thread;
@@ -3610,7 +3619,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
     //加载核心Java类文件
   {
-    slog_debug("Initialize java.lang classes...");
+    slog_debug("即将加载核心Java类文件");
     TraceTime timer("Initialize java.lang classes", TraceStartupTime);
 
     if (EagerXrunInit && Arguments::init_libraries_at_startup()) {

@@ -6,7 +6,7 @@ set -e
 # 3.通过sh: 运行在不同的进程
 # 4.通过.: 运行在相同的进程，在test_call_other_shell.sh中调用parameter_usage.sh后，parameter_usage.sh中的变量和函数在test_call_other_shell.sh中可直接使用
 
-source ./setenv.sh
+. ./setenv.sh
 
 cd $cur_dir
 make compileJava
