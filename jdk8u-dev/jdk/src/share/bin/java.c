@@ -568,7 +568,7 @@ JavaMain(void * _args)
      * This method also correctly handles launching existing JavaFX
      * applications that may or may not have a Main-Class manifest entry.
      */
-    slog_debug("will load main class...");
+    slog_debug("will load main class,[%s]...", what);
     mainClass = LoadMainClass(env, mode, what);
     CHECK_EXCEPTION_NULL_LEAVE(mainClass);
     /*

@@ -319,7 +319,11 @@ static size_t slog_get_kernel_tid()
      * pthread_self(): 用户态线程id
      * __NR_gettid: 内核线程id
      */
+#ifdef LINUX
     return (size_t)syscall(__NR_gettid);
+#elifdef __APPLE__
+    return (size_t)pthread_mach_thread_np(pthread_self());
+#endif
 }
 
 static size_t slog_get_pid()

@@ -36,6 +36,8 @@
 #include "services/attachListener.hpp"
 #include "services/diagnosticCommand.hpp"
 #include "services/heapDumper.hpp"
+#include "utilities/slog.hpp"
+
 
 volatile jlong AttachListener::_state = AL_NOT_INITIALIZED;
 
@@ -131,6 +133,7 @@ static jint data_dump(AttachOperation* op, outputStream* out) {
 // See also: ThreadDumpDCmd class
 //
 static jint thread_dump(AttachOperation* op, outputStream* out) {
+  slog_trace("attachListener.cpp中的thread_dump函数被调用了,AttachOperation的name->%s...", op->name());
   bool print_concurrent_locks = false;
   if (op->arg(0) != NULL && strcmp(op->arg(0), "-l") == 0) {
     print_concurrent_locks = true;
