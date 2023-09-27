@@ -319,7 +319,7 @@ unsigned int Abstract_VM_Version::jvm_version() {
          (Abstract_VM_Version::vm_build_number() & 0xFF);
 }
 
-
+// 这个是vm版本的初始化,更新一些信息.
 void VM_Version_init() {
   VM_Version::initialize();
 

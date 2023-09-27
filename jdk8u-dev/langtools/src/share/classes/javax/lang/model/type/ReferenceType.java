@@ -30,7 +30,7 @@ package javax.lang.model.type;
  * Represents a reference type.
  * These include class and interface types, array types, type variables,
  * and the null type.
- *
+ * 代表引用类型,包括类和接口,数组类型,类型变量,null.
  * @author Joseph D. Darcy
  * @author Scott Seligman
  * @author Peter von der Ah&eacute;

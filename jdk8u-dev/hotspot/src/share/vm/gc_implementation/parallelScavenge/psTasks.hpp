@@ -49,7 +49,7 @@ class VMThread;
 // This task scans all the roots of a given type.
 //
 //
-
+// 
 class ScavengeRootsTask : public GCTask {
  public:
   enum RootType {

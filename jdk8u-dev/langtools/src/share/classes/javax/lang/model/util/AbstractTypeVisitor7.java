@@ -57,7 +57,7 @@ import javax.lang.model.type.*;
  * implementations.  Future versions of the API that are only required
  * to run on Java SE 8 and later may take advantage of default methods
  * in this situation.
- *
+ * 用于jdk1.7的type visitor。
  * @param <R> the return type of this visitor's methods.  Use {@link
  *            Void} for visitors that do not need to return results.
  * @param <P> the type of the additional parameter to this visitor's

@@ -59,12 +59,21 @@ class ParCompactionManager;
 //所有oopDesc的父类
 class oopDesc {
   friend class VMStructs;
+  // _mark和_metadata被称为对象头，其中前者存储对象的运行时记录信息；后者是一个指针，指向当前对象所属的Klass对象。
  private:
     //标记,线程状态,并发锁,GC分代信息等内部标识
+    // 用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
+    // 在hotspot/src/share/vm/oops/oopsHierarchy.hpp中定义了markOop也是一个别名：
+    // typedef class   markOopDesc*                markOop;
   volatile markOop  _mark;
+    // Klass指针的联合体，指向当前对象所属的Klass对象
     //标识元数据信息,如变量,方法,父类,所实现接口等信息
   union _metadata {
+      // 未采用指针压缩技术时使用
+      //实例对应的 Klass （实例对应的类）的指针
     Klass*      _klass;
+      //压缩指针
+      // 未采用指针压缩技术时使用
     narrowKlass _compressed_klass;
   } _metadata;
 
@@ -124,6 +133,7 @@ class oopDesc {
 
  private:
   // field addresses in oop
+  //字段数据
   void*     field_base(int offset)        const;
 
   jbyte*    byte_field_addr(int offset)   const;

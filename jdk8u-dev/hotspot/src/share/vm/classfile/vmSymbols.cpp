@@ -68,23 +68,37 @@ static const char* vm_symbol_enum_name(vmSymbols::SID sid) {
 
 // Put all the VM symbol strings in one place.
 // Makes for a more compact libjvm.
+//注意这里的 VM_SYMBOLS_DO 符号,它在头文件中是个宏定义
 #define VM_SYMBOL_BODY(name, string) string "\0"
+
+
+/**
+ * 下面的宏展开就是：VM_SYMBOLS_DO中的众多宏字符串分别与"\0"拼接而成的字符串
+ * "java/lang/System\0java/lang/Object\0java/lang/Class\0java/lang/String\0..."
+ */
 static const char* vm_symbol_bodies = VM_SYMBOLS_DO(VM_SYMBOL_BODY, VM_ALIAS_IGNORE);
 
 void vmSymbols::initialize(TRAPS) {
+    slog_debug("进入hotspot/src/share/vm/classfile/vmSymbols.cpp中的vmSymbols::initialize函数...");
   assert((int)SID_LIMIT <= (1<<log2_SID_LIMIT), "must fit in this bitfield");
   assert((int)SID_LIMIT*5 > (1<<log2_SID_LIMIT), "make the bitfield smaller, please");
   assert(vmIntrinsics::FLAG_LIMIT <= (1 << vmIntrinsics::log2_FLAG_LIMIT), "must fit in this bitfield");
 
   if (!UseSharedSpaces) {
+      //vm_symbol_bodies声明在上面
     const char* string = &vm_symbol_bodies[0];
     for (int index = (int)FIRST_SID; index < (int)SID_LIMIT; index++) {
+        //为Java类创建符号
       Symbol* sym = SymbolTable::new_permanent_symbol(string, CHECK);
+        //存到符号数组中
       _symbols[index] = sym;
+        //strlen函数遇到\0就返回了，这里就分隔成一段一段的了...
       string += strlen(string); // skip string body
+        //下一个
       string += 1;              // skip trailing null
     }
 
+      //Java基本类型
     _type_signatures[T_BYTE]    = byte_signature();
     _type_signatures[T_CHAR]    = char_signature();
     _type_signatures[T_DOUBLE]  = double_signature();
@@ -99,6 +113,7 @@ void vmSymbols::initialize(TRAPS) {
 
 #ifdef ASSERT
   // Check for duplicates:
+  // 校验重复...
   for (int i1 = (int)FIRST_SID; i1 < (int)SID_LIMIT; i1++) {
     Symbol* sym = symbol_at((SID)i1);
     for (int i2 = (int)FIRST_SID; i2 < i1; i2++) {
@@ -119,6 +134,21 @@ void vmSymbols::initialize(TRAPS) {
       vm_symbol_index[index] = (SID)index;
     }
     int num_sids = SID_LIMIT-FIRST_SID;
+    /**
+     * void qsort (void* base, size_t num, size_t size,int (*compar)(const void*,const void*));
+     *
+     * 1.首元素地址base
+     * 我们要排序一组数据，首先我们需要找到这组数据在哪，因此我们直接将首元素的地址传给qsort函数来确定从哪开始排序。
+     *
+     * 2.元素个数num
+     * 我们知道了从哪开始，也要知道在哪结束才能确定一组需要排序的数据，但是我们不方便直接将结尾元素的地址传入函数，因此我们将需要排序的元素的个数传给qsort函数来确定一组数据。
+     *
+     * 3.元素大小size
+     * 我们知道qsort函数能排序任意数据类型的一组数据，因此我们用void*类型的指针来接收元素，但是我们知道void*类型的指针不能进行加减操作，也就无法移动，那么在函数内部我们究竟用什么类型的指针来操作变量呢？我们可以将void*类型的指针强制类型转换成char*类型的指针后来操作元素，因为char*类型的指针移动的单位字节长度是1个字节，我们只需要再知道我们需要操作的数据是几个字节就可以操作指针从一个元素移动到下一个元素，因此我们需要将元素大小传入qsort函数。
+     *
+     * 4.自定义比较函数compar
+     * 我们需要告诉qsort函数我们希望数据按照怎么的方式进行比较，比如对于几个字符串，我们可以比较字符串的大小（strcmp），也可以比较字符串的长度（strlen），因此我们要告诉qsort函数我们希望的比较方式，我们就需要传入一个比较函数compar就简写为cmp吧。
+     */
     qsort(&vm_symbol_index[FIRST_SID], num_sids, sizeof(vm_symbol_index[0]),
           compare_vmsymbol_sid);
   }

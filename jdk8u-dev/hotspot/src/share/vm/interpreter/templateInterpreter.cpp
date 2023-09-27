@@ -34,6 +34,7 @@
 # define __ _masm->
 
 void TemplateInterpreter::initialize() {
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateInterpreter.cpp中的TemplateInterpreter::initialize函数...");
   if (_code != NULL) return;
   // assertions
     //校验字节码的个数必须小于等于DispatchTable的长度
@@ -65,6 +66,7 @@ void TemplateInterpreter::initialize() {
                           "Interpreter");
       //初始化InterpreterGenerator，初始化的时候会生成所有的调用函数
       //  实例化模板解释器生成器对象TemplateInterpreterGenerator，里面也涉及到初始化。
+      slog_trace("即将创建InterpreterGenerator实例...");
     InterpreterGenerator g(_code);
     if (PrintInterpreter) print();
   }
@@ -72,6 +74,7 @@ void TemplateInterpreter::initialize() {
   // initialize dispatch table
     // 初始化字节分发表
     // _normal_table是如何初始化的了？答案在TemplateInterpreterGenerator::generate_all()方法调用的set_entry_points_for_all_bytes()方法的实现中
+    slog_trace("将字节分发表_active_table赋值为_normal_table...");
   _active_table = _normal_table;
 }
 
@@ -94,6 +97,7 @@ EntryPoint::EntryPoint() {
 
 
 EntryPoint::EntryPoint(address bentry, address zentry, address centry, address sentry, address aentry, address ientry, address lentry, address fentry, address dentry, address ventry) {
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateInterpreter.cpp中的EntryPoint::EntryPoint构造函数...");
   assert(number_of_states == 10, "check the code below");
   _entry[btos] = bentry;
   _entry[ztos] = zentry;
@@ -243,9 +247,14 @@ static const BasicType types[Interpreter::number_of_result_handlers] = {
   T_OBJECT
 };
 
-// generate_all方法用于生成Interpreter中定义的各种调用入口地址
+// generate_all方法用于生成Interpreter中定义的各种调用入口地址（即初始化了所有的例程：）
 // 调用的generate_all()函数将生成一系列HotSpot运行过程中所执行的一些公共代码的入口和所有字节码的InterpreterCodelet
+// 另外，既然已经涉及到机器码了，单独的templateInterpreterGenerator显然是不能完成这件事的，它还需要配合
+//
+//hotspot\src\cpu\x86\vm\templateInterpreterGenerator_x86.cpp&&hotspot\src\cpu\x86\vm\templateInterpreterGenerator_x86_64.cpp一起做事
+// 使用-XX:+UnlockDiagnosticVMOptions -XX:+PrintInterpreter -XX:+LogCompilation -XX:LogFile=file.log保存结果到文件，可以查看生成的这些例程。
 void TemplateInterpreterGenerator::generate_all() {
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateInterpreter.cpp中的TemplateInterpreterGenerator::generate_all函数...");
   AbstractInterpreterGenerator::generate_all();
 
   { CodeletMark cm(_masm, "error exits");
@@ -399,12 +408,19 @@ void TemplateInterpreterGenerator::generate_all() {
   }
 
   { CodeletMark cm(_masm, "throw exception entrypoints");
+      // 调用CPU相关的代码生成例程
     Interpreter::_throw_ArrayIndexOutOfBoundsException_entry = generate_ArrayIndexOutOfBounds_handler("java/lang/ArrayIndexOutOfBoundsException");
     Interpreter::_throw_ArrayStoreException_entry            = generate_klass_exception_handler("java/lang/ArrayStoreException"                 );
     Interpreter::_throw_ArithmeticException_entry            = generate_exception_handler("java/lang/ArithmeticException"           , "/ by zero");
     Interpreter::_throw_ClassCastException_entry             = generate_ClassCastException_handler();
     Interpreter::_throw_NullPointerException_entry           = generate_exception_handler("java/lang/NullPointerException"          , NULL       );
     Interpreter::_throw_StackOverflowError_entry             = generate_StackOverflowError_handler();
+  }
+
+//宏定义，调用generate_method_entry生成汇编入口
+#define method_entry(kind)                                                                    \
+  { CodeletMark cm(_masm, "method entry point (kind = " #kind ")");                    \
+    Interpreter::_entry_table[Interpreter::kind] = generate_method_entry(Interpreter::kind);  \
   }
 
     //初始化_entry_table
@@ -416,14 +432,11 @@ void TemplateInterpreterGenerator::generate_all() {
 // 调用generate_method_entry()函数为各种类型的方法生成对应的方法入口
 // InterpreterGenerator::generate_normal_entry()函数最终会返回生成机器码的入口执行地址，然后通过变量_entry_table数组来保存，这样就可以使用方法类型做为数组下标获取对应的方法入口了。
 
-#define method_entry(kind)                                                                    \
-  { CodeletMark cm(_masm, "method entry point (kind = " #kind ")");                    \
-    Interpreter::_entry_table[Interpreter::kind] = generate_method_entry(Interpreter::kind);  \
-  }
-
+    //生成各种Java方法入口
   // 大部分MethodKind对应的address都是通过generate_method_entry方法生成，除了method_handle_invoke_FIRST到method_handle_invoke_LAST之间的几个，
   // 他们是通过AbstractInterpreterGenerator::initialize_method_handle_entries完成初始化的
   // all non-native method kinds
+    slog_trace("即将调用method_entry宏来生成各种类型Java方法的入口...");
   method_entry(zerolocals)
   method_entry(zerolocals_synchronized)
   method_entry(empty)
@@ -472,9 +485,9 @@ address TemplateInterpreterGenerator::generate_error_exit(const char* msg) {
 
 
 //------------------------------------------------------------------------------------------------------------------------
-
+// 生成各个字节码对应的例程。最终会调用到TemplateInterpreterGenerator::generate_and_dispatch()函数。
 void TemplateInterpreterGenerator::set_entry_points_for_all_bytes() {
-    slog_trace("TemplateInterpreterGenerator::set_entry_points_for_all_bytes函数被调用了,生成所有字节码对应的汇编指令...");
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateInterpreter.cpp中的TemplateInterpreterGenerator::set_entry_points_for_all_bytes函数，生成所有字节码对应的汇编指令...");
     //逐一遍历所有的字节码
   for (int i = 0; i < DispatchTable::length; i++) {
     Bytecodes::Code code = (Bytecodes::Code)i;
@@ -505,8 +518,16 @@ void TemplateInterpreterGenerator::set_unimplemented(int i) {
   Interpreter::_wentry_point[i] = _unimplemented_bytecode;
 }
 
-
+/**
+ * 模板解释器生成器调用   TemplateInterpreterGenerator::set_entry_points()  为每个字节码设置例程，可以看到这个函数的参数就是 Bytecodes::Code 表示一个字节码指令
+ *
+ *
+ *
+ */
 void TemplateInterpreterGenerator::set_entry_points(Bytecodes::Code code) {
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateInterpreter.cpp中的TemplateInterpreterGenerator::set_entry_points函数...");
+    //这里的CodeletMark会生成一个InterpreterCodelet用以保存字节码和汇编码
+    //在CodeletMark析构时会将InterpreterCodelet提交到StubQueue
   CodeletMark cm(_masm, Bytecodes::name(code), code);
   // initialize entry points
     // 初始化 entry points
@@ -555,6 +576,7 @@ void TemplateInterpreterGenerator::set_wide_entry_point(Template* t, address& we
 }
 
 //bep，cep，sep等分别对应不同栈顶缓存（即rax寄存器中的）值类型下的同一个字节码的调用入口地址，bep对应btos,cep对应ctos，依次类推
+// 该方法用来实际生成_normal_table中各个字节码的调用入口地址
 void TemplateInterpreterGenerator::set_short_entry_points(Template* t, address& bep, address& cep, address& sep, address& aep, address& iep, address& lep, address& fep, address& dep, address& vep) {
   assert(t->is_valid(), "template must exist");
   switch (t->tos_in()) {
@@ -695,6 +717,7 @@ static inline void copy_table(address* from, address* to, int size) {
   while (size-- > 0) *to++ = *from++;
 }
 
+// 当达到安全点后，_active_table会被改成_safept_table
 void TemplateInterpreter::notice_safepoints() {
   if (!_notice_safepoints) {
     // switch to safepoint dispatch table

@@ -6677,6 +6677,84 @@ void MacroAssembler::string_indexof(Register str1, Register str2,
 
 } // string_indexof
 
+/**
+ * String.compareTo是少数非常重要的方法之一，为此虚拟机工程师专门为它手写了汇编风格的代码（译注：这些代码会被汇编器转换为机器代码，所以实际上是指用汇编风格写机器代码）
+ *
+ * https://zhuanlan.zhihu.com/p/139412068
+ *
+ * # {method} 'compare' '(Ljava/lang/String;Ljava/lang/String;)I' in 'Test'
+ * # parm0:    rsi:rsi   = 'java/lang/String'
+ * # parm1:    rdx:rdx   = 'java/lang/String'
+ * #           [sp+0x20]  (sp of caller)
+ * 7fe3ed1159a0: mov    %eax,-0x14000(%rsp)
+ * 7fe3ed1159a7: push   %rbp
+ * 7fe3ed1159a8: sub    $0x10,%rsp
+ * 7fe3ed1159ac: mov    0x10(%rsi),%rdi
+ * 7fe3ed1159b0: mov    0x10(%rdx),%r10
+ * 7fe3ed1159b4: mov    %r10,%rsi
+ * 7fe3ed1159b7: add    $0x18,%rsi
+ * 7fe3ed1159bb: mov    0x10(%r10),%edx
+ * 7fe3ed1159bf: mov    0x10(%rdi),%ecx
+ * 7fe3ed1159c2: add    $0x18,%rdi
+ * 7fe3ed1159c6: mov    %ecx,%eax
+ * 7fe3ed1159c8: sub    %edx,%ecx
+ * 7fe3ed1159ca: push   %rcx
+ * 7fe3ed1159cb: cmovle %eax,%edx
+ * 7fe3ed1159ce: test   %edx,%edx
+ * 7fe3ed1159d0: je     0x00007fe3ed115a6f
+ * 7fe3ed1159d6: movzwl (%rdi),%eax
+ * 7fe3ed1159d9: movzwl (%rsi),%ecx
+ * 7fe3ed1159dc: sub    %ecx,%eax
+ * 7fe3ed1159de: jne    0x00007fe3ed115a72
+ * 7fe3ed1159e4: cmp    $0x1,%edx
+ * 7fe3ed1159e7: je     0x00007fe3ed115a6f
+ * 7fe3ed1159ed: cmp    %rsi,%rdi
+ * 7fe3ed1159f0: je     0x00007fe3ed115a6f
+ * 7fe3ed1159f6: mov    %edx,%eax
+ * 7fe3ed1159f8: and    $0xfffffff8,%edx
+ * 7fe3ed1159fb: je     0x00007fe3ed115a4f
+ * 7fe3ed1159fd: lea    (%rdi,%rax,2),%rdi
+ * 7fe3ed115a01: lea    (%rsi,%rax,2),%rsi
+ * 7fe3ed115a05: neg    %rax
+ * 7fe3ed115a08: vmovdqu (%rdi,%rax,2),%xmm0
+ * 7fe3ed115a0d: vpcmpestri $0x19,(%rsi,%rax,2),%xmm0
+ * 7fe3ed115a14: jb     0x00007fe3ed115a40
+ * 7fe3ed115a16: add    $0x8,%rax
+ * 7fe3ed115a1a: sub    $0x8,%rdx
+ * 7fe3ed115a1e: jne    0x00007fe3ed115a08
+ * 7fe3ed115a20: test   %rax,%rax
+ * 7fe3ed115a23: je     0x00007fe3ed115a6f
+ * 7fe3ed115a25: mov    $0x8,%edx
+ * 7fe3ed115a2a: mov    $0x8,%eax
+ * 7fe3ed115a2f: neg    %rax
+ * 7fe3ed115a32: vmovdqu (%rdi,%rax,2),%xmm0
+ * 7fe3ed115a37: vpcmpestri $0x19,(%rsi,%rax,2),%xmm0
+ * 7fe3ed115a3e: jae    0x00007fe3ed115a6f
+ * 7fe3ed115a40: add    %rax,%rcx
+ * 7fe3ed115a43: movzwl (%rdi,%rcx,2),%eax
+ * 7fe3ed115a47: movzwl (%rsi,%rcx,2),%edx
+ * 7fe3ed115a4b: sub    %edx,%eax
+ * 7fe3ed115a4d: jmp    0x00007fe3ed115a72
+ * 7fe3ed115a4f: mov    %eax,%edx
+ * 7fe3ed115a51: lea    (%rdi,%rdx,2),%rdi
+ * 7fe3ed115a55: lea    (%rsi,%rdx,2),%rsi
+ * 7fe3ed115a59: dec    %edx
+ * 7fe3ed115a5b: neg    %rdx
+ * 7fe3ed115a5e: movzwl (%rdi,%rdx,2),%eax
+ * 7fe3ed115a62: movzwl (%rsi,%rdx,2),%ecx
+ * 7fe3ed115a66: sub    %ecx,%eax
+ * 7fe3ed115a68: jne    0x00007fe3ed115a72
+ * 7fe3ed115a6a: inc    %rdx
+ * 7fe3ed115a6d: jne    0x00007fe3ed115a5e
+ * 7fe3ed115a6f: pop    %rax
+ * 7fe3ed115a70: jmp    0x00007fe3ed115a73
+ * 7fe3ed115a72: pop    %rcx
+ * 7fe3ed115a73: add    $0x10,%rsp
+ * 7fe3ed115a77: pop    %rbp
+ * 7fe3ed115a78: test   %eax,0x17ed6582(%rip)
+ * 7fe3ed115a7e: retq
+ *
+ */
 // Compare strings.
 void MacroAssembler::string_compare(Register str1, Register str2,
                                     Register cnt1, Register cnt2, Register result,

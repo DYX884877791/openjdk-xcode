@@ -31,6 +31,7 @@
 
 // This is the base class for an internal Class related metadata
 // Metadata是内部表示类相关元数据的一个基类，注意Metadata定义了多个虚函数
+// Metadata是元数据类的基础类型，除了Klass会直接继承外，表示方法的Method与表示常量池的ConstantPool也会继承
 class Metadata : public MetaspaceObj {
   // Debugging hook to check that the metadata has not been deleted.
   NOT_PRODUCT(int _valid;)

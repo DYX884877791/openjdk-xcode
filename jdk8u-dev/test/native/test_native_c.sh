@@ -6,12 +6,7 @@ set -e
 # 3.通过sh: 运行在不同的进程
 # 4.通过.: 运行在相同的进程，在test_call_other_shell.sh中调用parameter_usage.sh后，parameter_usage.sh中的变量和函数在test_call_other_shell.sh中可直接使用
 
-. ./setenv.sh
-
-cd $cur_dir
-make compileJava
-
-echo "编译Java文件成功,即将编译测试用例代码"
+. ./set_native_env.sh
 
 $base_dir/common/bin/logger.sh $build_dir/build.log make jvm
 	# -isysroot "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.1.sdk" \

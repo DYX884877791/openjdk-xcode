@@ -76,6 +76,8 @@ static const char *_fVersion;
 static const char *_dVersion;
 static jboolean _wc_enabled = JNI_FALSE;
 static jint _ergo_policy = DEFAULT_POLICY;
+// 默认级别为NONE
+static int default_slog_level = SLOG_NONE;
 
 /*
  * Entries for splash screen environment variables.
@@ -91,6 +93,8 @@ static char* splash_jar_entry = NULL;
  */
 static JavaVMOption *options;
 static int numOptions, maxOptions;
+
+static slog_flag_t ParseSlogLevel(int *pargc, char ***pargv);
 
 /*
  * Prototypes for functions internal to launcher.
@@ -178,6 +182,27 @@ void greet()
     printf("=========================================\n");
 }
 
+static slog_flag_t ParseSlogLevel(int *pargc, char ***pargv) {
+    int argc = *pargc;
+    char **argv = *pargv;
+
+    char *arg;
+    while ((arg = *argv) != 0) {
+        argv++;
+        --argc;
+        if(JLI_StrCCmp(arg, "-Dslog.level=") == 0) { // 自己添加的日志级别...
+            // get what follows this parameter, include "="
+            size_t pnlen = JLI_StrLen("-Dslog.level=");
+            if (JLI_StrLen(arg) > pnlen) {
+                char *value = arg + pnlen;
+                return slog_parse_flag(value);
+            }
+            return SLOG_UNKNOWN;
+        }
+    }
+    return default_slog_level;
+}
+
 /*
  * JLI_Launch作为启动器，创建了一个新线程执行JavaMain函数，JLI_Launch所在的线程称为启动线程，执行JavaMain函数的称之为Main线程。JavaMain函数的主要流程如下：
  *
@@ -235,9 +260,15 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     _wc_enabled = cpwildcard;
     _ergo_policy = ergo;
 
+    slog_flag_t eFlag = ParseSlogLevel(&argc, &argv);
 
-    slog_init("java", SLOG_FLAGS_ALL, 0);
-    slog_debug("JLI_Launch start!");
+    if (eFlag == SLOG_UNKNOWN) {
+        JLI_ReportMessage("sloglevel support one of following levels: \"%s\"",  slog_get_all_levels());
+        return(1);
+    }
+
+    slog_init("java", eFlag, 0);
+    slog_debug("进入jdk/src/share/bin/java.c中的JLI_Launch函数...");
 
 
     /*
@@ -300,7 +331,6 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     // }
     start = CounterGet();
 
-    slog_debug("will LoadJavaVM");
     /*
      * LoadJavaVM函数从JVM动态库获取函数指针；
      *
@@ -308,6 +338,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      * JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针并保存到InvocationFunctions结构体中。
      *
      */
+    slog_debug("即将调用LoadJavaVM函数...");
     if (!LoadJavaVM(jvmpath, &ifn)) {
         slog_destroy();
         return(6);
@@ -317,7 +348,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     //     end   = CounterGet();
     // }
     end   = CounterGet();
-    slog_debug("%ld micro seconds to LoadJavaVM", (long)(jint)Counter2Micros(end-start));
+    slog_debug("执行LoadJavaVM结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
     JLI_TraceLauncher("%ld micro seconds to LoadJavaVM\n",
              (long)(jint)Counter2Micros(end-start));
 
@@ -401,6 +432,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      *
      * ifn结构体保存了先前用LoadJavaVM函数在JVM动态库中查找到的JNI_CreateJavaVM、JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针。
      */
+    slog_debug("即将调用JVMInit函数进行JVM的初始化...");
     return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
 }
 /*
@@ -454,8 +486,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 int JNICALL
 JavaMain(void * _args)
 {
-
-    slog_debug("JavaMain starting...");
+    slog_debug("进入jdk/src/share/bin/java.c中的JavaMain函数...");
     JavaMainArgs *args = (JavaMainArgs *)_args;
     int argc = args->argc;
     char **argv = args->argv;
@@ -478,7 +509,7 @@ JavaMain(void * _args)
 
     /* Initialize the virtual machine */
     start = CounterGet();
-    slog_debug("will InitializeJVM...");
+    slog_debug("即将调用InitializeJVM函数...");
     // InitializeJVM函数进一步初始化JVM，它会调用之前初始化的 ifn 数据结构中的 CreateJavaVM 函数.
     if (!InitializeJVM(&vm, &env, &ifn)) {
         JLI_ReportErrorMessage(JVM_ERROR1);
@@ -508,7 +539,7 @@ JavaMain(void * _args)
 
     FreeKnownVMs();  /* after last possible PrintUsage() */
     end = CounterGet();
-    slog_debug("%ld micro seconds to InitializeJVM",  (long)(jint)Counter2Micros(end-start));
+    slog_debug("执行InitializeJVM结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
     if (JLI_IsTraceLauncher()) {
         // end = CounterGet();
         JLI_TraceLauncher("%ld micro seconds to InitializeJVM\n",
@@ -568,7 +599,7 @@ JavaMain(void * _args)
      * This method also correctly handles launching existing JavaFX
      * applications that may or may not have a Main-Class manifest entry.
      */
-    slog_debug("will load main class,[%s]...", what);
+    slog_debug("即将调用LoadMainClass函数,加载MainClass[%s]...", what);
     mainClass = LoadMainClass(env, mode, what);
     CHECK_EXCEPTION_NULL_LEAVE(mainClass);
     /*
@@ -625,7 +656,7 @@ JavaMain(void * _args)
      * 调用main方法.
      * 最终位置是在hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethod函数中
      **/
-    slog_debug("will CallStaticVoidMethod");
+    slog_debug("即将调用JNIEnv结构体中的CallStaticVoidMethod(位于hotspot/src/share/vm/prims/jni.cpp中jni_CallStaticVoidMethod)函数...");
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
 
     /*
@@ -1393,14 +1424,12 @@ static jboolean
 InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
 {
 
-    slog_debug("InitializeJVM starting...");
+    slog_debug("进入jdk/src/share/bin/java.c中的InitializeJVM函数...");
 
     // args结构体表示JVM启动选项，全局变量options指向先前TranslateApplicationArgs函数和ParseArguments函数添加或解析的JVM启动选项，另一个全局变量numOptions则保存了选项个数；
-
-
     JavaVMInitArgs args;
     jint r;
-
+    // 因为args是auto类型的变量，所以此处使用memset函数置0
     memset(&args, 0, sizeof(args));
     args.version  = JNI_VERSION_1_2;
     args.nOptions = numOptions;
@@ -1419,7 +1448,7 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
                    i, args.options[i].optionString);
     }
 
-    slog_debug("will call CreateJavaVM function in jni.cpp");
+    slog_debug("即将调用定义在文件hotspot/src/share/vm/prims/jni.cpp中的JNI_CreateJavaVM函数...");
     //ifn结构体的CreateJavaVM函数指针即指向JVM动态库中的JNI_CreateJavaVM函数。
     // JNI_CreateJavaVM函数定义在文件hotspot/src/share/vm/prims/jni.cpp中
     r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
@@ -1432,6 +1461,7 @@ static jclass helperClass = NULL;
 jclass
 GetLauncherHelperClass(JNIEnv *env)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的GetLauncherHelperClass函数...");
     if (helperClass == NULL) {
         NULL_CHECK0(helperClass = FindBootStrapClass(env,
                 "sun/launcher/LauncherHelper"));
@@ -1503,7 +1533,7 @@ static jclass
 LoadMainClass(JNIEnv *env, int mode, char *name)
 {
 
-    slog_debug("LoadMainClass starting...");
+    slog_debug("进入jdk/src/share/bin/java.c中的LoadMainClass函数...");
     jmethodID mid;
     jstring str;
     jobject result;
@@ -1521,6 +1551,7 @@ LoadMainClass(JNIEnv *env, int mode, char *name)
     CHECK_JNI_RETURN_0(
         result = (*env)->CallStaticObjectMethod(
             env, cls, mid, USE_STDERR, mode, str));
+    slog_debug("执行LoadMainClass结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
 
     if (JLI_IsTraceLauncher()) {
         end = CounterGet();
@@ -1556,10 +1587,6 @@ GetApplicationClass(JNIEnv *env)
 接着处理JAVA_ARGS中其他不以-J开头的选项，添加到新的参数列表中；
 最后添加原命令行参数中其他不以-J开头的选项，其中对-cp或-classpath后跟的路径做了特殊处理：如果路径含有通配符，那么该路径会被展开一层（非递归），用展开后的各文件/目录路径组成以分号分隔的新字符串替换原路径参数。
 注意参数pargc和pargv都是指针，所以该函数返回后JLI_Launch函数里的argc和argv分别是新的参数个数和列表了，并且第一个参数已经不再是可执行文件名。
-
-作者：buzzerrookie
-链接：https://www.jianshu.com/p/3612768ae014
-来源：简书
 
  *
  * For tools, convert command line args thus:
@@ -1630,7 +1657,7 @@ TranslateApplicationArgs(int jargc, const char **jargv, int *pargc, char ***parg
  * AddApplicationOptions函数为JVM启动添加了应用选项：
 
 如果CLASSPATH环境变量被设置，如果没有通配符则添加新的虚拟机启动选项：-Denv.class.path=变量值；如果有通配符则将变量值进行通配符展开（与TranslateApplicationArgs函数中的相同），
- 添加新的虚拟机启动选项：-Denv.class.path=展开后的各文件/目录路径组成的以分号分隔的字符串；
+添加新的虚拟机启动选项：-Denv.class.path=展开后的各文件/目录路径组成的以分号分隔的字符串；
 添加新的虚拟机启动选项：-Dapplication.home=可执行文件的应用目录（见GetApplicationHome函数）；
 添加新的虚拟机启动选项：-Djava.class.path=可执行文件的应用目录内的某些子目录/文件路径组成以分号分隔的字符串， 具体哪些子目录/文件的路径需要被添加由APP_CLASSPATH宏定义。
 
@@ -2234,7 +2261,7 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
                     int mode, char *what, int ret)
 {
 
-    slog_debug("ContinueInNewThread starting...");
+    slog_debug("进入jdk/src/share/bin/java.c中的ContinueInNewThread函数...");
     /*
      * 设置线程栈大小
      *

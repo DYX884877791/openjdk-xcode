@@ -72,6 +72,12 @@
 //                          <--+
 
 // Stub只定义了基础方法，没有任何属性，且所有方法的实现都是ShouldNotCallThis()，即要求子类实现所有的方法，其定义在hotspot/src/share/vm/code/stubs.hpp中
+// 什么是Stub？
+// Stub代码是HotSpot生成的固定调用点的代码。为什么需要Stub代码，HotSpot内部与Java代码调用的地方有两种形式JNI和Stub。
+// JNI调用方式需要Java代码与JNI代码一一对应，每一个Java方法都对应一个JNI函数。而Stub是HosSpot内部为了统一调用Java函数而生成的固定调用点。
+// 通过手工汇编编写的一段存储于内存中的统一调用点。HotSpot内部按Java方法功能类别生成了多个调用点的Stub代码。
+// 当虚拟机执行到一个Java方法调用时，会统一转到合适的Stub调用点。该调用点会进行栈帧创建，参数传递处理，大大简化了设计。
+// 比如， JavaCalls::call_virtual()就是Stub调用的一个用例
 class Stub VALUE_OBJ_CLASS_SPEC {
  public:
   // Initialization/finalization

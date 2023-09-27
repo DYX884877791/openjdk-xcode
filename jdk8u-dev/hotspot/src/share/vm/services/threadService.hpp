@@ -477,6 +477,7 @@ class JavaThreadInObjectWaitState : public JavaThreadStatusChanger {
 };
 
 // Change status to parked (timed or indefinite)
+// JavaThreadParkedState通过构造方法和析构方法来修改线程的状态，并记录锁等待的次数和耗时
 class JavaThreadParkedState : public JavaThreadStatusChanger {
  private:
   ThreadStatistics* _stat;

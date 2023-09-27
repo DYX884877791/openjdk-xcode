@@ -284,6 +284,7 @@ public:
 // Compilation
 //
 // The broker for all compilation requests.
+// 编译器管理器  CompileBroker 就负载编译器的初始化，管理等等，根据注释 The broker for all compilation requests 就能看出他负责所有编译请求的处理
 // CompileBroker定义在compileBroker.hpp中，表示一个负责接收并处理编译请求的经纪人，提供对外的编译相关的高度封装的方法。CompileBroker定义的属性都是静态属性
 class CompileBroker: AllStatic {
  friend class Threads;

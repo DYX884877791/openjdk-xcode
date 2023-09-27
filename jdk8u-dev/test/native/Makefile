@@ -2,10 +2,6 @@
 
 CFLAGS+=-g -Wall -O0
 
-.PHONY: compileJava
-compileJava:
-	sudo ${openjdk_home}/bin/javac ${java_dir}/Main.java -d ${java_target_dir} -encoding utf-8
-
 # 为什么使用clang的2阶段命令行构建不会生成dSYM目录？
 # https://qa.1r1g.com/sf/ask/2260814461/
 # https://blog.csdn.net/quentin_d/article/details/122879754

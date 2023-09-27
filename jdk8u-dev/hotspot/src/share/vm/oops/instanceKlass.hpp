@@ -136,8 +136,27 @@ class OopMapBlock VALUE_OBJ_CLASS_SPEC {
 
 struct JvmtiCachedClassFileData;
 
+// 每个InstanceKlass对象表示一个具体的Java类（这里的Java类不包括Java数组）。
+/**
+ * 有了InstanceKlass与Klass中定义的这些属性足够用来保存Java类元信息。在后续的类解析中会看到对相关变量的属性填充操作。
+ * 除了保存类元信息外，此类还有另外一个重要的功能，即支持方法分派，主要是通过Java虚方法表和Java接口函数表来完成的，不过C++并不像Java一样，
+ * 保存信息时非要在类中定义出相关属性，C++只是在分配内存时为要存储的信息分配好特定的内存，然后直接通过内存偏移来操作即可。
+ *
+ * 还有几个属性是没有对应的属性名，只能通过指针和偏移量的方式访问：
+ * 1. Java vtable：Java虚函数表，大小等于_vtable_len；
+ * 2. Java itables：Java接口函数表，大小等于 _itable_len；
+ * 3. 非静态oop-map blocks ，大小等于_nonstatic_oop_map_size；
+ * 4. 接口的实现类，只有当前类表示一个接口时存在。如果接口没有任何实现类则为NULL；如果只有一个实现类则为该实现类的Klass指针；如果有多个实现类，为当前类本身；
+ * 5. host klass，只在匿名类中存在，为了支持JSR 292中的动态语言特性，会给匿名类生成一个host klass。
+ */
 // InstanceKlass是Java Class在JVM层面的内存表示，包含了类在执行过程中需要的所有信息。
 //  InstanceKlass在Klass基础上新增的重要属性如_annotations、_array_klasses等
+// InstanceKlass共有3个直接子类，这3个子类用来表示一些特殊的类:
+// 1. InstanceRefKlass  -- java/lang/ref/Reference的子类需要使用InstanceRefKlass类来表示，因为这些类需要垃圾回收器特殊处理 ，在讲解强引用、弱引用、虚引用以及幽灵引用时再详细介绍。
+// 2. InstanceMirrorKlass类 -- 用于表示特殊的java.lang.Class类，我们需要分清相关类的表示方法
+//    java.lang.Class对象是通过对应的Oop对象来保存类的静态属性，因此他们的实例大小不同，需要特殊的方式来计算他们的大小以及属性遍历。
+//    Klass的属性_java_mirror就指向保存该类静态字段的Oop对象，可通过该属性访问类的静态字段。 Oop是HotSpot的对象表示模型，在后面会详细介绍。
+// 3. InstanceClassLoaderKlass类　-- 没有添加新的字段，增加了新的oop遍历方法，主要用于类加载器依赖遍历使用。
 class InstanceKlass: public Klass {
   friend class VMStructs;
   friend class ClassFileParser;
@@ -186,13 +205,13 @@ class InstanceKlass: public Klass {
 
  protected:
   // Annotations for this class
-  // Annotations指针，该类使用的所有注解
+  // Annotations类型的指针，保存该类使用的所有注解
   Annotations*    _annotations;
   // Array classes holding elements of this class.
-  // 数组元素为该类的数组Klass指针
+  // 数组元素为该类的数组Klass指针，例如ObjArrayKlass是对象数组且元素类型为Object，那么表示Object类的InstanceKlass对象的_array_klasses就是指向ObjArrayKlass的指针
   Klass*          _array_klasses;
   // Constant pool for this class.
-  //  ConstantPool指针，该类的常量池
+  //  ConstantPool指针，该类的常量池，ConstantPool类型的指针，用来保存类的常量池信息
   ConstantPool* _constants;
   // The InnerClasses attribute and EnclosingMethod attribute. The
   // _inner_classes is an array of shorts. If the class has InnerClasses
@@ -205,7 +224,7 @@ class InstanceKlass: public Klass {
   // number_of_inner_classes * 4. If the class has both InnerClasses
   // and EnclosingMethod attributes the _inner_classes array length is
   // number_of_inner_classes * 4 + enclosing_method_attribute_size.
-  // 用一个ushort数组表示当前类的内部类属性和闭包(EnclosingMethod)属性,参考Class类中的getEnclosingXX、getDeclaredXX
+  // 用一个jushort数组表示当前类的内部类(InnerClasses)属性和闭包(EnclosingMethod)属性,参考Class类中的getEnclosingXX、getDeclaredXX
   Array<jushort>* _inner_classes;
 
   // the source debug extension for this klass, NULL if not specified.
@@ -214,7 +233,7 @@ class InstanceKlass: public Klass {
   char*           _source_debug_extension;
   // Array name derived from this class which needs unreferencing
   // if this class is unloaded.
-  // 根据类名计算的以该类的数组的名字
+  // 根据类名计算的以该类的数组的名字，以该类为数组元素的数组的名字，如"[Ljava/lang/Object;"
   Symbol*         _array_name;
 
   // Number of heapOopSize words used by non-static fields in this klass
@@ -225,13 +244,13 @@ class InstanceKlass: public Klass {
   int             _static_field_size;    // number words used by static fields (oop and non-oop) in this klass
   // Constant pool index to the utf8 entry of the Generic signature,
   // or 0 if none.
-  // 常量池中保存该类的Generic signature的索引
+  // 保存此类的Generic signature在常量池中的索引
   u2              _generic_signature_index;
   // Constant pool index to the utf8 entry for the name of source file
   // containing this klass, 0 if not specified.
-  // 包含此类的源文件名在常量池中索引
+  // 保存此类的源文件名在常量池中索引
   u2              _source_file_name_index;
-  // 此类的包含的静态引用类型字段的数量
+  // 此类包含的静态引用类型字段的数量
   u2              _static_oop_field_count;// number of static oop fields in this klass
   // 总的字段数量
   u2              _java_fields_count;    // The number of declared Java fields
@@ -270,7 +289,7 @@ class InstanceKlass: public Klass {
   OopMapCache*    volatile _oop_map_cache;   // OopMapCache for all methods in the klass (allocated lazily)
   // MemberNameTable指针，保存了成员名
   MemberNameTable* _member_names;        // Member names
-  // JNIid指针，该类的第一个静态字段的JNIid，可以根据其_next属性获取下一个字段的JNIid
+  // JNIid指针，该类的第一个静态字段的JNIid，可以根据其_next属性获取下一个字段的JNIid，与jmethodID指针这2个指针对于JNI方法操作属性和方法非常重要
   JNIid*          _jni_ids;              // First JNI identifier for static fields in this class
   // jmethodID指针，java方法的ID列表
   jmethodID*      _methods_jmethod_ids;  // jmethodIDs corresponding to method_idnum, or NULL if none
@@ -292,7 +311,7 @@ class InstanceKlass: public Klass {
   // Class states are defined as ClassState (see above).
   // Place the _init_state here to utilize the unused 2-byte after
   // _idnum_allocated_count.
-  // 类的状态，是一个枚举值ClassState，allocated（已分配内存），loaded（从class文件读取加载到内存中），linked（已经成功链接和校验），
+  // 类的状态，为枚举类型ClassState，定义了如下常量值：allocated（已分配内存），loaded（从class文件读取加载到内存中），linked（已经成功链接和校验），
   // being_initialized（正在初始化），fully_initialized（已经完成初始化），initialization_error（初始化异常）
   u1              _init_state;                    // state of class
   // 引用类型
@@ -303,16 +322,16 @@ class InstanceKlass: public Klass {
   NOT_PRODUCT(int _verify_count;)  // to avoid redundant verifies
 
   // Method array.
-  // 方法指针数组，类方法
+  // 保存方法的指针数组，方法指针数组，类方法
   Array<Method*>* _methods;
   // Default Method Array, concrete methods inherited from interfaces
-  // 方法指针数组，从接口继承的默认方法
+  // 保存方法的指针数组，从接口继承的默认方法
   Array<Method*>* _default_methods;
   // Interface (Klass*s) this class declares locally to implement.
-  // Klass指针数组，直接实现的接口Klass
+  // 保存接口的指针数组，直接实现的接口Klass
   Array<Klass*>* _local_interfaces;
   // Interface (Klass*s) this class implements transitively.
-  // Klass指针数组，所有实现的接口Klass，包含_local_interfaces和通过继承间接实现的接口
+  // 保存接口的指针数组，包含_local_interfaces和通过继承间接实现的接口
   Array<Klass*>* _transitive_interfaces;
   // Int array containing the original order of method in the class file (for JVMTI).
   // int数组，保存类中方法声明时的顺序，JVMTI使用
@@ -336,7 +355,8 @@ class InstanceKlass: public Klass {
   //     [generic signature index]
   //     ...
   // 类的字段属性，每个字段有6个属性，access, name index, sig index, initial value index, low_offset, high_offset，
-  // 6个组成一个数组，access表示访问控制属性，根据name index可以获取属性名，根据initial value index可以获取初始值，根据low_offset, high_offset可以获取该属性在内存中的偏移量
+  // 6个组成一个数组，access表示访问控制属性，根据name index可以获取属性名，根据initial value index可以获取初始值，
+  // 根据low_offset, high_offset可以获取该属性在内存中的偏移量，另外保存完所有属性之后还可能会保存泛型签名信息。
   Array<u2>*      _fields;
 
   // embedded Java vtable follows here
@@ -960,9 +980,13 @@ class InstanceKlass: public Klass {
     return (super() == NULL) ? NULL : cast(super());
   }
 
-  // Sizing (in words)
+  // Sizing (in words) 以HeapWordSize为单位，64位环境下一个字为8字节，所以值为8
+  // 调用的align_object_offset()方法是进行内存对齐，这是一块非常重要的C++知识点
   static int header_size()            { return align_object_offset(sizeof(InstanceKlass)/HeapWordSize); }
 
+  /**
+   * 可以看到除了会为类中本身的属性分配内存，也会为vtable与itable等分配内存。
+   */
   static int size(int vtable_length, int itable_length,
                   int nonstatic_oop_map_size,
                   bool is_interface, bool is_anonymous) {

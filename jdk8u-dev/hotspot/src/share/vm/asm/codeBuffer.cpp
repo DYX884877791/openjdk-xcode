@@ -364,11 +364,14 @@ void CodeSection::relocate(address at, RelocationHolder const& spec, int format)
   end->initialize(this, reloc);
 }
 
+//CodeBuffer::initialize(csize_t code_size, csize_t locs_size) 时调用
 void CodeSection::initialize_locs(int locs_capacity) {
   assert(_locs_start == NULL, "only one locs init step, please");
   // Apply a priori lower limits to relocation size:
   csize_t min_locs = MAX2(size() / 16, (csize_t)4);
+    //不能低于最低值
   if (locs_capacity < min_locs)  locs_capacity = min_locs;
+    //NEW_RESOURCE_ARRAY是一个宏定义，从ResourceArea中分配内存
   relocInfo* locs_start = NEW_RESOURCE_ARRAY(relocInfo, locs_capacity);
   _locs_start    = locs_start;
   _locs_end      = locs_start;

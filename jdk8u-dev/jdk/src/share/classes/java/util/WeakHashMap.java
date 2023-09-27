@@ -34,6 +34,12 @@ import java.util.function.Consumer;
 
 
 /**
+ * WeakHashMap是基于基于弱引用key和哈希表的Map接口实现类，通常用于实现对内存敏感的本地缓存。
+ * 使用WeakHashMap时要求key不能被其他常驻内存的实例（如WeakHashMap中的value）引用，如果必须引用，则将引用方包装成WeakReference，
+ * 如：m.put(key, new WeakReference(value))。当只有WeakHashMap实例保留了对目标key的引用时，下一次垃圾回收可能将该key从内存中删除掉，
+ * 注意key删除了但是key对应的WeakReference实例还在WeakHashMap中。
+ * 如果被删除了，则下一次调用WeakHashMap的某个方法时，WeakHashMap会首先将被垃圾回收掉的key对应的WeakReference实例及其value从WeakHashMap中删除。
+ * 使用WeakHashMap时需要程序做好某个key突然没有的应对措施，key的删除是垃圾回收器决定的，对应用程序是不可控不可预知的。
  * Hash table based implementation of the <tt>Map</tt> interface, with
  * <em>weak keys</em>.
  * An entry in a <tt>WeakHashMap</tt> will automatically be removed when
@@ -139,6 +145,7 @@ public class WeakHashMap<K,V>
 
     /**
      * The default initial capacity -- MUST be a power of two.
+     *  默认初始容量
      */
     private static final int DEFAULT_INITIAL_CAPACITY = 16;
 
@@ -146,40 +153,48 @@ public class WeakHashMap<K,V>
      * The maximum capacity, used if a higher value is implicitly specified
      * by either of the constructors with arguments.
      * MUST be a power of two <= 1<<30.
+     * 最大容量
      */
     private static final int MAXIMUM_CAPACITY = 1 << 30;
 
     /**
      * The load factor used when none specified in constructor.
+     * 默认负载因子
      */
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
 
     /**
      * The table, resized as necessary. Length MUST Always be a power of two.
+     * 哈希表
      */
     Entry<K,V>[] table;
 
     /**
      * The number of key-value mappings contained in this weak hash map.
+     * 保存的元素个数
      */
     private int size;
 
     /**
      * The next size value at which to resize (capacity * load factor).
+     * 执行扩容的阈值 (capacity * load factor).
      */
     private int threshold;
 
     /**
      * The load factor for the hash table.
+     * 负载因子
      */
     private final float loadFactor;
 
     /**
      * Reference queue for cleared WeakEntries
+     * 保存弱引用的队列，当垃圾回收器回收了某个弱引用对应的对象时，会将该弱引用放入队列中
      */
     private final ReferenceQueue<Object> queue = new ReferenceQueue<>();
 
     /**
+     * 记录修改次数
      * The number of times this WeakHashMap has been structurally modified.
      * Structural modifications are those that change the number of
      * mappings in the map or otherwise modify its internal structure
@@ -215,6 +230,7 @@ public class WeakHashMap<K,V>
             throw new IllegalArgumentException("Illegal Load factor: "+
                                                loadFactor);
         int capacity = 1;
+        // 计算大于initialCapacity的最小的2的整数次方,跟HashMap中的实现相比，运算的次数更多
         while (capacity < initialCapacity)
             capacity <<= 1;
         table = newTable(capacity);
@@ -267,6 +283,8 @@ public class WeakHashMap<K,V>
 
     /**
      * Use NULL_KEY for key if it is null.
+     *
+     * 插入时对key做预处理，如果key为null转换为NULL_KEY
      */
     private static Object maskNull(Object key) {
         return (key == null) ? NULL_KEY : key;
@@ -274,6 +292,7 @@ public class WeakHashMap<K,V>
 
     /**
      * Returns internal representation of null key back to caller as null.
+     * 返回key时对key做预处理，如果key为NULL_KEY转换为null
      */
     static Object unmaskNull(Object key) {
         return (key == NULL_KEY) ? null : key;
@@ -282,6 +301,7 @@ public class WeakHashMap<K,V>
     /**
      * Checks for equality of non-null reference x and possibly-null y.  By
      * default uses Object.equals.
+     * 判断两个对象是否相等
      */
     private static boolean eq(Object x, Object y) {
         return x == y || x.equals(y);
@@ -293,6 +313,7 @@ public class WeakHashMap<K,V>
      * critical because HashMap uses power-of-two length hash tables, that
      * otherwise encounter collisions for hashCodes that do not differ
      * in lower bits.
+     * 让低位字节参与运算，减少hash碰撞,相比HashMap运算次数更多
      */
     final int hash(Object k) {
         int h = k.hashCode();
@@ -306,6 +327,7 @@ public class WeakHashMap<K,V>
 
     /**
      * Returns index for hash code h.
+     * 返回哈希表中索引
      */
     private static int indexFor(int h, int length) {
         return h & (length-1);
@@ -313,29 +335,42 @@ public class WeakHashMap<K,V>
 
     /**
      * Expunges stale entries from the table.
+     * 从哈希表中删除弱引用队列保存的元素，弱引用队列中保存的元素是已经被垃圾回收器给回收的元素
+     * 注意Entry是继承自WeakReference对象，此时从引用队列获取的Entry实例中保存的key已经被垃圾回收器会回收了
      */
     private void expungeStaleEntries() {
+        //不断的从弱引用队列中拉取元素
         for (Object x; (x = queue.poll()) != null; ) {
             synchronized (queue) {
                 @SuppressWarnings("unchecked")
                     Entry<K,V> e = (Entry<K,V>) x;
+                //找到被删除元素所属的哈希索引
                 int i = indexFor(e.hash, table.length);
-
+                //获取该索引下哈希桶的头元素
+                //prev表示前一个元素
                 Entry<K,V> prev = table[i];
+                //p表示当前遍历的元素
                 Entry<K,V> p = prev;
+                //遍历哈希桶的单向链表
                 while (p != null) {
                     Entry<K,V> next = p.next;
+                    //找到目标元素
                     if (p == e) {
+                        //p和prev只有在都指向头元素时才相等，即待删除元素是头元素，将下一个元素置为头元素
                         if (prev == e)
                             table[i] = next;
                         else
+                            //如果不是头元素，将前一个元素和下一个元素关联起来
                             prev.next = next;
                         // Must not null out e.next;
                         // stale entries may be in use by a HashIterator
+                        //e.key已经为null，将value进一步置为null，从而被垃圾回收器回收
                         e.value = null; // Help GC
+                        //元素被移除，size减1，跳出循环
                         size--;
                         break;
                     }
+                    //没找到key，pre置成当前元素，p置成下一个元素，继续遍历
                     prev = p;
                     p = next;
                 }
@@ -696,6 +731,8 @@ public class WeakHashMap<K,V>
     }
 
     /**
+     * Entry继承自WeakReference
+     *
      * The entries in this hash table extend WeakReference, using its main ref
      * field as the key.
      */
@@ -710,12 +747,14 @@ public class WeakHashMap<K,V>
         Entry(Object key, V value,
               ReferenceQueue<Object> queue,
               int hash, Entry<K,V> next) {
+            //此处自动将key包装成WeakReference
             super(key, queue);
             this.value = value;
             this.hash  = hash;
             this.next  = next;
         }
 
+        // 此处获取key是从WeakReference中获取key的
         @SuppressWarnings("unchecked")
         public K getKey() {
             return (K) WeakHashMap.unmaskNull(get());

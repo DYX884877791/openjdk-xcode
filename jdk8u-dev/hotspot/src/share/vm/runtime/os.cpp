@@ -69,7 +69,9 @@
 #endif
 
 # include <signal.h>
-
+extern "C" {
+    #include "utilities/slog.hpp"
+}
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 OSThread*         os::_starting_thread    = NULL;
@@ -262,8 +264,17 @@ OSReturn os::get_priority(const Thread* const thread, ThreadPriority& priority) 
 
 // sigexitnum_pd is a platform-specific special signal used for terminating the Signal thread.
 
+/**
+ * 可以看到通过os::signal_wait();等待信号，而在linux里是通过sem_wait()来实现，接受到SIGBREAK(linux 中的QUIT)信号的时候，第一次通过调用 AttachListener::is_init_trigger()初始化attach listener线程
 
+第一次收到信号，会开始初始化，当初始化成功，将会直接返回，而且不返回任何线程stack的信息（通过socket file的操作返回），并且第二次将不在需要初始化。如果初始化不成功，将直接在控制台的outputstream中打印线程栈信息。
+第二次收到信号，如果已经初始化过，将直接在控制台中打印线程的栈信息。如果没有初始化，继续初始化，走和第一次相同的流程。
+
+ * @param thread
+ * @param __the_thread__
+ */
 static void signal_thread_entry(JavaThread* thread, TRAPS) {
+    slog_debug("进入hotspot/src/share/vm/runtime/os.cpp中的signal_thread_entry函数...");
   os::set_priority(thread, NearMaxPriority);
   while (true) {
     int sig;
@@ -271,6 +282,9 @@ static void signal_thread_entry(JavaThread* thread, TRAPS) {
       // FIXME : Currently we have not decieded what should be the status
       //         for this java thread blocked here. Once we decide about
       //         that we should fix this.
+      // 看到通过os::signal_wait();等待信号，而在linux里是通过sem_wait()来实现，
+      // signal dispatcher 线程通过sem_wait会在等待，当进程接到信号SIGQUIT的时候，只有vm thread会被中断，而进入UserHandler 函数，
+      // 通过调用 os::signal_notify 去通告signal dispatcher 线程，让 signal dispatch 线程去处理信号。
       sig = os::signal_wait();
     }
     if (sig == os::sigexitnum_pd()) {
@@ -291,6 +305,10 @@ static void signal_thread_entry(JavaThread* thread, TRAPS) {
             continue;
           } else if (cur_state == AL_NOT_INITIALIZED) {
             // Start to initialize.
+            // 接受到SIGBREAK(linux 中的QUIT)信号的时候，第一次通过调用 AttachListener::is_init_trigger（）初始化attach listener线程
+            // 第一次收到信号，会开始初始化，当初始化成功，将会直接返回，而且不返回任何线程stack的信息（通过socket file的操作返回），并且第二次将不在需要初始化。
+            // 如果初始化不成功，将直接在控制台的outputstream中打印线程栈信息。
+            // 第二次收到信号，如果已经初始化过，将直接在控制台中打印线程的栈信息。如果没有初始化，继续初始化，走和第一次相同的流程。
             if (AttachListener::is_init_trigger()) {
               // Attach Listener has been initialized.
               // Accept subsequent request.
@@ -369,6 +387,7 @@ static void signal_thread_entry(JavaThread* thread, TRAPS) {
 }
 
 void os::init_before_ergo() {
+    slog_debug("进入hotspot/src/share/vm/runtime/os.cpp中的os::init_before_ergo方法...");
   initialize_initial_active_processor_count();
   // We need to initialize large page support here because ergonomics takes some
   // decisions depending on large page support and the calculated large page size.
@@ -413,6 +432,11 @@ void os::signal_init() {
     os::signal_init_pd();
 
     { MutexLocker mu(Threads_lock);
+      /**
+       * 在信号设计里，因为信号中断是在内核态调用的，内核调用了线程注入了自己的信号函数，一般只允许在该函数里处理简单的事物，所以在java里面专门
+       * 设计了处理信号后续的线程（signal dispatcher），接受到信号的线程通过信号函数notify到处理信号的线程（signal dispatcher ），最后由该线程做后续的事情。比如线程dump
+       * https://blog.csdn.net/raintungli/article/details/7178472
+       */
       JavaThread* signal_thread = new JavaThread(&signal_thread_entry);
 
       // At this point it may be possible that no osthread was created for the
@@ -430,8 +454,12 @@ void os::signal_init() {
 
       signal_thread->set_threadObj(thread_oop());
       Threads::add(signal_thread);
+      /**
+       * 启动了signal dispatcher 线程，signal dispather 线程主要是用于处理信号，等待信号并且分发处理，可以详细看signal_thread_entry的方法
+       */
       Thread::start(signal_thread);
     }
+      slog_debug("即将调用os::signal函数,对SIGQUIT信号设置了os::user_handler处理函数...");
     // Handle ^BREAK
     os::signal(SIGBREAK, os::user_handler());
   }
@@ -812,13 +840,15 @@ long os::random() {
 // locking.
 
 void os::start_thread(Thread* thread) {
+    slog_debug("进入hotspot/src/share/vm/runtime/os.cpp中的os::start_thread函数...");
   // guard suspend/resume
   MutexLockerEx ml(thread->SR_lock(), Mutex::_no_safepoint_check_flag);
   OSThread* osthread = thread->osthread();
-  // osthread->set_state(RUNNABLE)，设置线程状态 RUNNABLEpd_start_thread(thread)，启动线程，这个就由各个 OS 实现类，
-  // 实现各自系统的启动方法了。比如，windows系统和Linux系统的代码是完全不同的。
+  // osthread->set_state(RUNNABLE)，设置线程状态 RUNNABLE
+    slog_debug("设置osThread线程_pthread_t[0x%zx],thread_type[%s]的状态为RUNNABLE，但没有notify线程...", osthread->pthread_id(), os::get_thread_type((enum ThreadType)(osthread->thread_type())));
   osthread->set_state(RUNNABLE);
     //唤醒之前创建的在startThread_lock上等待的子线程，开始执行JavaThread的run方法
+    // 启动线程，这个就由各个 OS 实现类，实现各自系统的启动方法了。比如，windows系统和Linux系统的代码是完全不同的。
   // 调用pd_start_thread方法，不同的平台有不同的实现，比如linux对应到os_linux.cpp中的实现
   pd_start_thread(thread);
 }

@@ -71,7 +71,8 @@ import static javax.lang.model.SourceVersion.*;
  * implementations.  Future versions of the API that are only required
  * to run on Java SE 8 and later may take advantage of default methods
  * in this situation.
- *
+ * 一个类型的Visitor，其默认行为适用于jdk1.6。对于可能具有多种类型的XYZ类型，该类中的visitXYZ方法委托给与第一个参数的类型相对应的visitXYZKind方法。
+ * visitXYZKind方法调用defaultAction方法，将它们的参数传递给defaultAction的相应参数。
  * @param <R> the return type of this visitor's methods.  Use {@link
  *            Void} for visitors that do not need to return results.
  * @param <P> the type of the additional parameter to this visitor's

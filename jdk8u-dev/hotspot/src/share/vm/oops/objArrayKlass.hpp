@@ -31,11 +31,13 @@
 #include "utilities/macros.hpp"
 
 // ObjArrayKlass is the klass for objArrays
-
+// ObjArrayKlass是ArrayKlass的子类，用于表示数组元素是类或者数组
 class ObjArrayKlass : public ArrayKlass {
   friend class VMStructs;
  private:
+    // _element_klass：数组元素对应的Klass引用，如果是多维数组，对应数组元素的ObjArrayKlass的引用
   Klass* _element_klass;            // The klass of the elements of this array type
+    // 一维数组的类型，可以是InstanceKlass或者TypeArrayKlass。一维基本类型数组为TypeArrayKlass，而二维基本类型数组就会使用ObjArrayKlass来表示，所以其_bottom_klass会是TypeArrayKlass。　
   Klass* _bottom_klass;             // The one-dimensional type (InstanceKlass or TypeArrayKlass)
 
   // Constructor

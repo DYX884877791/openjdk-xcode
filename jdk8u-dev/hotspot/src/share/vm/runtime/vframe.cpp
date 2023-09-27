@@ -458,6 +458,7 @@ vframeStream::vframeStream(JavaThread* thread, frame top_frame,
 // Step back n frames, skip any pseudo frames in between.
 // This function is used in Class.forName, Class.newInstance, Method.Invoke,
 // AccessController.doPrivileged.
+// 后退 n 帧，跳过其间的任何伪帧。该函数用于Class.forName、Class.newInstance、Method.Invoke、AccessController.doPrivileged。
 void vframeStreamCommon::security_get_caller_frame(int depth) {
   assert(depth >= 0, err_msg("invalid depth: %d", depth));
   for (int n = 0; !at_end(); security_next()) {
@@ -473,7 +474,7 @@ void vframeStreamCommon::security_get_caller_frame(int depth) {
   // to walk to depth.  Callers of this method have to check for at_end.
 }
 
-
+// 下一个
 void vframeStreamCommon::security_next() {
   if (method()->is_prefixed_native()) {
     skip_prefixed_method_and_wrappers();  // calls next()

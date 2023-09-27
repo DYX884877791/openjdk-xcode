@@ -566,9 +566,11 @@ void java_lang_Class::initialize_mirror_fields(KlassHandle k,
   set_protection_domain(mirror(), protection_domain());
 
   // Initialize static fields
+    // 为final static 属性赋恒定值
   InstanceKlass::cast(k())->do_local_static_fields(&initialize_static_field, mirror, CHECK);
 }
 
+// 为klass和class实例互相设置引用并初始化class的静态字段（在每个Klass中都会有个java_mirror字段用来保存Klass对应的Class实例是个oop模型，Klass不直接暴露给java代码，给到java代码的是java_mirror即Class实例）
 void java_lang_Class::create_mirror(KlassHandle k, Handle class_loader,
                                     Handle protection_domain, TRAPS) {
   assert(k->java_mirror() == NULL, "should only assign mirror once");
@@ -582,13 +584,16 @@ void java_lang_Class::create_mirror(KlassHandle k, Handle class_loader,
   // the mirror.
   if (SystemDictionary::Class_klass_loaded()) {
     // Allocate mirror (java.lang.Class instance)
+      // 获取Class实例oop.
     Handle mirror = InstanceMirrorKlass::cast(SystemDictionary::Class_klass())->allocate_instance(k, CHECK);
 
     // Setup indirection from mirror->klass
     if (!k.is_null()) {
+        //为Class实例设置Klass引用
       java_lang_Class::set_klass(mirror(), k());
     }
 
+      // 获取Class类对应的Klass InstanceMirrorKlass
     InstanceMirrorKlass* mk = InstanceMirrorKlass::cast(mirror->klass());
     assert(oop_size(mirror()) == mk->instance_size(k), "should have been set");
 
@@ -632,6 +637,7 @@ void java_lang_Class::create_mirror(KlassHandle k, Handle class_loader,
     // Setup indirection from klass->mirror last
     // after any exceptions can happen during allocations.
     if (!k.is_null()) {
+        // 为Klass设置java_mirror属性，指向堆里的Class实例
       k->set_java_mirror(mirror());
     }
   } else {
@@ -702,6 +708,7 @@ oop java_lang_Class::class_loader(oop java_class) {
   return java_class->obj_field(_class_loader_offset);
 }
 
+
 oop java_lang_Class::create_basic_type_mirror(const char* basic_type_name, BasicType type, TRAPS) {
   // This should be improved by adding a field at the Java level or by
   // introducing a new VM klass (see comment in ClassFileParser)
@@ -709,6 +716,7 @@ oop java_lang_Class::create_basic_type_mirror(const char* basic_type_name, Basic
   if (type != T_VOID) {
     Klass* aklass = Universe::typeArrayKlassObj(type);
     assert(aklass != NULL, "correct bootstrap");
+      // 设置表示基本类型数组的TypeArrayKlass
     set_array_klass(java_class, aklass);
   }
 #ifdef ASSERT
@@ -727,9 +735,16 @@ Klass* java_lang_Class::as_Klass(oop java_class) {
   return k;
 }
 
-
+/**
+ * Class在Klass中的引用就是java_mirror在HSDB中可以清楚看到，但是Klass在Class中的引用在HSDB中是看不到的，也就是在Class中没有Klass相关的属性
+ *
+ * C++并不像Java一样，保存信息时非要在类中定义出相关属性，C++只是在分配内存时为要存储的信息分配好特定的内存，然后直接通过内存偏移来操作即可，所以C++是允许无属性存储引用的，只要记录相对偏移量就可以进行存取。
+ * @param java_class
+ * @param klass
+ */
 void java_lang_Class::set_klass(oop java_class, Klass* klass) {
   assert(java_lang_Class::is_instance(java_class), "must be a Class object");
+    // 在数据区基于偏移量设置klass引用,_klass_offset为相对于数据区的固定偏移量
   java_class->metadata_field_put(_klass_offset, klass);
 }
 
@@ -1098,6 +1113,7 @@ oop java_lang_Thread::park_blocker(oop java_thread) {
 
 jlong java_lang_Thread::park_event(oop java_thread) {
   if (_park_event_offset > 0) {
+      //即获取Thread实例的nativeParkEventPointer属性，该属性是private的，用来保存关联的Parker的指针
     return java_thread->long_field(_park_event_offset);
   }
   return 0;
@@ -3122,6 +3138,9 @@ bool java_lang_ClassLoader::isAncestor(oop loader, oop cl) {
 // based on non-null field
 // Written to by java.lang.ClassLoader, vm only reads this field, doesn't set it
 bool java_lang_ClassLoader::parallelCapable(oop class_loader) {
+    // 通过判断classloader在 parallelCapable_offset 这个offset上面的field是否为 null 来判断是否支持并行加载。
+    // 这个字段其实位于jdk/src/share/classes/java/lang/ClassLoader.java中的 parallelLockMap 属性，
+    // 回头去看ClassLoader的代码你会发现只有调用了registerAsParallelCapable方法，这个字段才不会是null。
   if (!JDK_Version::is_gte_jdk17x_version()
      || parallelCapable_offset == -1) {
      // Default for backward compatibility is false
@@ -3648,6 +3667,9 @@ int InjectedField::compute_offset() {
   return -1;
 }
 
+/**
+ * 首先是对java计算得到class文件中各个类的偏移量,之后进行了校验,最后根据常量池的偏移量把class文件中的常量值放入池中,至此常量池生成.
+ */
 void javaClasses_init() {
   JavaClasses::compute_offsets();
   JavaClasses::check_offsets();

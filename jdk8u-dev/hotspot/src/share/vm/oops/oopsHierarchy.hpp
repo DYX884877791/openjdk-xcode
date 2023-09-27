@@ -31,21 +31,42 @@
 // OBJECT hierarchy
 // This hierarchy is a representation hierarchy, i.e. if A is a superclass
 // of B, A's representation is a prefix of B's representation.
-
+//java对象中oop的偏移量
 typedef juint narrowOop; // Offset instead of address for an oop within a java object
 
 // If compressed klass pointers then use narrowKlass.
+// 如果压缩klass指针，则使用窄klass
 typedef juint  narrowKlass;
 
 typedef void* OopOrNarrowOopStar;
+//对象头标记
 typedef class   markOopDesc*                markOop;
 
 #ifndef CHECK_UNHANDLED_OOPS
 
+/**
+ * Hotspot虚拟机在内部使用两组类来表示Java的类和对象
+ *
+ * 1. oop(ordinary object pointer,普通对象指针),描述对象的实例信息,是在Java程序运行过程中new对象时创建的。
+ *      是HotSpot用来表示Java对象的实例信息的一个体系，即在JVM层面，oop用于表示对象（oop本质上是一个指向内存中对象的起始存储位置的指针）
+ * 2. klass,描述java类,是虚拟机内部Java类型结构,Klass是什么时候创建的呢？一般jvm在加载class文件时，会在方法区创建instanceKlass，表示其元数据，包括常量池、字段、方法等。
+ *
+ * 这里的缩进就体现了Oop继承体系：
+ * oopDesc
+ * --instanceOopDesc
+ * --arrayOopDesc
+ * ----objArrayOopDesc
+ * ----typeArrayOopDesc
+ */
+//对象头（包含markOop），包含Kclass
 typedef class oopDesc*                            oop;
+//Java类实例对象（包含oop）
 typedef class   instanceOopDesc*            instanceOop;
+//Java数组（包含oop）
 typedef class   arrayOopDesc*                    arrayOop;
+//Java对象数组（包含arrayOop）
 typedef class     objArrayOopDesc*            objArrayOop;
+//Java基本类型数组（包含arrayOop）
 typedef class     typeArrayOopDesc*            typeArrayOop;
 
 #else
@@ -186,27 +207,52 @@ template <class T> inline T cast_from_oop(oop o) {
 }
 
 // The metadata hierarchy is separate from the oop hierarchy
+// 元数据层次结构与oop层次结构是分开的
 
 //      class MetaspaceObj
+//继承自MetaspaceObj，方法信息相关，参数，返回值，注解，异常，code指令
 class   ConstMethod;
+//继承自MetaspaceObj，包含ConstantPool
 class   ConstantPoolCache;
+//继承自Metadata，与方法统计优化有关
 class   MethodData;
 //      class Metadata
+//继承自Metadata，组织方法有关信息，包含ConstMethod，MethodData，MethodData，CompiledMethod等
 class   Method;
+//继承自Metadata，包含Java类字节码常量池信息
 class   ConstantPool;
 //      class CHeapObj
+//继承自CHeapObj，包含方法的编译等信息
 class   CompiledICHolder;
 
-
+// klass层次结构与oop层次结构是分开的。
 // The klass hierarchy is separate from the oop hierarchy.
-
+/**
+ *  * 这里的缩进就体现了klass继承体系：
+ * Klass
+ * --InstanceKlass
+ * ----InstanceMirrorKlass
+ * ----InstanceClassLoaderKlass
+ * ----InstanceRefKlass
+ * --ArrayKlass
+ * ----ObjArrayKlass
+ * ----TypeArrayKlass
+ */
+//继承自 Metadata， 维护着类继承结构的类信息，对应一个ClassLoaderData
 class Klass;
+//继承自Klass，维护着对应的Java类相关信息（注解，字段，接口，虚表，版本，线程等信息），以及类所处的状 态
 class   InstanceKlass;
+//继承自InstanceKlass，用于java.lang.Class实例，与反射相关，除了类的普通字段之外，它们还包含类的静态字段
 class     InstanceMirrorKlass;
+//继承自InstanceKlass，它是为了遍历这个类装入器指向的类装入器的依赖关系。
 class     InstanceClassLoaderKlass;
+//继承自InstanceKlass，与java/lang/ref/Reference相关
 class     InstanceRefKlass;
+//继承自Klass，数组相关
 class   ArrayKlass;
+//继承自ArrayKlass，对象数组
 class     ObjArrayKlass;
+//继承自ArrayKlass，基本类型数组
 class     TypeArrayKlass;
 
 #endif // SHARE_VM_OOPS_OOPSHIERARCHY_HPP

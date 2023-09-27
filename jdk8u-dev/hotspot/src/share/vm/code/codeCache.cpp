@@ -174,6 +174,7 @@ nmethod* CodeCache::next_nmethod (CodeBlob* cb) {
 
 static size_t maxCodeCacheUsed = 0;
 
+// allocate方法用于分配CodeBlob的，当CodeBlob分配成功并且初始化完成时调用commit方法来增加CodeCache的相关统计计数
 CodeBlob* CodeCache::allocate(int size, bool is_critical) {
   // Do not seize the CodeCache lock here--if the caller has not
   // already done so, we are going to lose bigtime, since the code
@@ -211,7 +212,9 @@ CodeBlob* CodeCache::allocate(int size, bool is_critical) {
   return cb;
 }
 
+// free方法用于释放一个已分配的CodeBlob并减少CodeCache的统计计数。
 void CodeCache::free(CodeBlob* cb) {
+    //校验已经获取锁了，由此方法的调用方负责获取锁
   assert_locked_or_safepoint(CodeCache_lock);
   verify_if_often();
 
@@ -614,35 +617,46 @@ double CodeCache::reverse_free_ratio() {
 
 void icache_init();
 
+//  initialize方法用来初始化CodeCache的，在JVM进程启动时执行，初始化结束后整个运行期通过_heap属性管理的内存都不会被释放，从而保证已生成的被频繁访问的汇编代码一直常驻内存。
 void CodeCache::initialize() {
+    //校验参数配置是否正确，CodeCacheSegmentSize表示CodeCache对应内存的最小值，CodeEntryAlignment表示分配给一段汇编代码的最小内存空间
   assert(CodeCacheSegmentSize >= (uintx)CodeEntryAlignment, "CodeCacheSegmentSize must be large enough to align entry points");
 #ifdef COMPILER2
+    //OptoLoopAlignment表示给内部循环代码分配的最低内存大小
   assert(CodeCacheSegmentSize >= (uintx)OptoLoopAlignment,  "CodeCacheSegmentSize must be large enough to align inner loops");
 #endif
   assert(CodeCacheSegmentSize >= sizeof(jdouble),    "CodeCacheSegmentSize must be large enough to align constants");
   // This was originally just a check of the alignment, causing failure, instead, round
   // the code cache to the page size.  In particular, Solaris is moving to a larger
   // default page size.
+    //按照系统的内存页大小对CodeCache的参数取整
+    //CodeCacheExpansionSize表示CodeCache扩展一次内存空间对应的内存大小，x86下默认值是2304k
   CodeCacheExpansionSize = round_to(CodeCacheExpansionSize, os::vm_page_size());
+    //InitialCodeCacheSize表示CodeCache的初始大小，x86 启用C2编译下，默认值是2304k
   InitialCodeCacheSize = round_to(InitialCodeCacheSize, os::vm_page_size());
+    //ReservedCodeCacheSize表示CodeCache的最大内存大小，x86 启用C2编译下，默认值是48M
   ReservedCodeCacheSize = round_to(ReservedCodeCacheSize, os::vm_page_size());
+    //完成heap属性的初始化
   if (!_heap->reserve(ReservedCodeCacheSize, InitialCodeCacheSize, CodeCacheSegmentSize)) {
     vm_exit_during_initialization("Could not reserve enough space for code cache");
   }
 
+    //将CodeHeap放入一个MemoryPool中管理起来
   MemoryService::add_code_heap_memory_pool(_heap);
 
   // Initialize ICache flush mechanism
   // This service is needed for os::register_code_area
+    //初始化用于刷新CPU指令缓存的Icache，即生成一段用于刷新指令缓存的汇编代码，此时因为heap属性已初始化完成，所以可以从CodeCache中分配Blob了
   icache_init();
 
   // Give OS a chance to register generated code area.
   // This is used on Windows 64 bit platforms to register
   // Structured Exception Handlers for our generated code.
+    //通知操作系统我们的CodeCache的内存区域，主要是win64使用
   os::register_code_area(_heap->low_boundary(), _heap->high_boundary());
 }
 
-
+// 初始化代码缓存
 void codeCache_init() {
   CodeCache::initialize();
 }

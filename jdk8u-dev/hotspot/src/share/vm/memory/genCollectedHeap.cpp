@@ -375,15 +375,18 @@ void GenCollectedHeap::do_collection(bool  full,
   guarantee(!is_gc_active(), "collection is not reentrant");
   assert(max_level < n_gens(), "sanity check");
 
+  // 检查是否已经GC锁是否已经激活，并设置需要进行GC的标志为true，这时，通过is_active_and_needs_gc()就可以判断是否已经有线程触发了GC。
   if (GC_locker::check_active_before_gc()) {
     return; // GC is disabled (e.g. JNI GetXXXCritical operation)
   }
 
+  // 检查是否需要回收所有的软引用。
   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
                           collector_policy()->should_clear_all_soft_refs();
 
   ClearedAllSoftRefs casr(do_clear_all_soft_refs, collector_policy());
 
+  // 记录永久代已经使用的内存空间大小。
   const size_t metadata_prev_used = MetaspaceAux::used_bytes();
 
   print_heap_before_gc();
@@ -391,6 +394,7 @@ void GenCollectedHeap::do_collection(bool  full,
   {
     FlagSetting fl(_is_gc_active, true);
 
+    // 确定回收类型是否是FullGC以及gc触发类型(GC/Full GC(system)/Full GC，用作Log输出)。
     bool complete = full && (max_level == (n_gens()-1));
     const char* gc_cause_prefix = complete ? "Full GC" : "GC";
     TraceCPUTime tcpu(PrintGCDetails, true, gclog_or_tty);
@@ -399,10 +403,17 @@ void GenCollectedHeap::do_collection(bool  full,
     GCTraceTime t(GCCauseString(gc_cause_prefix, gc_cause()), PrintGCDetails, false, NULL, GCId::peek());
 
     gc_prologue(complete);
+    // gc计数加1操作(包括总GC计数和FullGC计数)。
     increment_total_collections(complete);
 
+    // 统计堆已被使用的空间大小。
     size_t gch_prev_used = used();
 
+    /**
+     * 如果是FullGC，那么从最高的内存代到最低的内存代，若某个内存代不希望对比其更低的内存代进行单独回收，那么就以该内存代作为GC的起始内存代。
+     * 这里说明下什么是单独回收。新生代比如DefNewGeneration的实现将对新生代使用复制算法进行垃圾回收，而老年代TenuredGeneration的垃圾回收则会使用其标记-压缩-清理算法对新生代也进行处理。
+     * 所以可以说DefNewGeneration的垃圾回收是对新生代进行单独回收，而TenuredGeneration的垃圾回收则是对老年代和更低的内存代都进行回收。
+     */
     int starting_level = 0;
     if (full) {
       // Search for the oldest generation which will collect all younger
@@ -417,8 +428,11 @@ void GenCollectedHeap::do_collection(bool  full,
 
     bool must_restore_marks_for_biased_locking = false;
 
+    // 接下来从GC的起始内存代开始，向最老的内存代进行回收 。
+
     int max_level_collected = starting_level;
     for (int i = starting_level; i <= max_level; i++) {
+        // should_collect()将根据该内存代GC条件返回是否应该对该内存代进行GC。若当前回收的内存代是最老的内存代，如果本次gc不是FullGC，将调用increment_total_full_collections()修正之前的FulllGC计数值。
       if (_gens[i]->should_collect(full, size, is_tlab)) {
         if (i == n_gens() - 1) {  // a major collection is to happen
           if (!complete) {
@@ -431,6 +445,7 @@ void GenCollectedHeap::do_collection(bool  full,
         // FIXME: We should try to start the timing earlier to cover more of the GC pause
         // The PrintGCDetails logging starts before we have incremented the GC id. We will do that later
         // so we can assume here that the next GC id is what we want.
+        // 统计GC前该内存代使用空间大小以及其他记录工作 。
         GCTraceTime t1(_gens[i]->short_name(), PrintGCDetails, false, NULL, GCId::peek());
         TraceCollectorStats tcs(_gens[i]->counters());
         TraceMemoryManagerStats tmms(_gens[i]->kind(),gc_cause());
@@ -451,6 +466,11 @@ void GenCollectedHeap::do_collection(bool  full,
                      size*HeapWordSize);
         }
 
+        // 验证工作 。
+        // 先调用prepare_for_verify()使各内存代进行验证的准备工作(正常情况下什么都不需要做)，随后调用Universe的verify()进行GC前验证
+        // 线程、堆(各内存代)、符号表、字符串表、代码缓冲、系统字典等，如对堆的验证将对堆内的每个oop对象的类型Klass进行验证，验证对象是否是oop，
+        // 类型klass是否在永久代，oop的klass域是否是klass 。那么为什么在这里进行GC验证？GC前验证和GC后验证又分别有什么作用？
+        // VerifyBeforeGC和VerifyAfterGC都需要和UnlockDiagnosticVMOptions配合使用以用来诊断JVM问题，但是验证过程非常耗时，所以在正常的编译版本中并没有将验证内容进行输出。
         if (VerifyBeforeGC && i >= VerifyGCLevel &&
             total_collections() >= VerifyGCStartAt) {
           HandleMark hm;  // Discard invalid handles created during verification
@@ -485,12 +505,14 @@ void GenCollectedHeap::do_collection(bool  full,
           // from GCH). XXX
 
           HandleMark hm;  // Discard invalid handles created during gc
+          // 保存内存代各区域的碰撞指针到该区域的_save_mark_word变量。
           save_marks();   // save marks for all gens
           // We want to discover references, but not process them yet.
           // This mode is disabled in process_discovered_references if the
           // generation does some collection work, or in
           // enqueue_discovered_references if the generation returns
           // without doing any work.
+          // 初始化引用处理器。
           ReferenceProcessor* rp = _gens[i]->ref_processor();
           // If the discovery of ("weak") refs in this generation is
           // atomic wrt other collectors in this configuration, we
@@ -501,7 +523,10 @@ void GenCollectedHeap::do_collection(bool  full,
           } else {
             // collect() below will enable discovery as appropriate
           }
+          // 由各内存代完成gc
           _gens[i]->collect(full, do_clear_all_soft_refs, size, is_tlab);
+          // 将不可触及的引用对象加入到Reference的pending链表
+          // 其中enqueue_discovered_references根据是否使用压缩指针选择不同的enqueue_discovered_ref_helper()模板函数
           if (!rp->enqueuing_is_done()) {
             rp->enqueue_discovered_references();
           } else {

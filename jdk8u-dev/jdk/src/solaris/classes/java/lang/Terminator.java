@@ -44,7 +44,9 @@ class Terminator {
     /* Invocations of setup and teardown are already synchronized
      * on the shutdown lock, so no further synchronization is needed here
      */
-
+    /*
+     *   setup 和 teardown 的调用已经在关闭锁上同步了，所以这里不需要进一步同步
+     */
     static void setup() {
         if (handler != null) return;
         SignalHandler sh = new SignalHandler() {

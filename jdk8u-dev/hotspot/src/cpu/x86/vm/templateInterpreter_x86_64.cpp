@@ -168,6 +168,7 @@ address TemplateInterpreterGenerator::generate_continuation_for(TosState state) 
 
 
 address TemplateInterpreterGenerator::generate_return_entry_for(TosState state, int step, size_t index_size) {
+    slog_trace("进入hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp中的TemplateInterpreterGenerator::generate_return_entry_for函数...");
   address entry = __ pc();
 
   // Restore stack bottom in case i2c adjusted stack
@@ -546,15 +547,21 @@ void InterpreterGenerator::lock_method(void) {
   {
     const int mirror_offset = in_bytes(Klass::java_mirror_offset());
     Label done;
+      //将方法的access_flags拷贝到rax中
     __ movl(rax, access_flags);
+      //校验这个方法是否是静态方法
     __ testl(rax, JVM_ACC_STATIC);
     // get receiver (assume this is frequent case)
+      //将栈顶的执行方法调用的实例拷贝到rax中
     __ movptr(rax, Address(r14, Interpreter::local_offset_in_bytes(0)));
+      //如果不是静态方法，则跳转到done
     __ jcc(Assembler::zero, done);
+      //如果是静态方法,获取该Method对应的真实Klass，即pool_holder属性
     __ movptr(rax, Address(rbx, Method::const_offset()));
     __ movptr(rax, Address(rax, ConstMethod::constants_offset()));
     __ movptr(rax, Address(rax,
                            ConstantPool::pool_holder_offset_in_bytes()));
+      //将Klass的java_mirror属性复制到到rax中，即某个类对应的class实例
     __ movptr(rax, Address(rax, mirror_offset));
 
 #ifdef ASSERT
@@ -571,11 +578,16 @@ void InterpreterGenerator::lock_method(void) {
   }
 
   // add space for monitor & lock
+    //将rsp往下，即低地址端移动entry_size，即一个BasicObjectLock的大小
   __ subptr(rsp, entry_size); // add space for a monitor entry
+    //将rsp地址写入栈帧中monitor_block_top地址
   __ movptr(monitor_block_top, rsp);  // set new monitor block top
   // store object
+    //将rax即跟锁关联的对象保存到BasicObjectLock的obj属性
   __ movptr(Address(rsp, BasicObjectLock::obj_offset_in_bytes()), rax);
+    //将rsp地址拷贝到c_rarg1，即BasicObjectLock实例的地址
   __ movptr(c_rarg1, rsp); // object address
+    //调用lock_object加锁，实现加锁的lock_object方法跟 synchronized修饰代码块时调用方法是一样的，都是InterpreterMacroAssembler::lock_object方法
   __ lock_object(c_rarg1);
 }
 
@@ -588,6 +600,18 @@ void InterpreterGenerator::lock_method(void) {
 //      r14: pointer to locals 本地变量表指针
 //      r13: sender sp 调用者的栈顶
 //      rdx: cp cache 常量池的地址
+
+// 大概逻辑：
+// 1. 返回地址重新入栈，开辟新栈帧
+// 2. rbcp值入栈，空出rbcp寄存器
+// 3. rbcp指向codebase
+// 4. Method*入栈
+// 5. Method*镜像压栈
+// 6. ConstantPoolCache压栈
+// 7. 局部变量表压栈
+// 8. 第一条字节码指令压栈
+// 9. 操作数栈底压栈
+
 // 对于普通的Java方法来说，生成的汇编代码如下：
 // push   %rax
 // push   %rbp
@@ -612,11 +636,13 @@ void InterpreterGenerator::lock_method(void) {
 // mov    %rsp,(%rsp)
 
 void TemplateInterpreterGenerator::generate_fixed_frame(bool native_call) {
+    slog_trace("进入hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp中的TemplateInterpreterGenerator::generate_fixed_frame函数...");
   // initialize fixed part of activation frame
     // 把返回地址紧接着局部变量区保存
-    //保存rax中的java方法返回地址到栈帧中
+    //保存rax中的java方法返回地址到栈帧中，局部变量入栈以后将返回地址重新入栈
   __ push(rax);        // save return address
     // 为Java方法创建栈帧
+    // 新栈帧，调整sp和bp
     //保存rbp，将rsp的值复制到rbp中
   __ enter();          // save old & set new rbp
     // 保存调用者的栈顶地址
@@ -644,8 +670,7 @@ void TemplateInterpreterGenerator::generate_fixed_frame(bool native_call) {
       // MethodData里面分为3个部分，
       // 一个是函数类型等运行相关统计数据，
       // 一个是参数类型运行相关统计数据，
-      // 还有一个是extra扩展区保存着
-      // deoptimization的相关信息
+      // 还有一个是extra扩展区保存着deoptimization的相关信息
       // 获取Method中的_method_data属性的值并保存到rdx中
     __ movptr(rdx, Address(rbx, in_bytes(Method::method_data_offset())));
     __ testptr(rdx, rdx);
@@ -1174,7 +1199,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
       //获取方法的锁
     lock_method();
   } else {
-    // no synchronization necessary
+    // no synchronization necessary ASSERT代码块用于检测该方法的flags不包含ACC_SYNCHRONIZED，即不是synchronized关键字修饰的方法
 #ifdef ASSERT
     {
       Label L;
@@ -1503,31 +1528,37 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
   }
 
   // do unlocking if necessary
+  // 本地方法synchronized解锁逻辑：
   {
     Label L;
+      //获取方法的access_flags
     __ movl(t, Address(method, Method::access_flags_offset()));
       //判断目标方法是否是SYNCHRONIZED方法，如果是则需要解锁，如果不是则跳转到L
     __ testl(t, JVM_ACC_SYNCHRONIZED);
+      //如果不是synchronized方法跳转到L
     __ jcc(Assembler::zero, L);
     // the code below should be shared with interpreter macro
     // assembler implementation
+      //如果是synchronized方法执行解锁
     {
       Label unlock;
       // BasicObjectLock will be first in list, since this is a
       // synchronized method. However, need to check that the object
       // has not been unlocked by an explicit monitorexit bytecode.
         //获取偏向锁BasicObjectLock的地址
+        //取出放在Java栈帧头部的BasicObjectLock
       const Address monitor(rbp,
                             (intptr_t)(frame::interpreter_frame_initial_sp_offset *
                                        wordSize - sizeof(BasicObjectLock)));
 
       // monitor expect in c_rarg1 for slow unlock path
-        // 将monitor的地址放入c_rarg1
+        // 将monitor的地址即关联的BasicObjectLock的地址放入c_rarg1中
       __ lea(c_rarg1, monitor); // address of first monitor
-        //获取偏向锁的_obj属性的地址
+        //获取偏向锁的_obj属性的地址，将BasicObjectLock的obj属性赋值到t中
       __ movptr(t, Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()));
-        //判断_obj属性是否为空，如果不为空即未解锁，跳转到unlock完成解锁
+        //判断_obj属性是否为空
       __ testptr(t, t);
+        //如果不为空即未解锁，跳转到unlock完成解锁
       __ jcc(Assembler::notZero, unlock);
 
       // Entry already unlocked, need to throw exception
@@ -1536,7 +1567,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
                                  CAST_FROM_FN_PTR(address,
                    InterpreterRuntime::throw_illegal_monitor_state_exception));
       __ should_not_reach_here();
-
+        //解锁
       __ bind(unlock);
       __ unlock_object(c_rarg1);
     }
@@ -1582,6 +1613,9 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
   return entry_point;
 }
 
+// 该函数在JVM启动时就会被调用，执行完成之后，会向JVM中的代码缓存区中写入对应的本地机器指令，在JVM调用一个特定的Java方法时，
+// 会根据Java方法所对应的entry_point找到对应的函数入口，并执行z这段预先生成好的指令...
+
 // Java方法执行即解释器解释方法的字节码流的实现
 // Generic interpreted method entry to (asm) interpreter
 // generate_normal_entry()函数会为执行的方法生成堆栈，而堆栈由局部变量表（用来存储传入的参数和被调用方法的局部变量）、Java方法栈帧数据和操作数栈这三大部分组成，
@@ -1599,7 +1633,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
 // 不同的是前者是提交一个编译任务给后台编译线程，编译完成后通过适配器将对原来字节码的调用转换成对本地代码的调用，后者是尽可能的立即完成编译，
 // 并且在完成必要的栈帧迁移转换后立即执行编译后的本地代码，即完成栈上替换。
 address InterpreterGenerator::generate_normal_entry(bool synchronized) {
-    slog_trace("InterpreterGenerator::generate_normal_entry函数被调用了...");
+    slog_trace("进入hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp中的InterpreterGenerator::generate_normal_entry函数...");
   // determine code generation flags
     //UseCompiler表示使用JIT编译器，默认为true
     //CountCompiledCalls表示统计编译方法的执行次数
@@ -1632,6 +1666,7 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
     // 但并没有执行计算，下面会生成对应的汇编来执行计算
     // 计算ConstMethod*，保存在rdx里面
     //将constMethod的内存地址放入rdx中
+    //Java入参数量
   __ movptr(rdx, constMethod);
     // 计算parameter大小，保存在rcx里面
     //将size_of_parameters地址处的方法参数个数读取到rcx中
@@ -1654,10 +1689,12 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
     //   r13: sender_sp (could differ from sp+wordSize
     //        if we were called via c2i ) 即调用者的栈顶地址
     // 计算local变量的大小，保存到rdx
+    // 局部变量表最大槽数
   __ load_unsigned_short(rdx, size_of_locals); // get size of locals in words
     // 由于局部变量表用来存储传入的参数和被调用方法的局部变量，
     // 所以rdx减去rcx后就是被调用方法的局部变量可使用的大小
     //将rdx中的本地变量个数减去方法参数个数
+    // 局部变量数 = 局部变量表最大槽数 - Java入参数量
   __ subl(rdx, rcx); // rdx = no. of additional locals
 
   // YYY
@@ -1676,7 +1713,8 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   generate_stack_overflow_check();
 
   // get return address
-    // 返回地址是在CallStub中保存的，如果不弹出堆栈到rax，中间会有个return address使的局部变量表不是连续的，
+    //为了将方法入参和方法局部变量连在一起，先弹出返回地址
+    // 返回地址是在CallStub中保存的，如果不弹出堆栈到rax，中间会有个return address使得局部变量表不是连续的，
     // 这会导致其中的局部变量计算方式不一致，所以暂时将返回地址存储到rax中
     // 将栈顶的值放入rax中，栈顶的值就是此时rsp中的地址，即Java方法执行完成后的地址
   __ pop(rax);
@@ -1722,6 +1760,7 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
     //r13：bcp(byte code pointer)
     //rdx：ConstantPool* 常量池的地址
     //r14：本地变量表第1个参数的地址
+    slog_trace("即将调用generate_fixed_frame函数来生成固定帧...");
   generate_fixed_frame(false);
     // 执行完generate_fixed_frame()函数后会继续返回执行InterpreterGenerator::generate_normal_entry()函数，如果是为同步方法生成机器码，那么还需要调用lock_method()函数，这个函数会改变当前栈帧的状态，添加同步所需要的一些信息
 
@@ -1749,11 +1788,17 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
   // which hasn't been entered yet, we set the thread local variable
   // _do_not_unlock_if_synchronized to true. The remove_activation
   // will check this flag.
+  // 解释执行普通Java方法synchronized解锁 :
+    //   普通Java方法执行完成后需要通过return系列指令返回到方法的调用栈帧，synchronized解锁就是在return系列指令中完成的。
+    //   return系列指令一共有7个，其底层实现都是同一个方法，参考TemplateTable::initialize方法的定义
+    // ireturn表示返回一个int值，lreturn表示返回一个long值，freturn表示返回一个float值， dreturn表示返回一个double值，areturn表示返回一个对象引用，return表示返回void，
+    // 除上述6个外OpenJDK还增加了一个_return_register_finalizer，跟return一样都是返回void，不同的是如果目标类实现了finalize方法则会注册对应的Finalizer。
+
     //r15_thread保存了当前线程Thread*的引用
     //获取Thread的do_not_unlock_if_synchronized属性的地址
   const Address do_not_unlock_if_synchronized(r15_thread,
         in_bytes(JavaThread::do_not_unlock_if_synchronized_offset()));
-    //将o_not_unlock_if_synchronized属性置为true
+    //将do_not_unlock_if_synchronized属性置为true
   __ movbool(do_not_unlock_if_synchronized, true);
 
     //执行profile统计
@@ -1825,6 +1870,7 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
     //开始字节码执行
     // 跳转到目标Java方法的第一条字节码指令，并执行其对应的机器指令
     // 调用dispatch_next()函数执行Java方法的字节码，其实就是根据字节码找到对应的机器指令片段的入口地址来执行，这段机器码就是根据对应的字节码语义翻译过来的
+    slog_trace("即将调用dispatch_next函数来执行Java方法的第一条字节码...");
   __ dispatch_next(vtos);
 
   // invocation counter overflow
@@ -1903,7 +1949,7 @@ address InterpreterGenerator::generate_normal_entry(bool synchronized) {
 // 生成本地方法执行入口地址的是generate_native_entry方法，生成普通Java方法执行入口地址的是generate_normal_entry方法，这两个都要区分方法是否是同步synchronized的。
 address AbstractInterpreterGenerator::generate_method_entry(
                                         AbstractInterpreter::MethodKind kind) {
-    slog_trace("AbstractInterpreterGenerator::generate_method_entry函数被调用了,为各种类型的方法生成对应的方法入口...");
+    slog_trace("进入hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp中的AbstractInterpreterGenerator::generate_method_entry函数...");
   // determine code generation flags
   bool synchronized = false;
   address entry_point = NULL;
@@ -1911,12 +1957,13 @@ address AbstractInterpreterGenerator::generate_method_entry(
 
     // 根据方法类型kind生成不同的入口
   switch (kind) {
-        // 表示普通方法类型，zerolocals表示正常的Java方法调用，包括Java程序的main()方法，对于zerolocals来说，会调用ig_this->generate_normal_entry()函数生成入口
+        // 表示普通方法类型，zerolocals表示正常的Java方法调用，包括Java程序的main()方法，对于zerolocals来说，会调用ig_this->generate_normal_entry()函数生成调用stub（入口）
   case Interpreter::zerolocals             :                                                      break;
-        // 表示普通的、同步方法类型
+        // 表示普通的、同步方法类型，即被 synchronized关键字修饰的实例方法
   case Interpreter::zerolocals_synchronized: synchronized = true;                                 break;
-        // 本地方法
+        // 表示普通的本地方法，本地方法则通过generate_native_entry生成调用stub，这两个方法都有一个bool参数表示是否需要加锁，如果有锁，都会调用到lock_method()方法
   case Interpreter::native                 : entry_point = ig_this->generate_native_entry(false); break;
+        // 表示被 synchronized关键字修饰的本地方法
   case Interpreter::native_synchronized    : entry_point = ig_this->generate_native_entry(true);  break;
   case Interpreter::empty                  : entry_point = ig_this->generate_empty_entry();       break;
   case Interpreter::accessor               : entry_point = ig_this->generate_accessor_entry();    break;
@@ -2262,6 +2309,8 @@ void TemplateInterpreterGenerator::set_vtos_entry_points(Template* t,
 
 InterpreterGenerator::InterpreterGenerator(StubQueue* code)
   : TemplateInterpreterGenerator(code) {
+    slog_trace("进入hotspot/src/cpu/x86/vm/templateInterpreter_x86_64.cpp中的InterpreterGenerator::InterpreterGenerator构造函数...");
+    slog_trace("即将调用generate_all函数...");
     // 其核心就是调用父类的generate_all方法。
    generate_all(); // down here so it can be "virtual"
 }

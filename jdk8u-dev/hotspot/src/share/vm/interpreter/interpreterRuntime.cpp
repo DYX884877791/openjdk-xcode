@@ -133,6 +133,7 @@ IRT_ENTRY(void, InterpreterRuntime::resolve_ldc(JavaThread* thread, Bytecodes::C
   ResourceMark rm(thread);
   methodHandle m (thread, method(thread));
   Bytecode_loadconstant ldc(m, bci(thread));
+        // 解析
   oop result = ldc.resolve_constant(CHECK);
 #ifdef ASSERT
   {
@@ -150,14 +151,32 @@ IRT_END
 //------------------------------------------------------------------------------------------------------------------------
 // Allocation
 
+/**
+ * Java程序通过new操作符来创建一个对象，该函数就是HotSpot中new操作符的实现函数
+ *
+ * 在Hotspot中使用二分模型Klass / oop 来表示类和对象，而类是对象的模板。比如，在main方法中 new A对象，所以需要确保类A已经被加载、解析完毕，生成好对应的Klass。
+ * 而生成好Klass类对象后，需要对类做初始化过程，也即链接类中所有的方法和调用父类以及本身的<clinit>方法（也即A类的static块）。
+ *
+ * 当类加载、解析、初始化完毕后，会调用klass->allocate_instance 方法尝试在Java堆内存中开辟对象。
+ * @param thread
+ * @param pool
+ * @param index
+ */
 IRT_ENTRY(void, InterpreterRuntime::_new(JavaThread* thread, ConstantPool* pool, int index))
+    // 确保类已经加载并且解析
+    // 如果没有加载和解析，那么就去加载和解析类，得到最终的Klass对象
+    //获取常量池中索引为index的Klass指针
   Klass* k_oop = pool->klass_at(index, CHECK);
   instanceKlassHandle klass (THREAD, k_oop);
 
   // Make sure we are not instantiating an abstract klass
+    // 确保不是实例化的一个抽象类
+    //校验Klass是否是抽象类，接口或者java.lang.Class,如果是则抛出异常
   klass->check_valid_for_instantiation(true, CHECK);
 
   // Make sure klass is initialized
+    // 确保类已经完成初始化工作
+    //检查Klass是否已经完成初始化，如果未完成则执行初始化
   klass->initialize(CHECK);
 
   // At this point the class may not be fully initialized
@@ -174,7 +193,11 @@ IRT_ENTRY(void, InterpreterRuntime::_new(JavaThread* thread, ConstantPool* pool,
   //       Java).
   //       If we have a breakpoint, then we don't rewrite
   //       because the _breakpoint bytecode would be lost.
+    // 在Java堆内存中开辟对象
+    //创建对象，对象分配的核心逻辑都在InstanceKlass::allocate_instance方法中，该方法的实现在hotspot/src/share/vm/oops/instanceKlass.cpp中
   oop obj = klass->allocate_instance(CHECK);
+    // 使用线程变量完成 值的传递
+    //将结果放到当前线程的_vm_result属性中，该属性专门用来传递解释器执行方法调用的结果
   thread->set_vm_result(obj);
 IRT_END
 

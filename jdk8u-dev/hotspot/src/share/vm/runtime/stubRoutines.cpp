@@ -339,7 +339,7 @@ void StubRoutines::initialize2() {
 #endif
 }
 
-
+// 这是方法引用例程初始化,其实就是初始化一些方法的引用.
 void stubRoutines_init1() { StubRoutines::initialize1(); }
 void stubRoutines_init2() { StubRoutines::initialize2(); }
 

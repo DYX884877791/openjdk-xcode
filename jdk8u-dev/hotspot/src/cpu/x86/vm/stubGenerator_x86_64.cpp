@@ -237,6 +237,23 @@ class StubGenerator: public StubCodeGenerator {
   }
 #endif
     /**
+     * _call_stub_entry的代码生成：
+     * _call_stub_entry是一个stub调用点，主要生成一段函数调用返回汇编指令，其过程类似中断，由于寄存器数量少需要共享使用因此需要将寄存器中的内容先保存，
+     * 函数执行结束以后再归还，HotSpot完全使用栈来模拟函数调用过程，_call_stub_entry在虚拟机中只生成一次，并将生成的汇编代码保存在内存中。
+     * 1. __ 前缀格式会调用汇编器生成汇编代码并存储在BufferBlob中，返回汇编代码地址
+     * 2. 以栈基rbp为准计算入参在栈中的位置，如rsp_after_call_off=-12 偏移量为-12*8 = -96，以此类推
+     * 3. 开始入栈，分配栈空间，在执行任何操作前先保存各寄存器的数据到上面第2步分配的栈地址处，获取寄存器控制权
+     * 4. 传递入参进入栈，调用java方法(其实还是一个stub调用点entry_point)
+     * 5. 保存entry_point返回结果
+     * 6. 参数出栈
+     * 7. 将之前保存在栈中的各寄存器的值恢复到寄存器中
+     * 8. 重置栈顶指针，返回，归还控制权给调用方
+     *
+     * 注意：
+     * 这里的generate_call_stub只完成了函数调用的第一步，真正的Java函数还没调起，它对应一个entry_point也是一个stub调用点。这个调用点在哪里生成呢？
+     * hotspot/src/share/vm/runtime/init.cpp中的init_globals函数调用了interpreter_init()函数...
+     *
+     *
      * 执行Java方法调用的思路整体上是先将用来传递参数的所有寄存器的值拷贝到栈帧中，再从栈帧中将必要的方法调用参数，参数个数，Method*等复制到寄存器中，
      * 然后执行方法调用，调用结束再从栈帧中将参数寄存器中的值恢复至执行方法调用前的状态，在恢复rsp，rbp等就可以正常退出调用了。
      * 这里涉及了诸多底层调用栈帧的演变，寄存器和汇编指令的使用相关的知识
@@ -244,6 +261,7 @@ class StubGenerator: public StubCodeGenerator {
      * @return
      */
   address generate_call_stub(address& return_address) {
+      slog_debug("进入hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp中的generate_call_stub函数...");
       //rsp_after_call_off和call_wrapper_off都是定义的枚举，表示对应项相对于rbp的偏移字节数
       //比如call_wrapper_off就是JavaCallWrapper实例相对于rbp的偏移字节数
       //这里是校验栈帧的属性和当前系统的属性是否一致
@@ -257,6 +275,7 @@ class StubGenerator: public StubCodeGenerator {
 
       //根据各项的偏移量计算各项的存储位置
     // same as in generate_catch_exception()!
+        //以栈基rbp为准计算入参在栈中的位置
     const Address rsp_after_call(rbp, rsp_after_call_off * wordSize);
 
     const Address call_wrapper  (rbp, call_wrapper_off   * wordSize);
@@ -451,7 +470,7 @@ class StubGenerator: public StubCodeGenerator {
     // 当把需要调用Java方法的参数准备就绪后，接下来就会调用Java方法。这里需要重点提示一下Java解释执行时的方法调用约定，不像C/C++在x86下的调用约定一样，不需要通过寄存器来传递参数，
     // 而是通过栈来传递参数的，说的更直白一些，是通过局部变量表来传递参数的，所以CallStub()函数栈帧中的argument word1 … argument word n其实是被调用的Java方法局部变量表的一部分。
 
-    // 调用Java方法
+    // 调用Java方法即调用entry_point
     // call Java function
 
     // 生成的汇编代码如下：
@@ -474,8 +493,7 @@ class StubGenerator: public StubCodeGenerator {
       // 将rsp寄存器的数据拷贝到r13寄存器中
     __ mov(r13, rsp);                   // set sender sp
     BLOCK_COMMENT("call Java function");
-      slog_trace("即将调用Java方法...");
-      // 调用解释器的解释函数，从而调用Java方法
+      // 调用解释器的解释函数，从而调用Java方法，后续就是 entry_point 的工作啦。
       // 调用的时候传递c_rarg1，也就是解释器的入口地址 entry_point
     __ call(c_rarg1);
 
@@ -4578,5 +4596,6 @@ class StubGenerator: public StubCodeGenerator {
 }; // end class declaration
 
 void StubGenerator_generate(CodeBuffer* code, bool all) {
+    // 进入StubGenerator g的构造方法，如上
   StubGenerator g(code, all);
 }

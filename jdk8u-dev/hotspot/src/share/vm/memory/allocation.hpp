@@ -174,9 +174,11 @@ const bool NMT_track_callsite = false;
 
 class NativeCallStack;
 
-
+// CHeapObj是所有在堆内存分配对象的基类，其定义在hotspot/src/share/vm/memory/allocation.hpp中，主要定义了new和delete操作符的多个重载版本，支持在堆内存中分配指定大小的内存
+// MEMFLAGS实际是枚举MemoryType的别名，表示内存的类型
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
  public:
+    // 以其中的一个new实现为例说明，具体实现在hotspot/src/share/vm/memory/allocation.inline.hpp
   _NOINLINE_ void* operator new(size_t size, const NativeCallStack& stack) throw();
   _NOINLINE_ void* operator new(size_t size) throw();
   _NOINLINE_ void* operator new (size_t size, const std::nothrow_t&  nothrow_constant,

@@ -1424,15 +1424,18 @@ public class File
     public boolean renameTo(File dest) {
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
+            //校验访问权限
             security.checkWrite(path);
             security.checkWrite(dest.path);
         }
         if (dest == null) {
             throw new NullPointerException();
         }
+        //校验路径合法性
         if (this.isInvalid() || dest.isInvalid()) {
             return false;
         }
+        // 常见的fs有UnixFileSystem、
         return fs.rename(this, dest);
     }
 
@@ -1466,15 +1469,20 @@ public class File
         if (time < 0) throw new IllegalArgumentException("Negative time");
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
+            //校验访问权限
             security.checkWrite(path);
         }
+        //校验路径合法性
         if (isInvalid()) {
             return false;
         }
+        //本地方法实现
         return fs.setLastModifiedTime(this, time);
     }
 
     /**
+     * setReadOnly / setWritable / setReadable / setExecutable / canExecute / canRead / canWrite
+     * 这几个都是获取或者修改文件的可读可写可执行权限的
      * Marks the file or directory named by this abstract pathname so that
      * only read operations are allowed. After invoking this method the file
      * or directory will not change until it is either deleted or marked
@@ -1505,6 +1513,8 @@ public class File
     }
 
     /**
+     * writable为true表示可写，为false表示不可写，ownerOnly为true，表示是否可写只针对于文件所有者，为false则适用于所有人
+     * 如果底层的文件系统不支持对不同用户控制权限，则此参数无意义
      * Sets the owner's or everybody's write permission for this abstract
      * pathname. On some platforms it may be possible to start the Java virtual
      * machine with special privileges that allow it to modify files that
@@ -1579,6 +1589,7 @@ public class File
     }
 
     /**
+     * 参数的含义同上，两个都为true，表示只有文件的所有者可以读取该文件，其他用户无法读取
      * Sets the owner's or everybody's read permission for this abstract
      * pathname. On some platforms it may be possible to start the Java virtual
      * machine with special privileges that allow it to read files that are
@@ -1659,6 +1670,7 @@ public class File
     }
 
     /**
+     * 参数的含义同上，两个都为true，表示只有文件的所有者可以执行该文件，其他用户无法执行
      * Sets the owner's or everybody's execute permission for this abstract
      * pathname. On some platforms it may be possible to start the Java virtual
      * machine with special privileges that allow it to execute files that are
@@ -1819,6 +1831,8 @@ public class File
     /* -- Disk usage -- */
 
     /**
+     * getTotalSpace / getFreeSpace / getUsableSpace
+     * 这几个方法用于获取当前文件所在磁盘分区的可用空间，已用空间和总的空间，单位字节
      * Returns the size of the partition <a href="#partName">named</a> by this
      * abstract pathname.
      *
@@ -1836,9 +1850,11 @@ public class File
     public long getTotalSpace() {
         SecurityManager sm = System.getSecurityManager();
         if (sm != null) {
+            //检查访问权限
             sm.checkPermission(new RuntimePermission("getFileSystemAttributes"));
             sm.checkRead(path);
         }
+        //检查路径合法
         if (isInvalid()) {
             return 0L;
         }
@@ -2112,6 +2128,7 @@ public class File
     /* -- Basic infrastructure -- */
 
     /**
+     * 用于比较两个文件，Unix下通过文件名来比较
      * Compares two abstract pathnames lexicographically.  The ordering
      * defined by this method depends upon the underlying system.  On UNIX
      * systems, alphabetic case is significant in comparing pathnames; on Microsoft Windows
@@ -2133,6 +2150,7 @@ public class File
     }
 
     /**
+     * 基于compareTo方法判断两个文件是否一致
      * Tests this abstract pathname for equality with the given object.
      * Returns <code>true</code> if and only if the argument is not
      * <code>null</code> and is an abstract pathname that denotes the same file
@@ -2154,6 +2172,7 @@ public class File
     }
 
     /**
+     * Unix下基于文件名来计算hash值
      * Computes a hash code for this abstract pathname.  Because equality of
      * abstract pathnames is inherently system-dependent, so is the computation
      * of their hash codes.  On UNIX systems, the hash code of an abstract

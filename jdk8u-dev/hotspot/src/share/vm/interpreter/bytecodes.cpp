@@ -604,7 +604,7 @@ void Bytecodes::initialize() {
   _is_initialized = true;
 }
 
-
+// 字节码的初始化,初始化jvm的字节码,也是vm层面的指令.
 void bytecodes_init() {
   Bytecodes::initialize();
 }

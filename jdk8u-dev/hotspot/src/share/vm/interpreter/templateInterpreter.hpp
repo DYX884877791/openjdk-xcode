@@ -87,6 +87,11 @@ class DispatchTable VALUE_OBJ_CLASS_SPEC {
   bool operator == (DispatchTable& y);                // for debugging only
 };
 
+//  模板解释器TemplateInterpreter又分为三个组成部分：
+//      templateInterpreterGenerator 解释器生成器
+//      templateTable 字节码实现
+//      templateInterpreter 解释器
+
 // TemplateInterpreter继承自AbstractInterpreter，其定义在同目录下的templateInterpreter.hpp中。
 // TemplateInterpreter在此基础上增加了很多的完成特定功能的函数的调用入口
 // TemplateInterpreter新增的方法主要有以下几种：
@@ -94,9 +99,28 @@ class DispatchTable VALUE_OBJ_CLASS_SPEC {
 //  1. 获取特定TosState的调用入口相关的，如continuation，dispatch_table，invoke_return_entry_table等
 //  2. 逆向优化相关的，如deopt_continue_after_entry，bytecode_should_reexecute等
 // TemplateInterpreter中定义的都是平台无关的部分，跟平台相关的部分通过宏的方式引入
+//
+//
+// 还有一个问题，这些例程是谁写入的呢？找一找架构图，下半部分都是解释器生成器，它的名字也是自解释的，那么它就是答案了。
+//  前面刻意说道解释器布局就是想突出它只是一个骨架，要得到可运行的解释器还需要解释器生成器填充这个骨架。
+//
+//  解释器生成器本来可以独自完成填充工作，可能为了解耦，也可能是为了结构清晰，hotspot将字节码的例程抽了出来放到了templateTable(模板表)中，它辅助模板解释器生成器(templateInterpreterGenerator)完成各例程填充。
+//
+//  只有这两个还不能完成任务，因为组成模板解释器的是本地代码例程，本地代码例程依赖于操作系统和CPU，这部分代码位于hotspot/cpu/x86/中，所以
+//
+//templateInterpreter =
+//    templateTable +
+//    templateTable_x86 +
+//    templateInterpreterGenerator +
+//    templateInterpreterGenerator_x86 +
+//    templateInterpreterGenerator_x86_64
+// 虚拟机中有很多这样的设计：在hotspot/share/的某个头文件写出定义，在源文件实现OS/CPU无关的代码，然后在hotspot/cpu/x86中实现CPU相关的代码，在hostpot/os实现OS相关的代码。
 class TemplateInterpreter: public AbstractInterpreter {
   friend class VMStructs;
   friend class InterpreterMacroAssembler;
+  /**
+   *
+   */
   friend class TemplateInterpreterGenerator;
   friend class InterpreterGenerator;
   friend class TemplateTable;
@@ -109,14 +133,22 @@ class TemplateInterpreter: public AbstractInterpreter {
     number_of_return_addrs    = number_of_states                // number of return addresses
   };
 
+  // 里面很多address变量,EntryPoint是一个address数组，DispatchTable也是。
+  // 模板解释器就是由一系列例程(routine)组成的，即address变量，它们每个都表示一个例程的入口地址，比如异常处理例程，invoke指令例程，用于gc的safepoint例程...
+  // 抽象解释器定义了必要的例程，具体的解释器在这之上还有自己的特设的例程。模板解释器就是一个例子，它继承自抽象解释器，在那些例程之上还有自己的特设例程：
  protected:
-
+    // 数组越界异常例程
   static address    _throw_ArrayIndexOutOfBoundsException_entry;
+    // 数组存储异常例程
   static address    _throw_ArrayStoreException_entry;
+    // 算术异常例程
   static address    _throw_ArithmeticException_entry;
+    // 类型转换异常例程
   static address    _throw_ClassCastException_entry;
   static address    _throw_WrongMethodType_entry;
+    // 空指针异常例程
   static address    _throw_NullPointerException_entry;
+    // 抛异常公共例程
   static address    _throw_exception_entry;
 
   static address    _throw_StackOverflowError_entry;

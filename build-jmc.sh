@@ -24,7 +24,7 @@ clone_jmc() {
     	hg clone $JMC_REPO $JMC_BUILD_DIR
     else
        	cd "$JMC_BUILD_DIR"
-       	hg pull -u
+       	# hg pull -u
     fi
 }
 

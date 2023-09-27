@@ -278,8 +278,10 @@ class UnixFileSystem extends FileSystem {
         // (i.e., only remove/update affected entries) but probably
         // not worth it since these entries expire after 30 seconds
         // anyway.
+        //清除路径解析的缓存
         cache.clear();
         javaHomePrefixCache.clear();
+        //本地方法
         return rename0(f1, f2);
     }
     private native boolean rename0(File f1, File f2);

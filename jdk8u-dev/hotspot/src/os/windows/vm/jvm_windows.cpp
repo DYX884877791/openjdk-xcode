@@ -60,6 +60,9 @@ JVM_ENTRY_NO_ENV(void*, JVM_RegisterSignal(jint sig, void* handler))
        user is allowed to set his own _native_ handler for these signals and
        invoke System.exit() as needed. Terminator.setup() is avoiding
        registration of these signals when -Xrs is present. */
+/*
+ *以下信号用于 Shutdown Hooks 支持。但是，如果设置了 ReduceSignalUsage (-Xrs)，则必须通过 System.exit() 调用 Shutdown Hooks，Java 不允许使用这些信号，并且允许用户为这些信号设置自己的 _native_ handler 并调用 System.exit() 根据需要。 Terminator.setup() 在存在 -Xrs 时避免注册这些信号。
+ */
    case SHUTDOWN1_SIGNAL:
    case SHUTDOWN2_SIGNAL:
      if (ReduceSignalUsage) return (void*)-1;

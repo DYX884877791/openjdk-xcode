@@ -959,7 +959,7 @@ void CompileBroker::compilation_init() {
   }
 #endif // COMPILER2
 
-#else // SHARK
+#else // SHARK SharkCompiler就是新的基于LLVM架构的编译器
   int c1_count = 0;
   int c2_count = 1;
 
@@ -980,6 +980,7 @@ void CompileBroker::compilation_init() {
   }
 
 
+    // 编译器编译一个Java方法会有很多步骤,下面是对这些步骤的性能统计
   if (UsePerfData) {
 
     EXCEPTION_MARK;
@@ -1072,7 +1073,7 @@ void CompileBroker::compilation_init() {
   _initialized = true;
 }
 
-
+// 创建编译线程
 CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQueue* queue, CompilerCounters* counters,
                                                     AbstractCompiler* comp, TRAPS) {
   CompilerThread* compiler_thread = NULL;
@@ -1161,7 +1162,7 @@ CompilerThread* CompileBroker::make_compiler_thread(const char* name, CompileQue
   return compiler_thread;
 }
 
-
+// 初始化编译队列，C2 CompileQueue、C1 CompileQueue，并创建 compiler_count 个编译线程
 void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler_count) {
   EXCEPTION_MARK;
 #if !defined(ZERO) && !defined(SHARK)
@@ -1169,23 +1170,27 @@ void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler
   assert(c2_compiler_count > 0 || c1_compiler_count > 0, "No compilers?");
 #endif // !ZERO && !SHARK
   // Initialize the compilation queue
+    // 设置C2队列
   if (c2_compiler_count > 0) {
       //初始化CompileQueue
     _c2_compile_queue  = new CompileQueue("C2 CompileQueue",  MethodCompileQueue_lock);
       //设置编译线程数量
     _compilers[1]->set_num_compiler_threads(c2_compiler_count);
   }
+    // 设置C1队列
   if (c1_compiler_count > 0) {
     _c1_compile_queue  = new CompileQueue("C1 CompileQueue",  MethodCompileQueue_lock);
     _compilers[0]->set_num_compiler_threads(c1_compiler_count);
   }
 
+    // 编译器线程总数
   int compiler_count = c1_compiler_count + c2_compiler_count;
     //初始化CompilerThread数组
   _compiler_threads =
     new (ResourceObj::C_HEAP, mtCompiler) GrowableArray<CompilerThread*>(compiler_count, true);
 
   char name_buffer[256];
+    // 启动C2编译线程
   for (int i = 0; i < c2_compiler_count; i++) {
     // Create a name for our thread.
     sprintf(name_buffer, "C2 CompilerThread%d", i);
@@ -1196,6 +1201,7 @@ void CompileBroker::init_compiler_threads(int c1_compiler_count, int c2_compiler
     _compiler_threads->append(new_thread);
   }
 
+    // 启动C1编译线程
   for (int i = c2_compiler_count; i < compiler_count; i++) {
     // Create a name for our thread.
     sprintf(name_buffer, "C1 CompilerThread%d", i);
@@ -1860,7 +1866,7 @@ void CompileBroker::shutdown_compiler_runtime(AbstractCompiler* comp, CompilerTh
 // The main loop run by a CompilerThread.
 // CompileBroker::compiler_thread_loop就是编译线程启动后自动执行的方法，循环的从编译任务队列中取出编译任务执行编译，方法编译完成后编译器会调用ciEnv::register_method方法将编译结果安装
 void CompileBroker::compiler_thread_loop() {
-    slog_trace("CompileBroker::compiler_thread_loop函数被调用了,编译线程启动后自动执行该方法...");
+    slog_debug("CompileBroker::compiler_thread_loop函数被调用了,编译线程启动后自动执行该方法...");
   CompilerThread* thread = CompilerThread::current();
   CompileQueue* queue = thread->queue();
   // For the thread that initializes the ciObjectFactory
@@ -2069,7 +2075,7 @@ static void post_compilation_event(EventCompilation* event, CompileTask* task) {
 // CompileBroker::invoke_compiler_on_method
 //
 // Compile a method.
-//
+// 编译任务执行入口
 void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
   if (PrintCompilation) {
     ResourceMark rm;
@@ -2150,7 +2156,7 @@ void CompileBroker::invoke_compiler_on_method(CompileTask* task) {
     if (comp == NULL) {
       ci_env.record_method_not_compilable("no compiler", !TieredCompilation);
     } else {
-        //执行方法编译
+        //执行方法编译，获取编译器，调用编译器的编译方法
       comp->compile_method(&ci_env, target, osr_bci);
     }
     //编译失败

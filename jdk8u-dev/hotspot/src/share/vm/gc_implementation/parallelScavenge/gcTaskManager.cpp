@@ -394,6 +394,7 @@ GCTaskManager::GCTaskManager(uint workers, NotifyDoneClosure* ndc) :
 }
 
 void GCTaskManager::initialize() {
+    slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/gcTaskManager.cpp中的GCTaskManager::initialize函数...");
   if (TraceGCTaskManager) {
     tty->print_cr("GCTaskManager::initialize: workers: %u", workers());
   }
@@ -420,6 +421,7 @@ void GCTaskManager::initialize() {
     }
     _thread = NEW_C_HEAP_ARRAY(GCTaskThread*, workers(), mtGC);
     for (uint t = 0; t < workers(); t += 1) {
+        slog_debug("即将调用GCTaskThread::create函数来创建第[%d]个GCTaskThread对象，总共要创建[%d]个...", t + 1, workers());
       set_thread(t, GCTaskThread::create(this, t, processor_assignment[t]));
     }
     if (TraceGCTaskThread) {
@@ -442,6 +444,7 @@ void GCTaskManager::initialize() {
   reset_barriers();
   reset_emptied_queue();
   for (uint s = 0; s < workers(); s += 1) {
+      slog_debug("即将调用第[%d]个GCTaskThread对象的start函数...", s + 1);
     thread(s)->start();
   }
 }

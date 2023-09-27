@@ -1082,6 +1082,7 @@ bool Method::should_not_be_cached() const {
 /**
  *  Returns true if this is one of the specially treated methods for
  *  security related stack walks (like Reflection.getCallerClass).
+ *  如果这是安全相关堆栈遍历的特殊处理方法之一（如 Reflection.getCallerClass），则返回 true。
  */
 bool Method::is_ignored_by_security_stack_walk() const {
   const bool use_new_reflection = JDK_Version::is_gte_jdk14x_version() && UseNewReflection;

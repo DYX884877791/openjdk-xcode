@@ -131,6 +131,7 @@ Java_java_io_UnixFileSystem_checkAccess(JNIEnv *env, jobject this,
 {
     jboolean rv = JNI_FALSE;
     int mode = 0;
+    //将FileSystem定义的常量转换成C中的枚举
     switch (a) {
     case java_io_FileSystem_ACCESS_READ:
         mode = R_OK;
@@ -144,6 +145,7 @@ Java_java_io_UnixFileSystem_checkAccess(JNIEnv *env, jobject this,
     default: assert(0);
     }
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
+            //调用access函数，获取文件的访问权限类型
         if (access(path, mode) == 0) {
             rv = JNI_TRUE;
         }
@@ -164,12 +166,13 @@ Java_java_io_UnixFileSystem_setPermission(JNIEnv *env, jobject this,
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         int amode = 0;
         int mode;
+            //转换成C中定义的枚举
         switch (access) {
         case java_io_FileSystem_ACCESS_READ:
             if (owneronly)
-                amode = S_IRUSR;
+                amode = S_IRUSR; //所有者可读
             else
-                amode = S_IRUSR | S_IRGRP | S_IROTH;
+                amode = S_IRUSR | S_IRGRP | S_IROTH; //所有者，用户组，其他用户组，即所有用户都可读
             break;
         case java_io_FileSystem_ACCESS_WRITE:
             if (owneronly)
@@ -186,11 +189,13 @@ Java_java_io_UnixFileSystem_setPermission(JNIEnv *env, jobject this,
         default:
             assert(0);
         }
+            //调用stat64获取原来的文件权限
         if (statMode(path, &mode)) {
-            if (enable)
+            if (enable) //为true，表示开启对应的权限
                 mode |= amode;
             else
                 mode &= ~amode;
+            //调用chmod修改文件权限
             if (chmod(path, mode) >= 0) {
                 rv = JNI_TRUE;
             }
@@ -377,6 +382,7 @@ Java_java_io_UnixFileSystem_rename0(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, from, ids.path, fromPath) {
         WITH_FIELD_PLATFORM_STRING(env, to, ids.path, toPath) {
+            //调用rename函数，如果toPath在另一个目录下，则相当于移动文件并重命名，如果toPath已存在则rename失败
             if (rename(fromPath, toPath) == 0) {
                 rv = JNI_TRUE;
             }
@@ -393,12 +399,13 @@ Java_java_io_UnixFileSystem_setLastModifiedTime(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         struct stat64 sb;
-
+        //调用stat64函数获取文件属性
         if (stat64(path, &sb) == 0) {
             struct timeval tv[2];
 
             /* Preserve access time */
 #ifndef MACOSX
+            /* 之前的文件修改时间 */
             tv[0].tv_sec = sb.st_atim.tv_sec;
             tv[0].tv_usec = sb.st_atim.tv_nsec / 1000;
 #else
@@ -407,10 +414,12 @@ Java_java_io_UnixFileSystem_setLastModifiedTime(JNIEnv *env, jobject this,
 #endif
 
             /* Change last-modified time */
-            tv[1].tv_sec = time / 1000;
-            tv[1].tv_usec = (time % 1000) * 1000;
-
+            /* 指定的文件修改时间，time是毫秒数 */
+            tv[1].tv_sec = time / 1000; //转换成秒数
+            tv[1].tv_usec = (time % 1000) * 1000; //上述秒数对应的毫秒数
+            //调用utimes函数修改文件属性
             if (utimes(path, tv) == 0)
+                //修改成功，返回true
                 rv = JNI_TRUE;
         }
     } END_PLATFORM_STRING(env, path);
@@ -428,6 +437,7 @@ Java_java_io_UnixFileSystem_setReadOnly(JNIEnv *env, jobject this,
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         int mode;
         if (statMode(path, &mode)) {
+            //设置成可读的，则其他所有用户都不可写
             if (chmod(path, mode & ~(S_IWUSR | S_IWGRP | S_IWOTH)) >= 0) {
                 rv = JNI_TRUE;
             }
@@ -444,10 +454,13 @@ Java_java_io_UnixFileSystem_getSpace(JNIEnv *env, jobject this,
 
     WITH_FIELD_PLATFORM_STRING(env, file, ids.path, path) {
         struct statvfs64 fsstat;
+            //将指定的内存块的值初始化成0
         memset(&fsstat, 0, sizeof(fsstat));
+            //调用statvfs64读取磁盘使用情况
         if (statvfs64(path, &fsstat) == 0) {
             switch(t) {
             case java_io_FileSystem_SPACE_TOTAL:
+                //磁盘块的大小乘以总的可用磁盘块个数得到总的可用空间，单位字节
                 rv = jlong_mul(long_to_jlong(fsstat.f_frsize),
                                long_to_jlong(fsstat.f_blocks));
                 break;

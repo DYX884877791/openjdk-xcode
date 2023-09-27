@@ -50,6 +50,7 @@ void Template::initialize(int flags, TosState tos_in, TosState tos_out, generato
 
 
 Bytecodes::Code Template::bytecode() const {
+    //_template_table就是一个Template数组，一个字节码对应一个Template，this地址减去_template_table就是获取当前字节码的编码值
     //通过当前Template的地址在_template_table中的位置反算出对应的字节码
   int i = this - TemplateTable::_template_table;
   if (i < 0 || i >= Bytecodes::number_of_codes) i = this - TemplateTable::_template_table_wide;
@@ -58,7 +59,7 @@ Bytecodes::Code Template::bytecode() const {
 
 
 void Template::generate(InterpreterMacroAssembler* masm) {
-    slog_trace("Template::generate函数被调用了,生成汇编代码...");
+//    slog_debug("Template::generate函数被调用了,生成汇编代码...");
   // parameter passing
   TemplateTable::_desc = this;
   TemplateTable::_masm = masm;
@@ -266,7 +267,7 @@ void TemplateTable::def(Bytecodes::Code code, int flags, TosState in, TosState o
 #endif // TEMPLATE_TABLE_BUG
 
 void TemplateTable::initialize() {
-    slog_trace("TemplateTable::initialize函数被调用了...");
+    slog_trace("进入hotspot/src/share/vm/interpreter/templateTable.cpp中的TemplateTable::initialize函数...");
     //如果已经初始化则返回
   if (_is_initialized) return;
 

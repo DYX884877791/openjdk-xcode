@@ -30,10 +30,19 @@
 
 // A TypeArrayKlass is the klass of a typeArray
 // It contains the type and size of the elements
-
+// TypeArrayKlass是ArrayKlass的子类，用于表示数组元素是基本类型的数组
+/**
+ * 数组类和普通类不同，数组类没有对应的Class文件，所以数组类是直接被虚拟机创建的。HotSpot在初始化时就会创建好8个基本类型的一维数组对象TypeArrayKlass。
+ * 之前在HotSpot启动时，调用initializeJVM()方法初始化HotSpot，这个方法会最终调用到Universe::genesis()方法，在这个方法中初始化基本类型的一维数组对象TypeArrayKlass。
+ * 例如初始化boolean类型的一维数组，调用语句如下：
+ *   _boolArrayKlassObj      = TypeArrayKlass::create_klass(T_BOOLEAN, sizeof(jboolean), CHECK);
+ *   其中_boolArrayKlassObj是声明在universe.cpp文件中的全局变量，如下：
+ *   Klass* Universe::_boolArrayKlassObj                 = NULL;
+ */
 class TypeArrayKlass : public ArrayKlass {
   friend class VMStructs;
  private:
+    // _max_length表示该数组允许的最大长度。
   jint _max_length;            // maximum number of elements allowed in an array
 
   // Constructor
@@ -50,6 +59,7 @@ class TypeArrayKlass : public ArrayKlass {
   bool oop_is_typeArray_slow() const    { return true; }
 
   // klass allocation
+  // 调用TypeArrayKlass::create_klass()方法创建TypeArrayKlass对象
   static TypeArrayKlass* create_klass(BasicType type, const char* name_str,
                                TRAPS);
   static inline Klass* create_klass(BasicType type, int scale, TRAPS) {

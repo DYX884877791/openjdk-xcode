@@ -94,6 +94,15 @@ class ParCompactionManager;
 class KlassSizeStats;
 class fieldDescriptor;
 
+// 整个Klass模型中涉及到的类主要提供了2个功能：
+//（1）提供C++层面的Java类（包括Java类和Java数组）表示
+//（2）方法分派
+// 一个Klass对象（注意是Klass对象表示Java类的元数据，所以不同的Java类就用不同的Klass对象）代表一个Java类的元数据（相当于java.lang.Class对象）。
+// 所以Klass中要有描述Java类中常量池、字段、方法的能力，也就是能保存这些信息，同时还能提供一些方法供HotSpot的开发者操作这些信息。
+// 可以看到，能够通过Klass类中的相关属性保存Java类定义的一些信息，如_name保存Java类的名称、_super保存Java类实现的类型等。
+// Klass类是Klass模型中定义的类的基类，所以只保存了Java类的一些必要信息，其它如常量池、方法、字段等会通过具体子类的属性来保存。
+
+
 // 一个Klass提供两方面的功能：实现Java语言层面的类和提供多态方法的支持。
 // C++类实例通过保存typeinfo指针实现RTTI，通过vtbl指针实现多态，Hotspot的Oop-Klass模型将这两者整合到Klass中，
 // Java类实例只需保留一个Klass指针即可实现RTTI和多态，能够有效降低指针的内存占用。
@@ -133,9 +142,9 @@ class Klass : public Metadata {
   //
   // Final note:  This comes first, immediately after C++ vtable,
   // because it is frequently queried.
-  // _layout_helper是对象内存布局的一个组合描述符，如果不是InstanceKclass或者ArrayKlass，则该值为0.对InstanceKclass而言，
+  // _layout_helper是对象内存布局的一个组合描述符，如果不是InstanceKlass或者ArrayKlass，则该值为0.对InstanceKlass而言，
   // 该值表示对象的以字节为单位的内存占用空间，对ArrayKlass而言，该值是一个组合起来的假数字，包含4部分，具体怎么组合和解析由子类实现
-  // tag：如果数组元素是对象实例则是0x80,否则是0xC0
+  // tag：如果数组元素是对象实例则是0x80,否则是0xC0,表示数组元素的类型为Java基本类型
   // hsz: 数组头元素的字节数
   // ebt：数组元素的类型，枚举值BasicType
   // esz：数组元素大小，以字节为单位
@@ -148,24 +157,35 @@ class Klass : public Metadata {
   //
   // Where to look to observe a supertype (it is &_secondary_super_cache for
   // secondary supers, else is &_primary_supers[depth()].
-  // 用于快速查找supertype的一个偏移量
+  // 用于快速查找supertype的一个偏移量，这个偏移量是相对于Klass对象起始地址的偏移量。
+  // 如果当前类是IOException，那么这个属性就指向_primary_supers数组中存储IOException的位置。当存储的类多于8个时，值与secondary_super_cache相等。
   juint       _super_check_offset;
 
   // Class name.  Instance classes: java/lang/String, etc.  Array classes: [I,
   // [Ljava/lang/String;, etc.  Set to zero for all other kinds of classes.
   // 类名，如java/lang/String，[Ljava/lang/String
+  // 类名，其中普通类名和数组类名略有不同
+  // 普通类名如：java/lang/String，数组类名如：[Ljava/lang/String;
   Symbol*     _name;
 
   // Cache of last observed secondary supertype
   // Klass指针，上一次observed secondary supertype
+  //最后观察到的次要超类型的缓存
+  //Klass指针，保存上一次查询父类的结果
   Klass*      _secondary_super_cache;
   // Array of all secondary supertypes
-  // Klass指针数组，指向secondary supertype，即类实现的接口对应的Kclass
+  // Klass指针数组，指向secondary supertype，即类实现的接口对应的Kclass所有次要超类型的数组
+  // Klass指针数组，一般存储类实现的接口，偶尔还会存储类
   Array<Klass*>* _secondary_supers;
   // Ordered list of all primary supertypes
-  // Klass指针数组，大小固定为8，指向primary supertypes，即默认继承的类如Object
+  // Klass指针数组，大小固定为8，
+  // _primary_supers代表了这个类的父类。
+  // 例如IOException,是Exception的子类，而Exception又是Throwable的子类。所以IOException的 _primary_supers是这样的：
+  //    [Throwable, Exception, IOException]。如果继承链过长，也就是当前类加上继承的类多于8个（默认值，可通过命令更改）时，
+  //    会将多出来的类存储到secondary_supers数组中。
   Klass*      _primary_supers[_primary_super_limit];
   // java/lang/Class instance mirroring this class
+  //java实例类映射的oop
   // oopDesc指针，此类对应的java/lang/Class实例，可以据此访问类静态属性
   oop       _java_mirror;
   // Superclass
@@ -175,7 +195,7 @@ class Klass : public Metadata {
   // Klass指针，子类
   Klass*      _subklass;
   // Sibling link (or NULL); links all subklasses of a klass
-  // Klass指针，该类的下一个子类
+  // Klass指针，该类的下一个子类，也就是通过_subklass->next_sibling()来获取_subklass的兄弟子类
   Klass*      _next_sibling;
 
   // All klasses loaded by a class loader are chained through these links
@@ -195,6 +215,7 @@ class Klass : public Metadata {
   // Biased locking implementation and statistics
   // (the 64-bit chunk goes first, to avoid some fragmentation)
   jlong    _last_biased_lock_bulk_revocation_time;
+  // 在锁的实现过程中非常重要
   markOop  _prototype_header;   // Used when biased locking is both enabled and disabled for this type
   jint     _biased_lock_revocation_count;
 
@@ -425,10 +446,10 @@ protected:
     return l2esz;
   }
   static jint array_layout_helper(jint tag, int hsize, BasicType etype, int log2_esize) {
-    return (tag        << _lh_array_tag_shift)
-      |    (hsize      << _lh_header_size_shift)
-      |    ((int)etype << _lh_element_type_shift)
-      |    (log2_esize << _lh_log2_element_size_shift);
+    return (tag        << _lh_array_tag_shift)          // 左移30位
+      |    (hsize      << _lh_header_size_shift)        // 左移16位
+      |    ((int)etype << _lh_element_type_shift)       // 左移1位
+      |    (log2_esize << _lh_log2_element_size_shift); // 左移0位
   }
   static jint instance_layout_helper(jint size, bool slow_path_flag) {
     return (size << LogHeapWordSize)
@@ -459,6 +480,14 @@ protected:
   // subclass check
   bool is_subclass_of(const Klass* k) const;
   // subtype check: true if is_subclass_of, or if k is interface and receiver implements it
+  // 判断当前类是否为k的子类
+  /**
+   * 当通过_super_check_offset获取到的类与k相同时，那么k存在于当前类的继承链上，肯定有父子关系。
+   * 如果k存在于_primary_supers数组中，那么通过_super_check_offset就可快速判断，如果k存在于_secondary_supers中，
+   * 那么需要调用search_secondary_supers()来判断。
+   * @param k
+   * @return
+   */
   bool is_subtype_of(Klass* k) const {
     juint    off = k->super_check_offset();
     Klass* sup = *(Klass**)( (address)this + off );

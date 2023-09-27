@@ -119,6 +119,7 @@ void AbstractInterpreter::print() {
 
 
 void interpreter_init() {
+    slog_trace("进入hotspot/src/share/vm/interpreter/interpreter.cpp中的interpreter_init函数...");
     //初始化解释器
   Interpreter::initialize();
 #ifndef PRODUCT

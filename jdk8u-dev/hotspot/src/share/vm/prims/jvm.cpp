@@ -97,7 +97,9 @@
 
 #include <errno.h>
 #include <jfr/recorder/jfrRecorder.hpp>
-
+extern "C" {
+    #include "utilities/slog.hpp"
+}
 #ifndef USDT2
 HS_DTRACE_PROBE_DECL1(hotspot, thread__sleep__begin, long long);
 HS_DTRACE_PROBE_DECL1(hotspot, thread__sleep__end, int);
@@ -348,13 +350,17 @@ static void set_property(Handle props, const char* key, const char* value, TRAPS
 
 
 JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
+    // JVM 函数的包装器
   JVMWrapper("JVM_InitProperties");
+    // 资源标记在调用析构函数时释放所有在构造后分配的资源。通常用作局部变量
+    // 里面大致是通过各种预定义的宏对应初始化 ResourceMark中的属性
   ResourceMark rm;
 
   Handle props(THREAD, JNIHandles::resolve_non_null(properties));
 
   // System property list includes both user set via -D option and
   // jvm system specific properties.
+    // 系统属性列表包括通过 -D 选项设置的用户和 jvm 系统特定的属性。
   for (SystemProperty* p = Arguments::system_properties(); p != NULL; p = p->next()) {
     PUTPROP(props, p->key(), p->value());
   }
@@ -363,6 +369,8 @@ JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
   // to the sun.nio.MaxDirectMemorySize property.
   // Do this after setting user properties to prevent people
   // from setting the value with a -D option, as requested.
+    // 将 -XX:MaxDirectMemorySize= 命令行标志转换为 sun.nio.MaxDirectMemorySize 属性。
+    //在设置用户属性后执行此操作，以防止人们按照要求使用 -D 选项设置值。
   {
     if (FLAG_IS_DEFAULT(MaxDirectMemorySize)) {
       PUTPROP(props, "sun.nio.MaxDirectMemorySize", "-1");
@@ -375,6 +383,7 @@ JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
 
   // JVM monitoring and management support
   // Add the sun.management.compiler property for the compiler's name
+    // JVM 监控和管理支持 添加 sun.management.compiler 属性作为编译器的名称
   {
 #undef CSIZE
 #if defined(_LP64) || defined(_WIN64)
@@ -867,21 +876,23 @@ JVM_LEAF(void, JVM_CopySwapMemory(JNIEnv *env, jobject srcObj, jlong srcOffset,
 
 // Misc. class handling ///////////////////////////////////////////////////////////
 
-
+// 返回调用者
 JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
   JVMWrapper("JVM_GetCallerClass");
 
   // Pre-JDK 8 and early builds of JDK 8 don't have a CallerSensitive annotation; or
   // sun.reflect.Reflection.getCallerClass with a depth parameter is provided
   // temporarily for existing code to use until a replacement API is defined.
+    //JDK 8 之前的版本和 JDK 8 的早期版本没有 CallerSensitive 注释；
+    // 或带有深度参数的 sun.reflect.Reflection.getCallerClass 临时提供给现有代码使用，直到定义替换 API。
   if (SystemDictionary::reflect_CallerSensitive_klass() == NULL || depth != JVM_CALLER_DEPTH) {
+      // 返回“深度”的方法 java 或栈中的原生帧 用于安全检查
     Klass* k = thread->security_get_caller_class(depth);
     return (k == NULL) ? NULL : (jclass) JNIHandles::make_local(env, k->java_mirror());
   }
 
-  // Getting the class of the caller frame.
-  //
-  // The call stack at this point looks something like this:
+  // Getting the class of the caller frame. 获取调用者帧的类
+  // The call stack at this point looks something like this: 此时的调用堆栈如下所示：
   //
   // [0] [ @CallerSensitive public sun.reflect.Reflection.getCallerClass ]
   // [1] [ @CallerSensitive API.method                                   ]
@@ -895,12 +906,14 @@ JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
     switch (n) {
     case 0:
       // This must only be called from Reflection.getCallerClass
+        // 这只能从 Reflection.getCallerClass 调用
       if (m->intrinsic_id() != vmIntrinsics::_getCallerClass) {
         THROW_MSG_NULL(vmSymbols::java_lang_InternalError(), "JVM_GetCallerClass must only be called from Reflection.getCallerClass");
       }
       // fall-through
     case 1:
       // Frame 0 and 1 must be caller sensitive.
+        // Frame 0 和 1 必须是调用者sensitive.
       if (!m->caller_sensitive()) {
         THROW_MSG_NULL(vmSymbols::java_lang_InternalError(), err_msg("CallerSensitive annotation expected at frame %d", n));
       }
@@ -908,6 +921,7 @@ JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
     default:
       if (!m->is_ignored_by_security_stack_walk()) {
         // We have reached the desired frame; return the holder class.
+          // 我们已经达到了预期的帧；返回持有者类。
         return (jclass) JNIHandles::make_local(env, m->method_holder()->java_mirror());
       }
       break;
@@ -1132,10 +1146,16 @@ static void is_lock_held_by_thread(Handle loader, PerfCounter* counter, TRAPS) {
 
 // common code for JVM_DefineClass() and JVM_DefineClassWithSource()
 // and JVM_DefineClassWithSourceCond()
+/**
+ * 这段逻辑主要就是利用 ClassFileStream 将要加载的class文件转成文件流，然后调用SystemDictionary::resolve_from_stream（），
+ * 生成 Class 在 JVM 中的代表：Klass。对于Klass，大家可能不太熟悉，但是在这里必须得了解下。
+ * 说白了，它就是JVM 用来定义一个Java Class 的数据结构。不过Klass只是一个基类，Java Class 真正的数据结构定义在 InstanceKlass中。
+ */
 static jclass jvm_define_class_common(JNIEnv *env, const char *name,
                                       jobject loader, const jbyte *buf,
                                       jsize len, jobject pd, const char *source,
                                       jboolean verify, TRAPS) {
+    slog_trace("进入hotspot/src/share/vm/prims/jvm.cpp中的jvm_define_class_common函数...");
   if (source == NULL)  source = "__JVM_DefineClass__";
 
   assert(THREAD->is_Java_thread(), "must be a JavaThread");
@@ -1179,7 +1199,12 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
   }
     //构建ProtectionDomain对应的Hander
   Handle protection_domain (THREAD, JNIHandles::resolve(pd));
+    slog_trace("即将调用SystemDictionary::resolve_from_stream函数(进行字节数组的解析并创建出Klass实例)...");
     //完成字节数组的解析并创建一个Klass实例
+    /**
+     * 实际上是一个 InstanceKlass实例
+     * InstanceKlass 中记录了一个 Java 类的所有属性，包括注解、方法、字段、内部类、常量池等信息。这些信息本来被记录在Class文件中，所以说，InstanceKlass就是一个Java Class 文件被加载到内存后的形式。
+     */
   Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                      protection_domain, &st,
                                                      verify != 0,
@@ -1190,6 +1215,7 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
   }
 
     //将Klass实例转换成Java 的Class
+    // 为class实例创建本地引用，防止class对象无GCROOT引用被gc掉
   return (jclass) JNIHandles::make_local(env, k->java_mirror());
 }
 
@@ -1202,6 +1228,7 @@ JVM_END
 
 
 JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
+    slog_trace("进入hotspot/src/share/vm/prims/jvm.cpp中的JVM_DefineClassWithSource函数...");
   JVMWrapper2("JVM_DefineClassWithSource %s", name);
 
   return jvm_define_class_common(env, name, loader, buf, len, pd, source, true, THREAD);
@@ -3128,6 +3155,7 @@ void jio_print(const char* s) {
 // implementation is local to this file, we always lock Threads_lock for that one.
 
 static void thread_entry(JavaThread* thread, TRAPS) {
+    slog_debug("进入hotspot/src/share/vm/prims/jvm.cpp中的thread_entry函数...");
   HandleMark hm(THREAD);
   Handle obj(THREAD, thread->threadObj());
   JavaValue result(T_VOID);
@@ -3145,6 +3173,7 @@ static void thread_entry(JavaThread* thread, TRAPS) {
 
 JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
   JVMWrapper("JVM_StartThread");
+    slog_debug("进入hotspot/src/share/vm/prims/jvm.cpp中的JVM_StartThread函数...");
   JavaThread *native_thread = NULL;
 
   // We cannot hold the Threads_lock when we throw an exception,
@@ -3158,6 +3187,7 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
     // Ensure that the C++ Thread and OSThread structures aren't freed before
     // we operate.
       //获取锁
+      //对Threads_lock加锁，确保C++对象和操作系统线程结构不被清除。解锁，是在方法结束出栈后MutexLocker析构函数中进行的。
     MutexLocker mu(Threads_lock);
 
       //如果关联的JavaThread不为空，说明该线程已经启动过，需要抛出异常
@@ -3168,12 +3198,14 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
     // there is a small window between the Thread object being created
     // (with its JavaThread set) and the update to its threadStatus, so we
     // have to check for this
+    // //jthread对象如果是非空的，则证明线程已启动
     if (java_lang_Thread::thread(JNIHandles::resolve_non_null(jthread)) != NULL) {
       throw_illegal_thread_state = true;
     } else {
       // We could also check the stillborn flag to see if this thread was already stopped, but
       // for historical reasons we let the thread detect that itself when it starts running
         //获取stackSize属性，1.4以上不是从Thread实例中读取，直接返回0
+        //取线程栈大小，注意在java/lang/Thread.java源码中，调用init方法时这个参数被设置成0，也就是OpenJDK（包括HotSpot）不支持传递线程栈大小！
       // 2. 如果没有创建，则会创建线程
       jlong size =
              java_lang_Thread::stackSize(JNIHandles::resolve_non_null(jthread));
@@ -3182,10 +3214,11 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
       // size_t (an unsigned type), so avoid passing negative values which would
       // result in really large stacks.
       size_t sz = size > 0 ? (size_t) size : 0;
-      // 虚拟机创建 JavaThread， 该类内部会创建操作系统线程，然后关联 Java 线程
+      // 虚拟机创建 JavaThread(C++层面的线程)， 该类内部会创建操作系统线程，然后关联 Java 线程
 
         //创建JavaThread和关联的OSThread
         // 这里实际上传入的是&thread_entry，而thread_entry的定义在本JVM_StartThread方法的上面
+        slog_debug("在JVM_StartThread函数中创建一个新的(C++层面的)JavaThread对象，线程执行函数thread_entry的入口地址为%p", &thread_entry);
       native_thread = new JavaThread(&thread_entry, sz);
 
       // At this point it may be possible that no osthread was created for the
@@ -3203,6 +3236,7 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
     }
   }
 
+  // 状态异常直接抛出
   if (throw_illegal_thread_state) {
       //关联的JavaThread不为空，抛出异常
     THROW(vmSymbols::java_lang_IllegalThreadStateException());
@@ -3210,6 +3244,7 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
 
   assert(native_thread != NULL, "Starting null thread?");
 
+    //操作系统线程对象为空，无法启动线程了，清理资源并抛出异常
     //创建osthread失败，抛出异常
   if (native_thread->osthread() == NULL) {
     // No one should hold a reference to the 'native_thread'.
@@ -3539,6 +3574,7 @@ JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
     //获取关联的JavaThread
   JavaThread* thr = java_lang_Thread::thread(JNIHandles::resolve_non_null(jthread));
   if (thr != NULL) {
+      // JVM_Interrupt对参数进行了校验，然后直接调用Thread::interrupt
     Thread::interrupt(thr);
   }
 JVM_END
@@ -4348,11 +4384,14 @@ jclass find_class_from_class_loader(JNIEnv* env, Symbol* name, jboolean init,
   //   the checkPackageAccess relative to the initiating class loader via the
   //   protection_domain. The protection_domain is passed as NULL by the java code
   //   if there is no security manager in 3-arg Class.forName().
+  // 遵循双亲委派机制加载类，通常会创建或从Dictionary中查询已经加载的InstanceKlass实例，不涉及到对类的连接、初始化等操作。
+  // 通过forName()方法调用到此函数时，还会调用initialize()函数执行类的初始化操作
   Klass* klass = SystemDictionary::resolve_or_fail(name, loader, protection_domain, throwError != 0, CHECK_NULL);
 
   KlassHandle klass_handle(THREAD, klass);
   // Check if we should initialize the class
   if (init && klass_handle->oop_is_instance()) {
+    // init的值为true，则对类进行初始化操作
     klass_handle->initialize(CHECK_NULL);
   }
   return (jclass) JNIHandles::make_local(env, klass_handle->java_mirror());

@@ -136,6 +136,10 @@ class Direct$Type$Buffer$RW$$BO$
         } else {
             address = base;
         }
+        /**
+         * cleaner是该类的一个私有属性，在构造函数中初始化，当DirectByteBuffer实例被垃圾回收器回收掉了，这个cleaner属性对应的Cleaner实例就没有其他强引用了，
+         * 只剩下Cleaner内部维护的链表对其的虚引用了，就会被垃圾回收器加入到Reference的pending队列中，等待被处理。
+         */
         cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
         att = null;
 #else[rw]

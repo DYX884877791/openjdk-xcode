@@ -38,6 +38,13 @@ ClassFileStream::ClassFileStream(u1* buffer, int length, const char* source, boo
   _need_verify  = need_verify;
 }
 
+/**
+ * 介绍一下ClassFileStream类中的一些被频繁调用的方法
+ *
+ * Class文件由字节为单位的字节流组成，所有的16位、32位和64位长度的数据将被构造成 2个、4个和8个8字节单位来表示。
+ * 多字节数据项总是按照Big-Endian的顺序进行存储，而x86等处理器则是使用了相反的Little-Endian顺序来存储数据。
+ * 因此，在x86平台上需要进行转换。如下面的get_Java_u2、get_Java_u4等函数...
+ */
 u1 ClassFileStream::get_u1(TRAPS) {
   if (_need_verify) {
     guarantee_more(1, CHECK_0);

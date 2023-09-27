@@ -450,20 +450,24 @@ AttachOperation* AttachListener::dequeue() {
 // domain socket before we are properly initialized
 
 void AttachListener::vm_start() {
+    slog_debug("进入hotspot/src/os/bsd/vm/attachListener_bsd.cpp中的AttachListener::vm_start函数...");
   char fn[UNIX_PATH_MAX];
   struct stat st;
   int ret;
+  const char* temp_dir = os::get_temp_directory();
+  int pid = os::current_process_id();
 
-  int n = snprintf(fn, UNIX_PATH_MAX, "%s/.java_pid%d",
-           os::get_temp_directory(), os::current_process_id());
+  int n = snprintf(fn, UNIX_PATH_MAX, "%s/.java_pid%d", temp_dir, pid);
   assert(n < (int)UNIX_PATH_MAX, "java_pid file name buffer overflow");
-
+    slog_debug("即将调用stat库函数查看文件[%s]的属性...", fn);
   RESTARTABLE(::stat(fn, &st), ret);
   if (ret == 0) {
     ret = ::unlink(fn);
     if (ret == -1) {
       debug_only(warning("failed to remove stale attach pid file at %s", fn));
     }
+  } else {
+    perror("stat() failed...");
   }
 }
 
@@ -520,15 +524,18 @@ bool AttachListener::init_at_startup() {
 // If the file .attach_pid<pid> exists in the working directory
 // or /tmp then this is the trigger to start the attach mechanism
 bool AttachListener::is_init_trigger() {
+    slog_debug("进入hotspot/src/os/bsd/vm/attachListener_bsd.cpp中的AttachListener::is_init_trigger函数...");
   if (init_at_startup() || is_initialized()) {
     return false;               // initialized at startup or already initialized
   }
   char path[PATH_MAX + 1];
   int ret;
   struct stat st;
+  const char* temp_dir = os::get_temp_directory();
+  int pid = os::current_process_id();
 
-  snprintf(path, PATH_MAX + 1, "%s/.attach_pid%d",
-           os::get_temp_directory(), os::current_process_id());
+  snprintf(path, PATH_MAX + 1, "%s/.attach_pid%d", temp_dir, pid);
+    slog_debug("即将调用stat库函数查看文件[%s]的属性...", path);
   RESTARTABLE(::stat(path, &st), ret);
   if (ret == 0) {
     // simple check to avoid starting the attach mechanism when
@@ -538,6 +545,7 @@ bool AttachListener::is_init_trigger() {
       return true;
     }
   }
+  perror("stat() failed...");
   return false;
 }
 

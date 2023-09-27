@@ -13,13 +13,15 @@
 #include <string.h>
 #include <dlfcn.h>
 #include <unistd.h>
-#include <syscall.h>
  
 #ifdef __APPLE__
-#define _DARWIN_BETTER_REALPATH
-#include <mach-o/dyld.h>
-#include <CoreServices/CoreServices.h>
-static void dummyCallback(void * info) {};
+    #define _DARWIN_BETTER_REALPATH
+    #include <mach-o/dyld.h>
+    #include <CoreServices/CoreServices.h>
+    #include <sys/syscall.h>
+    static void dummyCallback(void * info) {};
+#else
+    #include <syscall.h>
 #endif
  
 #ifdef  _WINDOWS
@@ -190,11 +192,15 @@ void thread_function()
 
 
 int main(const int argc, const char** argv) {
-    thread_function();
-    release_for_exit();
+#ifdef __APPLE__
+    printf("gettid is %lu\n",(size_t)pthread_mach_thread_np(pthread_self()));
+#else
     printf("gettid is %lu\n",(size_t)syscall(__NR_gettid));
+#endif
     printf("pthread_self is %lu\n",(size_t)pthread_self());
     printf("pid is %lu\n",(size_t)getpid());
+    thread_function();
+    release_for_exit();
     sleep(600);
     return 0;
 }

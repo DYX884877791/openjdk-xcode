@@ -190,7 +190,7 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     jmethodID putID, removeID, getPropID;
     jobject ret = NULL;
     jstring jVMVal = NULL;
-
+    // 获取Java 配置环境 里面主要是通过 各种预定义的宏区分不同的操作系统，之后进行对应的编译，获取环境设置 java_props_t的属性
     sprops = GetJavaProperties(env);
     CHECK_NULL_RETURN(sprops, NULL);
 
@@ -396,6 +396,8 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
      * unset "user.language", "user.script", "user.country", and "user.variant"
      * in order to tell whether the command line option "-DXXXX=YYYY" is
      * specified or not.  They will be reset in fillI18nProps() below.
+     * 取消设置“user.language”、“user.script”、“user.country”和“user.variant”，以判断是否指定了命令行选项“-DXXXX=YYYY”。
+     * 它们将在下面的fillI18nProps() 中重置
      */
     REMOVEPROP(props, "user.language");
     REMOVEPROP(props, "user.script");
@@ -403,9 +405,11 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     REMOVEPROP(props, "user.variant");
     REMOVEPROP(props, "file.encoding");
 
+    // jvm 初始化
     ret = JVM_InitProperties(env, props);
 
     /* Check the compatibility flag */
+    // 检查兼容性标志
     GETPROP(props, "sun.locale.formatasdefault", jVMVal);
     if (jVMVal) {
         const char * val = (*env)->GetStringUTFChars(env, jVMVal, 0);

@@ -89,6 +89,7 @@ class ThreadRootsMarkingTask : public GCTask {
 
 class MarkFromRootsTask : public GCTask {
  public:
+    // JVM GC的类型是一个枚举类, 一共有 十种.
   enum RootType {
     universe              = 1,
     jni_handles           = 2,

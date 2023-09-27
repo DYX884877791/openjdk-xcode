@@ -34,6 +34,7 @@ public interface Filter<T> {
      * Does this element match against the filter?
      * @param t element to be checked
      * @return true if the element satisfy constraints imposed by filter
+     * 作为布尔判断的简单过滤器。如果提供的元素与筛选器匹配，方法accepts将返回true。
      */
     boolean accepts(T t);
 }

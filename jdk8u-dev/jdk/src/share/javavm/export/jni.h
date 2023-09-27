@@ -810,6 +810,20 @@ struct JNINativeInterface_ {
  *    (*env)->FindClass(env, "java/lang/String")
  *
  * in C.
+ *
+ * 深入去看JNIEnv结构体的话，不难发现，这个结构体当中包含了几乎有所的JNI函数，大致可以分为如下几类：
+ *
+ * 函数名	备注
+ * NewObject	创建Java类中的对象
+ * NewString	创建Java类中的String对象
+ * New<Type>Array	创建类型为Type的数组对象
+ * Get<Type>Field	获取类型为Type的字段
+ * Set<Type>Field	设置类型为Type的字段的值
+ * GetStatic<Type>Field	获取类型为Type的static的字段
+ * SetStatic<Type>Field	设置类型为Type的static的字段的值
+ * Call<Type>Method	调用返回类型为Type的方法
+ * CallStatic<Type>Method	调用返回值类型为Type的static方法
+ *
  */
 
 struct JNIEnv_ {

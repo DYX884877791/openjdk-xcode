@@ -571,6 +571,11 @@ inline void oop_store_raw(HeapWord* addr, oop value) {
   }
 }
 
+/*
+ * 根据UseCompressedOops分两种情况处理，该函数表示JVM中对象的指针是否使用了压缩指针，压缩指针的目的是为了节约内存。
+ * 对于压缩指针的情况，将值都转换成narrowOop类型，该类型其实是无符号整型，然后再调用了Atomic::cmpxchg进行CPU级别的CAS操作，最后再转成未压缩指针。
+ * 而对于非压缩指针的情况，则调用Atomic::cmpxchg_ptr进行CPU级别的CAS操作，此时的指针大小为64位，可转成long型再执行CPU级别的64位的CAS操作。
+ */
 inline oop oopDesc::atomic_compare_exchange_oop(oop exchange_value,
                                                 volatile HeapWord *dest,
                                                 oop compare_value,

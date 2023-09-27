@@ -906,7 +906,12 @@ class Thread implements Runnable {
 
     /**
      * interrupt方法用于中断某个处于阻塞状态的线程，如调用sleep方法后被阻塞的线程，中断后该线程就会抛出InterruptedException异常；
-     * interrupted方法用于判断某个线程是否被中断了
+     * interrupted方法用于判断某个线程是否被中断了。
+     *
+     *  如果线程堵塞在object.wait、Thread.join和Thread.sleep，将会清除线程的中断状态，并抛出InterruptedException;
+     *  如果线程堵塞在java.nio.channels.InterruptibleChannel的IO上，Channel将会被关闭，线程被置为中断状态，并抛出java.nio.channels.ClosedByInterruptException；
+     *  如果线程堵塞在java.nio.channels.Selector上，线程被置为中断状态，select方法会马上返回，类似调用wakeup的效果；
+     *  如果不是以上三种情况，thread.interrupt()方法仅仅是设置线程的中断状态为true。
      *
      * Interrupts this thread.
      *

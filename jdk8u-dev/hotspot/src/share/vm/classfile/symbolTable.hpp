@@ -28,6 +28,9 @@
 #include "memory/allocation.inline.hpp"
 #include "oops/symbol.hpp"
 #include "utilities/hashtable.hpp"
+extern "C" {
+#include "utilities/slog.hpp"
+}
 
 // The symbol table holds all Symbol*s and corresponding interned strings.
 // Symbol*s and literal strings should be canonicalized.
@@ -74,6 +77,9 @@ class TempNewSymbol : public StackObj {
   operator Symbol*()                             { return _temp; }
 };
 
+// https://blog.csdn.net/qq_43799161/article/details/131529592
+// key为Symbol，Symbol可以理解为utf8编码的字符信息，
+// value为mtSymbol，这是一个枚举值，仅仅表示内存的解释，不起实际作用
 class SymbolTable : public RehashableHashtable<Symbol*, mtSymbol> {
   friend class VMStructs;
   friend class ClassFileParser;
@@ -143,6 +149,7 @@ public:
   static uint bucket_size() { return sizeof(HashtableBucket<mtSymbol>); }
 
   static void create_table() {
+      slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.hpp中的create_table函数...");
     assert(_the_table == NULL, "One symbol table allowed.");
     _the_table = new SymbolTable();
     initialize_symbols(symbol_alloc_arena_size);
@@ -255,6 +262,10 @@ public:
   static int parallel_claimed_index()        { return _parallel_claimed_idx; }
 };
 
+
+// key是oop，oop可以理解为Java对象地址（实际上存放的就是Java的String对象）
+//
+// value是mtSymbol，这是一个枚举值，仅仅表示内存的解释，不起实际作用
 class StringTable : public RehashableHashtable<oop, mtSymbol> {
   friend class VMStructs;
 

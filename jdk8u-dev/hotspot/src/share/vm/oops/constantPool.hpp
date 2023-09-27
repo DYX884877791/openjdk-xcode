@@ -67,7 +67,7 @@ class CPSlot VALUE_OBJ_CLASS_SPEC {
  public:
   CPSlot(intptr_t ptr): _ptr(ptr) {}
   CPSlot(Klass* ptr): _ptr((intptr_t)ptr) {}
-  CPSlot(Symbol* ptr): _ptr((intptr_t)ptr | 1) {}
+  CPSlot(Symbol* ptr): _ptr((intptr_t)ptr | 1) {} // 或上1表示已经解析过了，Symbol*本来不需要解析
 
   intptr_t value()   { return _ptr; }
   bool is_resolved()   { return (_ptr & 1) == 0; }
@@ -84,19 +84,34 @@ class CPSlot VALUE_OBJ_CLASS_SPEC {
 };
 
 class KlassSizeStats;
+/**
+ * 这个类的对象代码具体的常量池，保存着常量池元信息
+ * 类表示常量池元信息，所以继承了类Metadata。_tags表示常量池中的内容，常量池中的总项数通过_length来保存，所以_tags数组的长度也为_length，
+ * 具体存储的内容就是每一项的tag值，这都是虚拟机规范定义好的；_cache辅助解释运行来保存一些信息
+ * 常量池中包含的内容如下：
+ * -- 字面量
+ * ---- 文本字符串
+ * ---- 被声明为final的常量值
+ * ---- 基本数据类型的值
+ * ---- 其他
+ * -- 符号引用
+ * ---- 类和接口的完全限定名
+ * ---- 字段名称和描述符
+ * ---- 方法名称和描述符
+ */
 class ConstantPool : public Metadata {
   friend class VMStructs;
   friend class BytecodeInterpreter;  // Directly extracts an oop in the pool for fast instanceof/checkcast
   friend class Universe;             // For null constructor
  private:
   Array<u1>*           _tags;        // the tag array describing the constant pool's contents
-  ConstantPoolCache*   _cache;       // the cache holding interpreter runtime information
+  ConstantPoolCache*   _cache;       // the cache holding interpreter runtime information 解释执行时的运行时信息
   InstanceKlass*       _pool_holder; // the corresponding class
   Array<u2>*           _operands;    // for variable-sized (InvokeDynamic) nodes, usually empty
 
   // Array of resolved objects from the constant pool and map from resolved
   // object index to original constant pool index
-  jobject              _resolved_references;
+  jobject              _resolved_references; // jobject是指针类型
   Array<u2>*           _reference_map;
 
   enum {
@@ -126,11 +141,14 @@ class ConstantPool : public Metadata {
   void set_flags(int f)                        { _flags = f; }
 
  private:
+    // base()是ConstantPool中定义的方法，所以this指针指向当前ConstantPool对象在内存中的首地址，加上ConstantPool类本身需要占用的内存大小后，
+    // 指针指向了常量池相关信息，这部分信息通常就是length个指针宽度的数组，其中length为常量池数量。
   intptr_t* base() const { return (intptr_t*) (((char*) this) + sizeof(ConstantPool)); }
 
   CPSlot slot_at(int which) const {
     assert(is_within_bounds(which), "index out of bounds");
     // Uses volatile because the klass slot changes without a lock.
+    // 同样调用obj_at_addr_raw()方法，获取ConstantPool中对应索引处存储的值，然后封装为CPSlot对象返回即可
     volatile intptr_t adr = (intptr_t)OrderAccess::load_ptr_acquire(obj_at_addr_raw(which));
     assert(adr != 0 || which == 0, "cp entry for klass should not be zero");
     return CPSlot(adr);
@@ -143,6 +161,7 @@ class ConstantPool : public Metadata {
   }
   intptr_t* obj_at_addr_raw(int which) const {
     assert(is_within_bounds(which), "index out of bounds");
+    // 通过(intptr_t*)&base()[which]获取到常量池索引which对应的值
     return (intptr_t*) &base()[which];
   }
 
@@ -358,6 +377,7 @@ class ConstantPool : public Metadata {
 
   Symbol* klass_name_at(int which) const;  // Returns the name, w/o resolving.
 
+  // 返回已连接的Klass*
   Klass* resolved_klass_at(int which) const {  // Used by Compiler
     guarantee(tag_at(which).is_klass(), "Corrupted constant pool");
     // Must do an acquire here in case another thread resolved the klass
@@ -366,6 +386,15 @@ class ConstantPool : public Metadata {
   }
 
   // This method should only be used with a cpool lock or during parsing or gc
+  // 返回未连接的Symbol*
+  /**
+   * 举个例子如下：
+   * #3 = Class         #17        // TestClass
+   * ...
+   * #17 = Utf8          TestClass　
+   * 类索引为0x0003，去常量池里找索引为3的类描述符，类描述符中的索引为17，再去找索引为17的字符串，就是“TestClass”。
+   * 调用obj_at_addr_raw()方法找到的是一个指针，这个指针指向表示“TestClass”这个字符串的Symbol对象，也就是在解析常量池项时会将本来存储索引值17替换为存储指向Symbol对象的指针。　
+   */
   Symbol* unresolved_klass_at(int which) {     // Temporary until actual use
     Symbol* s = CPSlot((Symbol*)OrderAccess::load_ptr_acquire(obj_at_addr_raw(which))).get_symbol();
     // check that the klass is still unresolved.

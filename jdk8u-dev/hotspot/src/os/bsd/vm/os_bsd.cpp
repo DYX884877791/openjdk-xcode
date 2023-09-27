@@ -65,7 +65,9 @@
 #include "utilities/events.hpp"
 #include "utilities/growableArray.hpp"
 #include "utilities/vmError.hpp"
-
+extern "C" {
+    #include "utilities/slog.hpp"
+}
 // put OS-includes here
 # include <sys/types.h>
 # include <sys/mman.h>
@@ -570,6 +572,7 @@ bool os::Bsd::is_sig_ignored(int sig) {
 }
 
 void os::Bsd::signal_sets_init() {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::Bsd::signal_sets_init函数...");
   // Should also have an assertion stating we are still single-threaded.
   assert(!signal_sets_initialized, "Already initialized");
   // Fill in signals that are necessarily unblocked for all threads in
@@ -636,7 +639,7 @@ sigset_t* os::Bsd::allowdebug_blocked_signals() {
 }
 
 void os::Bsd::hotspot_sigmask(Thread* thread) {
-
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::Bsd::hotspot_sigmask函数...");
   //Save caller's signal mask before setting VM signal mask
   sigset_t caller_sigmask;
   pthread_sigmask(SIG_BLOCK, NULL, &caller_sigmask);
@@ -649,6 +652,9 @@ void os::Bsd::hotspot_sigmask(Thread* thread) {
   if (!ReduceSignalUsage) {
     if (thread->is_VM_thread()) {
       // Only the VM thread handles BREAK_SIGNAL ...
+      // 只有vmThread才会处理BREAK_SIGNAL信号，其他信号不会处理BREAK_SIGNAL信号
+      // 可以搜索一下pthread函数pthread_sigmask的用法，以及SIG_UNBLOCK、SIG_BLOCK的区别...
+      // https://blog.csdn.net/Alkaid2000/article/details/128052806
       pthread_sigmask(SIG_UNBLOCK, vm_signals(), NULL);
     } else {
       // ... all other threads block BREAK_SIGNAL
@@ -682,6 +688,7 @@ static uint64_t locate_unique_thread_id(mach_port_t mach_thread_port) {
   thread_identifier_info_data_t     m_ident_info;
   mach_msg_type_number_t            count = THREAD_IDENTIFIER_INFO_COUNT;
 
+    // 取一下线程信息，thread_info是定义在/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/mach/thread_act.h下的一个函数
   thread_info(mach_thread_port, THREAD_IDENTIFIER_INFO,
               (thread_info_t) &m_ident_info, &count);
 
@@ -691,6 +698,7 @@ static uint64_t locate_unique_thread_id(mach_port_t mach_thread_port) {
 
 // Thread start routine for all newly created threads
 static void *java_start(Thread *thread) {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的java_start函数...");
   // Try to randomize the cache line index of hot stack frames.
   // This helps when threads of the same stack traces evict each other's
   // cache lines. The threads can be either from the same JVM instance, or
@@ -703,6 +711,8 @@ static void *java_start(Thread *thread) {
   ThreadLocalStorage::set_thread(thread);
 
   OSThread* osthread = thread->osthread();
+  pthread_t pthread_id = osthread->pthread_id();
+    slog_debug("当前线程pthread_t为0x%zx,所属进程的pid为%d", pthread_id, pid);
   Monitor* sync = osthread->startThread_lock();
 
   // non floating stack BsdThreads needs extra check, see above
@@ -710,18 +720,23 @@ static void *java_start(Thread *thread) {
     // notify parent thread
     MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
     osthread->set_state(ZOMBIE);
+      slog_debug("osThread线程的状态置为ZOMBIE，当前线程[0x%zx]即将调用sync->notify_all函数唤醒父线程，将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...");
     sync->notify_all();
     return NULL;
   }
-
-  osthread->set_thread_id(os::Bsd::gettid());
+  pid_t tid = os::Bsd::gettid();
+    slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id为0x%lx,并赋值给osthread的_thread_id变量", tid);
+  osthread->set_thread_id(tid);
 
 #ifdef __APPLE__
-  uint64_t unique_thread_id = locate_unique_thread_id(osthread->thread_id());
+  // https://blog.csdn.net/yxccc_914/article/details/79854603
+  uint64_t unique_thread_id = locate_unique_thread_id(tid);
   guarantee(unique_thread_id != 0, "unique thread id was not found");
+    slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为0x%zx,并赋值给osthread的_unique_thread_id变量", unique_thread_id);
   osthread->set_unique_thread_id(unique_thread_id);
 #endif
   // initialize signal mask for this thread
+    slog_debug("即将调用os::Bsd::hotspot_sigmask函数对thread对象进行信号掩码的设置...");
   os::Bsd::hotspot_sigmask(thread);
 
   // initialize floating point control register
@@ -738,32 +753,40 @@ static void *java_start(Thread *thread) {
   {
     MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
 
-    // notify parent thread
+    // notify parent thread 唤醒父线程...
     osthread->set_state(INITIALIZED);
+      slog_debug("osThread线程的状态置为INITIALIZED，当前线程[0x%zx]即将调用sync->notify_all函数唤醒父线程，将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...", pthread_id);
     sync->notify_all();
 
     // wait until os::start_thread()
+      slog_debug("不停的查看osThread线程的状态是否为INITIALIZED...");
     while (osthread->get_state() == INITIALIZED) {
+        slog_debug("osThread线程的状态是INITIALIZED，当前线程[0x%zx]调用sync->wait函数进行等待(等待os::start_thread函数中修改osThread的状态并调用sync_with_child->notify函数进行唤醒)...", pthread_id);
       sync->wait(Mutex::_no_safepoint_check_flag);
+        slog_debug("当前线程[0x%zx]被唤醒了，再次检查osThread线程的状态是否为INITIALIZED...", pthread_id);
     }
+      slog_debug("osThread线程的状态不为INITIALIZED，继续往下执行...");
   }
 
   // call one more level start routine
+  slog_debug("即将调用thread的run方法...");
   thread->run();
 
   return 0;
 }
 
 bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::create_thread函数...");
   assert(thread->osthread() == NULL, "caller responsible");
-
   // Allocate the OSThread object
+    slog_debug("在os::create_thread函数中即将调用OSThread的构造函数创建一个osThread对象(Hotspot对操作系统线程的抽象...)");
   OSThread* osthread = new OSThread(NULL, NULL);
   if (osthread == NULL) {
     return false;
   }
 
   // set the correct thread state
+    slog_debug("将thr_type[%s]赋值给OSThread对象的_thread_type成员变量...", os::get_thread_type(thr_type));
   osthread->set_thread_type(thr_type);
 
   // Initial state is ALLOCATED but not INITIALIZED
@@ -814,6 +837,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
 
   {
     pthread_t tid;
+      slog_debug("即将调用pthread_create库函数创建线程,回调函数是java_start...");
     int ret = pthread_create(&tid, &attr, (void* (*)(void*)) java_start, thread);
 
     pthread_attr_destroy(&attr);
@@ -829,6 +853,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     }
 
     // Store pthread info into the OSThread
+      slog_debug("创建的posix线程tid为0x%zx,并赋值给osThread对象的_pthread_id变量", tid);
     osthread->set_pthread_id(tid);
 
     // Wait until child thread is either initialized or aborted
@@ -836,8 +861,11 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
       Monitor* sync_with_child = osthread->startThread_lock();
       MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
       while ((state = osthread->get_state()) == ALLOCATED) {
+          slog_debug("在os::create_thread函数中，当前线程[0x%zx]即将调用sync_with_child->wait函数进行等待，等待java_start函数中修改osThread的状态并调用sync->notify_all函数进行唤醒...");
         sync_with_child->wait(Mutex::_no_safepoint_check_flag);
+          slog_debug("当前线程[0x%zx]被唤醒了，再次检查osThread线程的状态是否为ALLOCATED...", pthread_self());
       }
+        slog_debug("osThread线程的状态不为ALLOCATED，继续往下执行...");
     }
 
   }
@@ -860,28 +888,35 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
 
 // bootstrap the main thread
 bool os::create_main_thread(JavaThread* thread) {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::create_main_thread函数...");
   assert(os::Bsd::_main_thread == pthread_self(), "should be called inside main thread");
+  // 执行了create_attached_thread方法,该方法就是把java线程的描述挂载到os的线程上,进入该方法
   return create_attached_thread(thread);
 }
 
 bool os::create_attached_thread(JavaThread* thread) {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::create_attached_thread函数...");
 #ifdef ASSERT
     thread->verify_not_published();
 #endif
 
   // Allocate the OSThread object
+  // 创建了OSThread,也就是os的线程,至此java线程就和os线程对应起来了.
+    slog_debug("在os::create_attached_thread函数中即将调用OSThread的构造函数创建一个osthread对象...");
   OSThread* osthread = new OSThread(NULL, NULL);
 
   if (osthread == NULL) {
     return false;
   }
-
-  osthread->set_thread_id(os::Bsd::gettid());
+  pid_t tid = os::Bsd::gettid();
+    slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id为0x%lx,并赋值给osthread对象的_thread_id变量", tid);
+  osthread->set_thread_id(tid);
 
   // Store pthread info into the OSThread
 #ifdef __APPLE__
   uint64_t unique_thread_id = locate_unique_thread_id(osthread->thread_id());
   guarantee(unique_thread_id != 0, "just checking");
+    slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为0x%zx,并赋值给osthread对象的_unique_thread_id变量", unique_thread_id);
   osthread->set_unique_thread_id(unique_thread_id);
 #endif
   osthread->set_pthread_id(::pthread_self());
@@ -891,11 +926,12 @@ bool os::create_attached_thread(JavaThread* thread) {
 
   // Initial thread state is RUNNABLE
   osthread->set_state(RUNNABLE);
-
+    slog_debug("将上面创建的osthread对象赋值给JavaThread对象的_osthread成员变量...");
   thread->set_osthread(osthread);
 
   // initialize signal mask for this thread
   // and save the caller's signal mask
+    slog_debug("即将调用os::Bsd::hotspot_sigmask函数对javaThread对象进行信号掩码的设置...");
   os::Bsd::hotspot_sigmask(thread);
 
   return true;
@@ -906,6 +942,7 @@ void os::pd_start_thread(Thread* thread) {
   assert(osthread->get_state() != INITIALIZED, "just checking");
   Monitor* sync_with_child = osthread->startThread_lock();
   MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
+    slog_debug("在os::pd_start_thread函数中此时osThread线程的状态是RUNNABLE，当前线程[0x%zx]即将调用sync_with_child->notify函数，将会唤醒os_bsd.cpp中java_start函数中的sync->wait...", pthread_self());
   sync_with_child->notify();
 }
 
@@ -1923,6 +1960,7 @@ static volatile jint sigint_count = 0;
 
 static void
 UserHandler(int sig, void *siginfo, void *context) {
+    slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的UserHandler函数...");
   // 4511530 - sem_post is serialized and handled by the manager thread. When
   // the program is interrupted by Ctrl-C, SIGINT is sent to every thread. We
   // don't want to flood the manager thread with sem_post requests.
@@ -2097,7 +2135,7 @@ void os::signal_init_pd() {
   // Initialize signal structures
   ::memset((void*)pending_signals, 0, sizeof(pending_signals));
 
-  // Initialize signal semaphore
+  // Initialize signal semaphore 初始化信号量，
   ::SEM_INIT(sig_sem, 0);
 }
 

@@ -700,16 +700,21 @@ inline HeapWord* ContiguousSpace::allocate_impl(size_t size,
 }
 
 // This version is lock-free.
+// Eden创建对象
 inline HeapWord* ContiguousSpace::par_allocate_impl(size_t size,
                                                     HeapWord* const end_value) {
   do {
     HeapWord* obj = top();
+      // 是否还有空间容纳当前对象，如果没有空间了就直接返回null，交给其他代去创建。
     if (pointer_delta(end_value, obj) >= size) {
       HeapWord* new_top = obj + size;
+        // 因为存在并发，所以使用平台原子性指令
       HeapWord* result = (HeapWord*)Atomic::cmpxchg_ptr(new_top, top_addr(), obj);
       // result can be one of two:
       //  the old top value: the exchange succeeded
       //  otherwise: the new value of the top is returned.
+        // 根据CAS的规范，只有result == obj才代表成功
+        // 其他情况下，就是发生并发，导致CAS失败，所以进入下一轮循环。
       if (result == obj) {
         assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
         return obj;

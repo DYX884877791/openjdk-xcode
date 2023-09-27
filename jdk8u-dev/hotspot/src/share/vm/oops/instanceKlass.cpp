@@ -177,6 +177,15 @@ HS_DTRACE_PROBE_DECL5(hotspot, class__initialization__end,
 
 volatile int InstanceKlass::_total_instanceKlass_count = 0;
 
+/**
+ * HotSpot在解析一个类时会调用InstanceKlass::allocate_instance_klass()方法分配内存，而分配多大的内存则是通过调用InstanceKlass::size()计算出来的
+ * 创建InstanceKlass实例会调用InstanceKlass::allocate_instance_klass()方法。在创建时，会涉及到C++new运算符的重载，
+ * 通过重载new运算符来分配对象的内存空间，也就是调用InstanceKlass::size()方法得到的大小，然后再调用对应类的构造函数初始化相应的属性。
+ *
+ * 方法的实现比较简单，当rt等于REF_NONE时，也就是为非Reference类型时，会根据类名创建对应C++类的对象。
+ * Class类创建InstanceMirrorKlass、ClassLoader类或ClassLoader的子类创建InstanceClassLoaderKlass类、普通类通过InstanceKlass来表示。
+ * 当rt不为REF_NONE时，会创建InstanceRefKlass对象。
+ */
 InstanceKlass* InstanceKlass::allocate_instance_klass(
                                               ClassLoaderData* loader_data,
                                               int vtable_len,
@@ -228,6 +237,8 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(
 
   // Add all classes to our internal class loader list here,
   // including classes in the bootstrap (NULL) class loader.
+    // 添加所有类型到我们内部类加载器列表中，包括在根加载器中的类
+    // loader_data的类型为ClassLoaderData*,通过ClassLoaderData中的_klasses保持通过InstanceKlass._next_link属性保持的列表
   loader_data->add_class(ik);
 
   Atomic::inc(&_total_instanceKlass_count);
@@ -571,6 +582,7 @@ void InstanceKlass::initialize(TRAPS) {
   if (this->should_be_initialized()) {
     HandleMark hm(THREAD);
     instanceKlassHandle this_oop(THREAD, this);
+    // 进入initialize_impl方法,这里就是在加载了类后,对其进行的初始化,包括链接,准备,校验等
     initialize_impl(this_oop, CHECK);
     // Note: at this point the class may be initialized
     //       OR it may be in the state of being initialized
@@ -1171,29 +1183,43 @@ objArrayOop InstanceKlass::allocate_objArray(int n, int length, TRAPS) {
 
 instanceOop InstanceKlass::register_finalizer(instanceOop i, TRAPS) {
   if (TraceFinalizerRegistration) {
+      //打印跟踪日志
     tty->print("Registered ");
     i->print_value_on(tty);
     tty->print_cr(" (" INTPTR_FORMAT ") as finalizable", (address)i);
   }
+    //i是新创建的对象
   instanceHandle h_i(THREAD, i);
   // Pass the handle as argument, JavaCalls::call expects oop as jobjects
+    //result表示调用结果
   JavaValue result(T_VOID);
+    //args表示方法参数
   JavaCallArguments args(h_i);
+    //获取调用方法
   methodHandle mh (THREAD, Universe::finalizer_register_method());
+    //执行方法调用
   JavaCalls::call(&result, mh, &args, CHECK_NULL);
   return h_i();
 }
 
 instanceOop InstanceKlass::allocate_instance(TRAPS) {
+    //判断目标类是否覆写了Object类的finalize方法
   bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+    // 因为类是对象的模板，所以可以从类中得到一个对象的大小
+    //获取目标类的对象大小
   int size = size_helper();  // Query before forming handle.
 
   KlassHandle h_k(THREAD, this);
 
   instanceOop i;
 
+    // 尝试在Java堆中开辟对象
+    //创建对象， InstanceKlass::allocate_instance方法中对象创建的核心逻辑在CollectedHeap::obj_allocate中，
+    // 该类定义在hotspot/src/share/vm/gc_interface/collectedHeap.hpp中，实现在同目录的collectedHeap.cpp中
   i = (instanceOop)CollectedHeap::obj_allocate(h_k, size, CHECK_NULL);
+    //如果覆写了finalize方法并且RegisterFinalizersAtInit为false，即不在JVM启动时完成finalize方法的注册
   if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+      //注册finalize方法
     i = register_finalizer(i, CHECK_NULL);
   }
   return i;
@@ -1527,6 +1553,9 @@ Method* InstanceKlass::find_method_impl(Symbol* name, Symbol* signature,
                                         OverpassLookupMode overpass_mode,
                                         StaticLookupMode static_mode,
                                         PrivateLookupMode private_mode) const {
+    // 从当前的InstanceKlass中的_methods数组中查找，这个数组中只存储了当前类中定义的方法
+    // 在方法解析完成后会返回存储所有方法的数组，这个数组会调用ClassFileParser::sort_methods()函数进行排序并最终保存在InstanceKlass类
+    // 的_methods属性中。调用find_method_index()函数使用二分查找算法在_methods属性中查找方法，如果找到方法，则返回数组的下标位置，否则返回-1。
   return InstanceKlass::find_method_impl(methods(), name, signature, overpass_mode, static_mode, private_mode);
 }
 
@@ -1671,6 +1700,8 @@ Method* InstanceKlass::uncached_lookup_method(Symbol* name, Symbol* signature, O
   OverpassLookupMode overpass_local_mode = overpass_mode;
   Klass* klass = const_cast<InstanceKlass*>(this);
   while (klass != NULL) {
+      // 调用find_method_impl()函数从当前InstanceKlass的_methods数组中查找名称和签名相同的方法
+      // 如果调用find_method_impl()函数无法从当前类中查找到对应的方法，那么通过while循环一直从继承链往上查找，如果找到就直接返回，否则返回NULL。
     Method* method = InstanceKlass::cast(klass)->find_method_impl(name, signature, overpass_local_mode, find_static, find_private);
     if (method != NULL) {
       return method;

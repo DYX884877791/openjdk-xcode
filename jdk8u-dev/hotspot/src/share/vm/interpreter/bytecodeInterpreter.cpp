@@ -2197,35 +2197,81 @@ run:
           UPDATE_PC_AND_TOS_AND_CONTINUE(3, count);
         }
 
+        /**
+         * 这里是对new字节码指令的解释，过程比较复杂，代码中已经附上了详细的注释了。这里也对其做一个简单的总结：
+
+            1. 取到new字节码指令携带的常量，用于指向常量池，拿到类信息。
+            2. 如果已经解析，如果已经初始化，如果支持快速开辟对象，此时会拿到Java堆中Eden空间中未开辟的空间，然后CAS尝试开辟对象空间
+                （因为Java堆空间是共享的，所以存在多线程的竞争问题，所以使用CAS保证开辟对象空间的原子性）。开辟成功后，将内存初始化为0，设置对象头，设置Klass指针，然后保存到操作数栈中。
+            3. 如果不满足已经解析、已经初始化、快速开辟对象，此时就会走InterpreterRuntime::_new方法走慢开辟逻辑。
+            4. 当InterpreterRuntime::_new方法开辟好对象后，会放入到操作数栈，然后执行完毕。
+         */
       CASE(_new): {
+          // 拿到new指令携带的指向常量池的下标
+          //获取操作数栈中目标类的符号引用在常量池的索引
         u2 index = Bytes::get_Java_u2(pc+1);
+        //获取当前执行的方法的类的常量池，istate是当前字节码解释器BytecodeInterpreter实例的指针
         ConstantPool* constants = istate->method()->constants();
+        // 判断当前类是否已经解析
         if (!constants->tag_at(index).is_unresolved_klass()) {
           // Make sure klass is initialized and doesn't have a finalizer
+          //校验从常量池获取的解析结果Klass指针是否是InstanceKlass指针
           Klass* entry = constants->slot_at(index).get_klass();
           assert(entry->is_klass(), "Should be resolved klass");
           Klass* k_entry = (Klass*) entry;
           assert(k_entry->oop_is_instance(), "Should be InstanceKlass");
           InstanceKlass* ik = (InstanceKlass*) k_entry;
+          // 判断当前类是否已经初始化完毕，并且是否支持快速开辟
+          //如果目标类已经完成初始化，并且可以使用快速分配的方式创建
+          /**
+           * 如果满足以下条件则不能使用快速分配的方式创建：(参考 hotspot/src/share/vm/oops/instanceKlass.hpp中can_be_fastpath_allocated()方法)
+           *
+           * 目标类是抽象类
+           * 目标类覆写了Object的finalizer方法
+           * 目标类大于FastAllocateSizeLimit参数的值，该参数默认是128k，FastAllocateSizeLimit参数的定义位于hotspot/src/share/vm/runtime/globals.hpp中
+           * 目标类是java/lang/Class，不能直接分配
+           */
           if ( ik->is_initialized() && ik->can_be_fastpath_allocated() ) {
+              // 因为类是对象的模板，所以类就已经决定对象的大小和变量的排布。
+              //获取目标类的对象大小
             size_t obj_size = ik->size_helper();
             oop result = NULL;
             // If the TLAB isn't pre-zeroed then we'll have to do it
+            //如果TLAB没有预先初始化则必须在这里完成初始化，need_zero表示是否需要初始化
             bool need_zero = !ZeroTLAB;
+            //如果UseTLAB参数为true,在TLAB中分配对象内存
             if (UseTLAB) {
               result = (oop) THREAD->tlab().allocate(obj_size);
             }
             // Disable non-TLAB-based fast-path, because profiling requires that all
             // allocations go through InterpreterRuntime::_new() if THREAD->tlab().allocate
             // returns NULL.
+            //如果使用Profile则当TLAB分配失败必须使用InterpreterRuntime::_new()方法分配内存，此时不能走
+            //ifndef圈起来的一段逻辑
 #ifndef CC_INTERP_PROFILE
             if (result == NULL) {
               need_zero = true;
               // Try allocate in shared eden
+              //尝试在共享的eden区分配
             retry:
+                /*
+                  这里很简单，由于类是对象的模板，所以开辟对象的大小都已经是确定值。
+                  在Java堆初始化就已经使用mmap系统调用开辟了一大段空间，并且根据垃圾回收器和垃圾回收策略决定好空间的分布
+                  所以当前只需要从开辟好的空间中得到当前对象所需的空间的大小作为当前对象的内存。
+                  并发的情况下就使用cmpxchg_ptr保证Java堆内存的原子性。
+                  而c/c++很妙的地方在于可以直接操作内存，可以动态对内存的解释做改变（改变指针类型）
+                  所以得到一小段空间并返回基地址（对象的起始地址），而这片空间直接使用oop来解释。
+                  如果：后续给对象中某个属性赋值，这将是一个很简单的寻址问题，已知基地址 + 对象头的常数偏移量 + 偏移量（类中保存了对象排布）= 属性的地址
+                */
+                //获取当前未分配内存空间的起始地址
               HeapWord* compare_to = *Universe::heap()->top_addr();
+              //起始地址加上目标类对象大小后，判断是否超过eden区的终止地址
               HeapWord* new_top = compare_to + obj_size;
               if (new_top <= *Universe::heap()->end_addr()) {
+                  // cas确保Java堆空间的原子性，并发的情况下失败了就重试。
+                  //如果没有超过则通过原子CAS的方式尝试分配，分配失败就一直尝试直到不能分配为止
+                  //cmpxchg_ptr函数是比较top_addr的地址和compare_to的地址是否一样，如果一样则将new_top的地址写入top_addr中并返回compare_to
+                  //如果不相等，即此时eden区分配了新对象，则返回top_addr新的地址，即返回结果不等于compare_to
                 if (Atomic::cmpxchg_ptr(new_top, Universe::heap()->top_addr(), compare_to) != compare_to) {
                   goto retry;
                 }
@@ -2233,38 +2279,59 @@ run:
               }
             }
 #endif
+            // 对象开辟成功，需要对其初始化，设置对象头
+            //如果分配成功
             if (result != NULL) {
               // Initialize object (if nonzero size and need) and then the header
+              //如果需要完成对象初始化
               if (need_zero ) {
                 HeapWord* to_zero = (HeapWord*) result + sizeof(oopDesc) / oopSize;
                 obj_size -= sizeof(oopDesc) / oopSize;
                 if (obj_size > 0 ) {
+                    //将目标对象的内存置0
                   memset(to_zero, 0, obj_size * HeapWordSize);
                 }
               }
+              //设置对象头
+              // 如果使用偏向锁的话，对象头的内容需要修改。
               if (UseBiasedLocking) {
+                  //如果使用偏向锁
                 result->set_mark(ik->prototype_header());
               } else {
                 result->set_mark(markOopDesc::prototype());
               }
+              //设置oop的相关属性
               result->set_klass_gap(0);
+               // 对象头部存在klass的指针。
               result->set_klass(k_entry);
               // Must prevent reordering of stores for object initialization
               // with stores that publish the new object.
+               // 发布，让其他线程可见
+               //执行内存屏障指令
               OrderAccess::storestore();
+              // 把对象地址放入到0号操作数栈中。
+              //将目标对象放到操作数栈的顶部
               SET_STACK_OBJECT(result, 0);
+              //更新PC指令计数器，即告诉解释器此条new指令执行完毕，new指令总共3个字节，计数器加3
               UPDATE_PC_AND_TOS_AND_CONTINUE(3, 1);
             }
           }
         }
         // Slow case allocation
+        //调用InterpreterRuntime::_new函数(在hotspot/src/share/vm/interpreter/interpretorRuntime.cpp中)执行慢速分配
+        // 上面仅仅是优化开辟，如果优化开辟的条件不通过，此时走漫长的开辟过程
         CALL_VM(InterpreterRuntime::_new(THREAD, METHOD->constants(), index),
                 handle_exception);
         // Must prevent reordering of stores for object initialization
         // with stores that publish the new object.
+        // 发布，让其他线程可见
         OrderAccess::storestore();
+        // 把对象地址放入到0号操作数栈中。
+        //分配的对象保存在vm_result中，将对象放到操作数栈的顶部
         SET_STACK_OBJECT(THREAD->vm_result(), 0);
+        //vm_result置空
         THREAD->set_vm_result(NULL);
+        //更新PC指令计数器
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, 1);
       }
       CASE(_anewarray): {
@@ -2361,6 +2428,7 @@ run:
           UPDATE_PC_AND_CONTINUE(3);
 
       CASE(_ldc_w):
+      // ldc字节码指令如何创建出String对象?
       CASE(_ldc):
         {
           u2 index;
@@ -2386,12 +2454,18 @@ run:
 
           case JVM_CONSTANT_String:
             {
+                // 从常量池的对象池中拿对象
               oop result = constants->resolved_references()->obj_at(index);
+              // 如果不存在
               if (result == NULL) {
+                  // 解析ldc，生成String对象。
                 CALL_VM(InterpreterRuntime::resolve_ldc(THREAD, (Bytecodes::Code) opcode), handle_exception);
+                // 线程变量是可以在线程中任意地方存取，并且线程安全。
+                // 这里把String对象添加到操作数栈中
                 SET_STACK_OBJECT(THREAD->vm_result(), 0);
                 THREAD->set_vm_result(NULL);
               } else {
+                  // 如果存在就直接添加到操作数栈中。
                 VERIFY_OOP(result);
                 SET_STACK_OBJECT(result, 0);
               }

@@ -79,7 +79,8 @@ build_javafx() {
     cd "$JAVAFX_BUILD_DIR"
     #./gradlew sdk
     # JDK 8 now includes jfr, but javafx 8 refers to jrockit so won't build
-    ./gradlew --stacktrace -PCOMPILE_JFR=false -PCOMPILE_WEBKIT=true -PCOMPILE_MEDIA=true sdk
+    # ./gradlew --stacktrace -PCOMPILE_JFR=false -PCOMPILE_WEBKIT=true -PCOMPILE_MEDIA=true sdk
+    ./gradlew --stacktrace -PCOMPILE_JFR=false -PCOMPILE_WEBKIT=false -PCOMPILE_MEDIA=false openZipMac
 }
 
 build_javafx_demos() {
@@ -154,10 +155,10 @@ set -x
 
 if true ; then
 save_jdk "$BUILD_JDK_HOME" "$NEW_JDK_DIR"
-clone_javafx
-revert_javafx
-patch_javafx "$PATCH_DIR/javafx8-pass1.patch"
-clean_javafx
+#clone_javafx
+#revert_javafx
+#patch_javafx "$PATCH_DIR/javafx8-pass1.patch"
+# clean_javafx
 build_javafx
 #test_javafx
 #build_javafx_demos

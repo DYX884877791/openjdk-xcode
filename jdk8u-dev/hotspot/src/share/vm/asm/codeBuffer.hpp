@@ -76,23 +76,36 @@ public:
 // This class represents a stream of code and associated relocations.
 // There are a few in each CodeBuffer.
 // They are filled concurrently, and concatenated at the end.
+// CodeSection表示一个用来保存汇编代码和其关联的重定向表的内存区，CodeBuffer中有几个CodeSection，他们可以被并发的填充且尾部是连起来的。CodeSection同样定义在codeBuffer.hpp中
 class CodeSection VALUE_OBJ_CLASS_SPEC {
   friend class CodeBuffer;
  public:
   typedef int csize_t;  // code size type; would be size_t except for history
 
  private:
+    // 汇编指令的开始地址
   address     _start;           // first byte of contents (instructions)
+    // 用户打标的一个地址
   address     _mark;            // user mark, usually an instruction beginning
+    // 汇编指令的结束地址
   address     _end;             // current end address
+    // 允许填充汇编指令的地址下限
   address     _limit;           // last possible (allocated) end address
+    // 重定向信息的起始地址
   relocInfo*  _locs_start;      // first byte of relocation information
+    // 重定向信息的结束地址
   relocInfo*  _locs_end;        // first byte after relocation information
+    // 保存重定向信息的内存的下限
   relocInfo*  _locs_limit;      // first byte after relocation information buf
+    // 上一次重定向的地址
   address     _locs_point;      // last relocated position (grows upward)
+    // 是否自己分配一个locs
   bool        _locs_own;        // did I allocate the locs myself?
+    // 是否冻结了
   bool        _frozen;          // no more expansion of this section
+    // 标识所属的section的类型
   char        _index;           // my section number (SECT_INST, etc.)
+    // 关联的外层的CodeBuffer
   CodeBuffer* _outer;           // enclosing CodeBuffer
 
   // (Note:  _locs_point used to be called _last_reloc_offset.)
@@ -112,11 +125,13 @@ class CodeSection VALUE_OBJ_CLASS_SPEC {
     debug_only(_outer = (CodeBuffer*)badAddress);
   }
 
+  // 初始化_consts section调用
   void initialize_outer(CodeBuffer* outer, int index) {
     _outer = outer;
     _index = index;
   }
 
+  // 初始化_insts section调用
   void initialize(address start, csize_t size = 0) {
     assert(_start == NULL, "only one init step, please");
     _start         = start;
@@ -127,6 +142,15 @@ class CodeSection VALUE_OBJ_CLASS_SPEC {
     _locs_point    = start;
   }
 
+  /**
+   * CodeSection定义的方法可以分为以下几种
+   *
+   *  读写属性相关的，如start，end，set_end，locs_start，locs_end，index，has_locs等
+   *
+   *  初始化相关的，如initialize_outer，initialize，initialize_locs，initialize_locs_from，initialize_shared_locs等
+   *
+   *  Code emission时用来改写_end的方法，如emit_int8，emit_int16，emit_float，emit_address等
+   */
   void initialize_locs(int locs_capacity);
   void expand_locs(int new_capacity);
   void initialize_locs_from(const CodeSection* source_cs);

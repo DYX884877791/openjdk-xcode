@@ -33,12 +33,19 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.Set;
 
+/**
+ * ExpiringCache是io包下包内可见的一个基于LinkedHashMap实现的支持自动过期删除的缓存实现
+ */
 class ExpiringCache {
+    //元素的过期时间
     private long millisUntilExpiration;
+    //保存元素的Map
     private Map<String,Entry> map;
     // Clear out old entries every few queries
+    //queryCount表示读写计数，get和put时都会加1，如果超过queryOverflow则会清除掉所有的过期Entry
     private int queryCount;
     private int queryOverflow = 300;
+    //最大元素个数
     private int MAX_ENTRIES = 200;
 
     static class Entry {
@@ -65,16 +72,25 @@ class ExpiringCache {
     ExpiringCache(long millisUntilExpiration) {
         this.millisUntilExpiration = millisUntilExpiration;
         map = new LinkedHashMap<String,Entry>() {
+            /**
+             * 重写了removeEldestEntry方法，该方法是在新插入一个元素时调用的，如果返回true，则会将LinkHashMap中维护的双向链表的链表头节点对应的key从Map中移除。
+             * 因为是采用默认的构造函数，即双向链表中维护的是元素插入顺序而非访问顺序，所以当元素个数超过200时会移除第一个插入的元素
+             */
             protected boolean removeEldestEntry(Map.Entry<String,Entry> eldest) {
               return size() > MAX_ENTRIES;
             }
           };
     }
 
+    /**
+     * 其核心就是插入键值对的put方法和根据key值获取value的get方法
+     */
     synchronized String get(String key) {
         if (++queryCount >= queryOverflow) {
+            //queryCount加1后，如果超过queryOverflow，则清理掉所有所有过期Entry
             cleanup();
         }
+        //判断是否存在未过期的相同key的Entry
         Entry entry = entryFor(key);
         if (entry != null) {
             return entry.val();
@@ -84,13 +100,17 @@ class ExpiringCache {
 
     synchronized void put(String key, String val) {
         if (++queryCount >= queryOverflow) {
+            //queryCount加1后，如果超过queryOverflow，则清理掉所有所有过期Entry
             cleanup();
         }
+        //查找未过期的Entry
         Entry entry = entryFor(key);
         if (entry != null) {
+            //如果存在则更新修改时间
             entry.setTimestamp(System.currentTimeMillis());
             entry.setVal(val);
         } else {
+            //不存在则插入一个新的
             map.put(key, new Entry(System.currentTimeMillis(), val));
         }
     }

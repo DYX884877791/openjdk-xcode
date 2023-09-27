@@ -205,11 +205,11 @@ Symbol* SymbolTable::lookup(int index, const char* name,
   int count = 0;
   for (HashtableEntry<Symbol*, mtSymbol>* e = bucket(index); e != NULL; e = e->next()) {
     count++;  // count all entries in this bucket, not just ones with same hash
-    if (e->hash() == hash) {
+    if (e->hash() == hash) { // 先根据hash
       Symbol* sym = e->literal();
-      if (sym->equals(name, len)) {
+      if (sym->equals(name, len)) { //判断值是否相等
         // something is referencing this symbol now.
-        sym->increment_refcount();
+        sym->increment_refcount(); // 引用数+1
         return sym;
       }
     }
@@ -299,6 +299,7 @@ Symbol* SymbolTable::lookup(const Symbol* sym, int begin, int end, TRAPS) {
 
 Symbol* SymbolTable::lookup_only(const char* name, int len,
                                    unsigned int& hash) {
+    slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::lookup_only函数，查找[%s]的Symbol...", name);
   hash = hash_symbol(name, len);
   int index = the_table()->hash_to_index(hash);
 
@@ -366,6 +367,7 @@ void SymbolTable::add(ClassLoaderData* loader_data, constantPoolHandle cp,
   MutexLocker ml(SymbolTable_lock, THREAD);
 
   SymbolTable* table = the_table();
+    // 调用basic_add
   bool added = table->basic_add(loader_data, cp, names_count, names, lengths,
                                 cp_indices, hashValues, CHECK);
   if (!added) {
@@ -379,8 +381,11 @@ void SymbolTable::add(ClassLoaderData* loader_data, constantPoolHandle cp,
   }
 }
 
+// 符号表维护着Java类/字符等信息
 Symbol* SymbolTable::new_permanent_symbol(const char* name, TRAPS) {
+    slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::new_permanent_symbol函数...");
   unsigned int hash;
+    //从符号表中查找符号应用，SymbolTable是HashTable
   Symbol* result = SymbolTable::lookup_only((char*)name, (int)strlen(name), hash);
   if (result != NULL) {
     return result;
@@ -388,6 +393,7 @@ Symbol* SymbolTable::new_permanent_symbol(const char* name, TRAPS) {
   // Grab SymbolTable_lock first.
   MutexLocker ml(SymbolTable_lock, THREAD);
 
+    //如果不存在则创建hash索引，并放到表中
   SymbolTable* table = the_table();
   int index = table->hash_to_index(hash);
   return table->basic_add(index, (u1*)name, (int)strlen(name), hash, false, THREAD);
@@ -395,6 +401,7 @@ Symbol* SymbolTable::new_permanent_symbol(const char* name, TRAPS) {
 
 Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
                                unsigned int hashValue_arg, bool c_heap, TRAPS) {
+    slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::basic_add函数...");
   assert(!Universe::heap()->is_in_reserved(name),
          "proposed name of symbol must be stable");
 
@@ -437,8 +444,9 @@ Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
   return sym;
 }
 
+// 每个类加载器都会对应一个ClassLoaderData的数据结构，里面会存譬如具体的类加载器对象，加载的klass，管理内存的metaspace等
 // This version of basic_add adds symbols in batch from the constant pool
-// parsing.
+// parsing.  解析class文件的时候调用这里
 bool SymbolTable::basic_add(ClassLoaderData* loader_data, constantPoolHandle cp,
                             int names_count,
                             const char** names, int* lengths,
@@ -447,6 +455,7 @@ bool SymbolTable::basic_add(ClassLoaderData* loader_data, constantPoolHandle cp,
 
   // Check symbol names are not too long.  If any are too long, don't add any.
   for (int i = 0; i< names_count; i++) {
+      // 不能大于 Symbol.max_length
     if (lengths[i] > Symbol::max_length()) {
       THROW_MSG_0(vmSymbols::java_lang_InternalError(),
                   "name is too long to represent");
@@ -456,6 +465,7 @@ bool SymbolTable::basic_add(ClassLoaderData* loader_data, constantPoolHandle cp,
   // Cannot hit a safepoint in this function because the "this" pointer can move.
   No_Safepoint_Verifier nsv;
 
+    // 本次解析的string常量数量
   for (int i=0; i<names_count; i++) {
     // Check if the symbol table has been rehashed, if so, need to recalculate
     // the hash value.
@@ -467,16 +477,18 @@ bool SymbolTable::basic_add(ClassLoaderData* loader_data, constantPoolHandle cp,
     }
     // Since look-up was done lock-free, we need to check if another
     // thread beat us in the race to insert the symbol.
+      // 索引位置
     int index = hash_to_index(hashValue);
+      // 常量池是否存在
     Symbol* test = lookup(index, names[i], lengths[i], hashValue);
     if (test != NULL) {
       // A race occurred and another thread introduced the symbol, this one
       // will be dropped and collected. Use test instead.
       cp->symbol_at_put(cp_indices[i], test);
       assert(test->refcount() != 0, "lookup should have incremented the count");
-    } else {
+    } else { // 不存在 Symbol
       // Create a new symbol.  The null class loader is never unloaded so these
-      // are allocated specially in a permanent arena.
+      // are allocated specially in a permanent arena. 创建1个新的symbol,空的classLoader永远不会卸载
       bool c_heap = !loader_data->is_the_null_class_loader_data();
       Symbol* sym = allocate_symbol((const u1*)names[i], lengths[i], c_heap, CHECK_(false));
       assert(sym->equals(names[i], lengths[i]), "symbol must be properly initialized");  // why wouldn't it be???
@@ -746,11 +758,13 @@ oop StringTable::lookup(jchar* name, int len) {
 
 oop StringTable::intern(Handle string_or_null, jchar* name,
                         int len, TRAPS) {
+    // StringTable就是一张hash表。所以这里计算下标。
   unsigned int hashValue = hash_string(name, len);
   int index = the_table()->hash_to_index(hashValue);
   oop found_string = the_table()->lookup(index, name, len, hashValue);
 
   // Found
+    // 命中缓存，直接返回
   if (found_string != NULL) {
     ensure_string_alive(found_string);
     return found_string;
@@ -765,6 +779,8 @@ oop StringTable::intern(Handle string_or_null, jchar* name,
   if (!string_or_null.is_null()) {
     string = string_or_null;
   } else {
+      // 因为没有命中缓存，所以需要创建一个String对象，并且添加到StringTable中
+      // 在Java堆创建一个String对象。
     string = java_lang_String::create_from_unicode(name, len, CHECK_NULL);
   }
 
@@ -783,6 +799,7 @@ oop StringTable::intern(Handle string_or_null, jchar* name,
   {
     MutexLocker ml(StringTable_lock, THREAD);
     // Otherwise, add to symbol to table
+      // 把创建出来的String对象，添加到StringTable中。
     added_or_found = the_table()->basic_add(index, string, name, len,
                                   hashValue, CHECK_NULL);
   }
@@ -809,6 +826,7 @@ oop StringTable::intern(oop string, TRAPS)
   ResourceMark rm(THREAD);
   int length;
   Handle h_string (THREAD, string);
+    // 把utf8字符串转换成unicode编码。
   jchar* chars = java_lang_String::as_unicode_string(string, length, CHECK_NULL);
   oop result = intern(h_string, chars, length, CHECK_NULL);
   return result;

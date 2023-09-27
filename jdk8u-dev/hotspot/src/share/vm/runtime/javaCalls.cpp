@@ -328,7 +328,7 @@ void JavaCalls::call(JavaValue* result, methodHandle method, JavaCallArguments* 
 }
 
 void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArguments* args, TRAPS) {
-  slog_trace("JavaCalls::call_helper函数被调用了...");
+//  slog_debug("JavaCalls::call_helper函数被调用了...");
   // During dumping, Java execution environment is not fully initialized. Also, Java execution
   // may cause undesirable side-effects in the class metadata.
   assert(!DumpSharedSpaces, "must not execute Java bytecodes when dumping");
@@ -374,7 +374,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
 
 
   // 检查目标方法是否“首次执行前就必须被编译”，是的话调用JIT编译器去编译目标方法
-  // 对于main()方法来说，如果配置了-Xint选项，则是以解释模式执行的，所以并不会走上面的compile_method()函数的逻辑。
+  // 对于main()方法来说，如果配置了-Xint选项，则是以解释模式执行的，所以并不会走这里的compile_method()函数的逻辑。
   assert(!thread->is_Compiler_thread(), "cannot compile from the compiler");
   if (CompilationPolicy::must_be_compiled(method)) {
     CompileBroker::compile_method(method, InvocationEntryBci,
@@ -392,7 +392,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
   // 这个参数会做为实参传递给StubRoutines::call_stub()函数指针指向的“函数”
   // EntryPoint例程:是从当前要执行的Java方法中获取的： hotspot/src/share/vm/oops/method.hpp
   address entry_point = method->from_interpreted_entry();
-  slog_trace("获取目标方法的解释模式入口地址=>%p", entry_point);
+  slog_trace("获取目标方法[%s]的解释模式入口地址为[%p]", method->name_and_sig_as_C_string(), entry_point);
   if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
     entry_point = method->interpreter_entry();
   }
@@ -467,6 +467,7 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
         result_val_address,          // see NOTE above (compiler problem) result_val_address 函数返回值地址；
         result_type,                 // 函数返回类型；
         method(),                    // 当前要执行的方法。通过此参数可以获取到Java方法所有的元数据信息，包括最重要的字节码信息，这样就可以根据字节码信息解释执行这个方法了；
+        // 用于后续帧开辟, entry_point 会从 method() 中获取出 Java Method 的第一个字节码命令(Opcode),也就是整个 Java Method 的调用入口
         entry_point,                 // HotSpot每次在调用Java函数时，必然会调用CallStub函数指针，这个函数指针的值取自_call_stub_entry，HotSpot通过_call_stub_entry指向被调用函数地址。在调用函数之前，必须要先经过entry_point，HotSpot实际是通过entry_point从method()对象上拿到Java方法对应的第1个字节码命令，这也是整个函数的调用入口；
         args->parameters(),          // 描述Java函数的入参信息；
         args->size_of_parameters(),  // 参数需要占用的，以字为单位的内存大小

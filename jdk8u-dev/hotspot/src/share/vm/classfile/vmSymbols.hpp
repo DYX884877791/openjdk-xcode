@@ -1167,12 +1167,31 @@ class vmSymbols: AllStatic {
   enum SID {
     NO_SID = 0,
 
+    /**
+     * 学到了学到了，宏函数里面也可以调用宏函数
+     *
+     * 下面的这一段宏展开变为：
+     *
+     * java_lang_System_enum,
+     * java_lang_Object_enum,
+     * java_lang_Class_enum,
+     * java_lang_String_enum,
+     * ...
+     */
     #define VM_SYMBOL_ENUM(name, string) VM_SYMBOL_ENUM_NAME(name),
     VM_SYMBOLS_DO(VM_SYMBOL_ENUM, VM_ALIAS_IGNORE)
     #undef VM_SYMBOL_ENUM
 
     SID_LIMIT,
 
+      /**
+       * 下面的这一段宏展开变为：
+       *
+       * NOT_LP64(  intptr_signature_enum = int_signature_def,  )
+       * LP64_ONLY( intptr_signature_enum = long_signature_def, )
+       * register_method_signature_enum = object_void_signature_def,
+       * ...
+       */
     #define VM_ALIAS_ENUM(name, def) VM_SYMBOL_ENUM_NAME(name) = VM_SYMBOL_ENUM_NAME(def),
     VM_SYMBOLS_DO(VM_SYMBOL_IGNORE, VM_ALIAS_ENUM)
     #undef VM_ALIAS_ENUM
@@ -1184,7 +1203,7 @@ class vmSymbols: AllStatic {
   };
 
  private:
-  // The symbol array
+  // The symbol array，哪里初始化这个变量的呢?
   static Symbol* _symbols[];
 
   // Field signatures indexed by BasicType.
@@ -1194,6 +1213,26 @@ class vmSymbols: AllStatic {
   // Initialization
   static void initialize(TRAPS);
   // Accessing
+    /**
+     * 下面的这一段宏展开变为：
+     *
+     * static Symbol* java_lang_System() {
+     *    return _symbols[java_lang_System_enum];
+     * }
+     *
+     * static Symbol* java_lang_Object() {
+     *    return _symbols[java_lang_Object_enum];
+     * }
+     *
+     * static Symbol* java_lang_Class() {
+     *    return _symbols[java_lang_Class_enum];
+     * }
+     *
+     * static Symbol* java_lang_String() {
+     *    return _symbols[java_lang_String_enum];
+     * }
+     * ...
+     */
   #define VM_SYMBOL_DECLARE(name, ignore)                 \
     static Symbol* name() {                               \
       return _symbols[VM_SYMBOL_ENUM_NAME(name)];         \

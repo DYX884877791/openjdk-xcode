@@ -473,6 +473,29 @@ extern "C" void breakpoint() {
 // signal support
 
 debug_only(static bool signal_sets_initialized = false);
+/**
+ * java里信号掩码的集合: 在下面的signal_sets_init函数中会对各信号集进行初始化
+
+信号集：
+unblocked_sigs
+其中包含的信号：
+--SIGILL
+--SIGSEGV
+--SIGBUS
+--SIGFPE
+--SR_signum
+--SHUTDOWN1_SIGNAL(SIGHUP)
+--SHUTDOWN2_SIGNAL(SIGINT)
+--SHUTDOWN3_SIGNAL(SIGTERM)
+
+vm_sigs
+--BREAK_SIGNAL (SIGQUIT)
+
+allowdebug_blocked_sigs
+--SHUTDOWN1_SIGNAL(SIGHUP)
+--SHUTDOWN2_SIGNAL(SIGINT)
+--SHUTDOWN3_SIGNAL(SIGTERM)
+ */
 static sigset_t unblocked_sigs, vm_sigs, allowdebug_blocked_sigs;
 
 bool os::Linux::is_sig_ignored(int sig) {
@@ -486,6 +509,9 @@ bool os::Linux::is_sig_ignored(int sig) {
            return false;
 }
 
+/**
+ * 信号集初始化...
+ */
 void os::Linux::signal_sets_init() {
   // Should also have an assertion stating we are still single-threaded.
   assert(!signal_sets_initialized, "Already initialized");
@@ -559,6 +585,7 @@ void os::Linux::hotspot_sigmask(Thread* thread) {
 
   //Save caller's signal mask before setting VM signal mask
   sigset_t caller_sigmask;
+  // 在多线程的应用中，每个线程可以通过调用pthread_signmask()设置本线程的信号掩码，可以设置阻塞的信号，但信号SIGKILL/SIGSTOP是不能被设置成阻塞的。
   pthread_sigmask(SIG_BLOCK, NULL, &caller_sigmask);
 
   OSThread* osthread = thread->osthread();
@@ -797,36 +824,46 @@ static void *java_start(Thread *thread) {
   static int counter = 0;
     // 线程ID
   int pid = os::current_process_id();
+    //填充cpu缓存行，提高线程运行效率
   alloca(((pid ^ counter++) & 7) * 128);
 
     // 设置线程
+    //设置当前C++的线程对象，放到栈顶
   ThreadLocalStorage::set_thread(thread);
 
   OSThread* osthread = thread->osthread();
   Monitor* sync = osthread->startThread_lock();
 
   // non floating stack LinuxThreads needs extra check, see above
+    //检查当前能否安全的创建线程
   if (!_thread_safety_check(thread)) {
     // notify parent thread
     MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
+      //如果失败则设置状态为ZOMBIE（僵尸进程）
     osthread->set_state(ZOMBIE);
     sync->notify_all();
     return NULL;
   }
 
   // thread_id is kernel thread id (similar to Solaris LWP id)
+    //为操作系统线程对象设置pid，具体函数实现在hotspot/src/os/linux/vm/osThread_linux.hpp的set_thread_id函数中
+    //将原生线程的ID存储到OSThread中。因为Linux下所有操作线程的API都需要传入线程ID。
+    // 这里设置了内核线程给出的id，通过syscall在内核中获取
   osthread->set_thread_id(os::Linux::gettid());
 
   if (UseNUMA) {
+      //NUMA架构下设置lgrp_id
     int lgrp_id = os::numa_get_group_id();
     if (lgrp_id != -1) {
       thread->set_lgrp_id(lgrp_id);
     }
   }
   // initialize signal mask for this thread
+    //设置线程的信号掩码，用户创建的线程屏蔽掉BREAK_SIGNAL信号
   os::Linux::hotspot_sigmask(thread);
 
   // initialize floating point control register
+    //初始化浮点控制寄存器
   os::Linux::init_thread_fpu_state();
 
   // handshaking with parent thread
@@ -842,6 +879,7 @@ static void *java_start(Thread *thread) {
       // 循环，初始化状态，则一致等待 wait
     // wait until os::start_thread()
     while (osthread->get_state() == INITIALIZED) {
+        //等待直到调用了os::start_thread()
         // 这里被唤醒的时机是该类中pd_start_thread方法的 notify()那一行
       sync->wait(Mutex::_no_safepoint_check_flag);
     }
@@ -871,33 +909,53 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
   }
 
   // set the correct thread state
+    //设置线程类型
   osthread->set_thread_type(thr_type);
 
   // Initial state is ALLOCATED but not INITIALIZED
+    //设置线程状态
   osthread->set_state(ALLOCATED);
 
   // 绑定
+    //关联操作系统线程对象到C++线程对象上
   thread->set_osthread(osthread);
 
   // init thread attributes
+  // 初始化线程属性，POSIX线程库的那一套东西pthread
   pthread_attr_t attr;
   pthread_attr_init(&attr);
+    //设置线程属性为detached
+    // 1. PTHREAD_CREATE_JOINABLE：对于该状态下的线程，主线程需要用 join() 函数来等待子线程执行完毕获得返回值，并释放资源
+    // 2. PTHREAD_CREATE_DETACHED：对于该状态下的线程，不需要主线程等待，会自动释放资源；
+    // PTHREAD_CREATE_JOINABLE 的线程可以转换成 PTHREAD_CREATE_DETACHED 的线程，但不能反向转换
   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
   // stack size
+    //支持环境变量配置线程栈大小
+    // 对于Java的用户线程来说规则如下：
+    //
+    // 1. 64位Linux操作系统下，没有指定栈空间大小，默认为1M，参考代码：size_t os::Linux::default_stack_size(os::ThreadType thr_type)
+    // 2. 32位Linux操作系统下，没有指定栈空间大小，默认为512K，参考代码：size_t os::Linux::default_stack_size(os::ThreadType thr_type)
+    // 3. 如果指定-Xss参数，用指定的，参考代码：stack_size_at_create()
+    // 4. 64位Linux操作系统允许的最小栈空间为64K，32位最小为48K，参考代码：size_t os::Linux::min_stack_allowed
+    // 5. 最后的栈空间大小不会低于系统允许的最小值
   if (os::Linux::supports_variable_stack_size()) {
     // calculate stack size if it's not specified by caller
+      //参数中stack_size如果是0 则使用默认栈大小
     if (stack_size == 0) {
       stack_size = os::Linux::default_stack_size(thr_type);
 
+        //根据线程类型计算线程栈空间大小
       switch (thr_type) {
       case os::java_thread:
         // Java threads use ThreadStackSize which default value can be
         // changed with the flag -Xss
+          //java线程，注意这里就是取的-Xss参数的值
         assert (JavaThread::stack_size_at_create() > 0, "this should be set");
         stack_size = JavaThread::stack_size_at_create();
         break;
       case os::compiler_thread:
+          //JIT编译线程
         if (CompilerThreadStackSize > 0) {
           stack_size = (size_t)(CompilerThreadStackSize * K);
           break;
@@ -907,24 +965,29 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
       case os::pgc_thread:
       case os::cgc_thread:
       case os::watcher_thread:
+          //虚拟机线程
         if (VMThreadStackSize > 0) stack_size = (size_t)(VMThreadStackSize * K);
         break;
       }
     }
 
+      //确定最终的线程栈大小，
     stack_size = MAX2(stack_size, os::Linux::min_stack_allowed);
     pthread_attr_setstacksize(&attr, stack_size);
   } else {
     // let pthread_create() pick the default value.
+      //由pthread的默认值决定线程栈大小
   }
 
   // glibc guard page
+    //设置保护区
   pthread_attr_setguardsize(&attr, os::Linux::default_guard_size(thr_type));
 
   ThreadState state;
 
   {
     // Serialize thread creation if we are running with fixed stack LinuxThreads
+      //如果使用固定堆栈运行Linux线程，则串行化创建线程
     bool lock = os::Linux::is_LinuxThreads() && !os::Linux::is_floating_stack();
     if (lock) {
       os::Linux::createThread_lock()->lock_without_safepoint_check();
@@ -934,11 +997,15 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     // pthread_create 为 linux api，用来创建线程。
     //  通过文档(man pthread_create 来进行查询文档)我们可以了解，当 pthread_create 函数执行创建完线程之后会调用第三个参数传递过去的回调函数
     // 在这里就是 java_start 函数
+    // 位于hotspot/src/os/linux/vm/os_linux.cpp
+    // 这里第4个参数就是C++层面创建的Java线程
     int ret = pthread_create(&tid, &attr, (void* (*)(void*)) java_start, thread);
 
+      //创建完成后，销毁线程属性
     pthread_attr_destroy(&attr);
 
     if (ret != 0) {
+        //创建失败打印异常，销毁资源
       if (PrintMiscellaneous && (Verbose || WizardMode)) {
         perror("pthread_create()");
       }
@@ -950,10 +1017,12 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     }
 
     // Store pthread info into the OSThread
+      //创建成功设置操作系统线程信息
     osthread->set_pthread_id(tid);
 
     // Wait until child thread is either initialized or aborted
     {
+        //操作系统线程挂起等待线程初始化完成或者中止
       Monitor* sync_with_child = osthread->startThread_lock();
       MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
       while ((state = osthread->get_state()) == ALLOCATED) {
@@ -962,6 +1031,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     }
 
     if (lock) {
+        //解锁
       os::Linux::createThread_lock()->unlock();
     }
   }
@@ -2550,6 +2620,7 @@ class Semaphore : public StackObj {
     bool trywait();
     bool timedwait(unsigned int sec, int nsec);
   private:
+    // 信号量，参照man 3 sem_init
     sem_t _semaphore;
 };
 
@@ -2617,6 +2688,7 @@ void* os::signal(int signal_number, void* handler) {
   sigAct.sa_flags   = SA_RESTART|SA_SIGINFO;
   sigAct.sa_handler = CAST_TO_FN_PTR(sa_handler_t, handler);
 
+  // 使用sigaction函数注册信号处理函数...
   if (sigaction(signal_number, &sigAct, &oldSigAct)) {
     // -1 means registration failed
     return (void *)-1;
@@ -2678,6 +2750,7 @@ static int check_pending_signals(bool wait) {
     do {
       thread->set_suspend_equivalent();
       // cleared by handle_special_suspend_equivalent_condition() or java_suspend_self()
+      // 等待一个信号量，
       ::sem_wait(&sig_sem);
 
       // were we externally suspended while we were waiting?
@@ -4541,6 +4614,7 @@ void os::interrupt(Thread* thread) {
   assert(Thread::current() == thread || Threads_lock->owned_by_self(),
     "possibility of dangling Thread pointer");
 
+    //获取系统native线程对象
   OSThread* osthread = thread->osthread();
 
   if (!osthread->interrupted()) {
@@ -4549,7 +4623,9 @@ void os::interrupt(Thread* thread) {
     // More than one thread can get here with the same value of osthread,
     // resulting in multiple notifications.  We do, however, want the store
     // to interrupted() to be visible to other threads before we execute unpark().
+      //内存屏障，使osthread的interrupted状态对其它线程立即可见
     OrderAccess::fence();
+      //_SleepEvent用于Thread.sleep,线程调用了sleep方法，则通过unpark唤醒
     ParkEvent * const slp = thread->_SleepEvent ;
       //唤醒在_SleepEvent上等待的线程，_SleepEvent用于实现线程sleep
     if (slp != NULL) slp->unpark() ;
@@ -4557,9 +4633,11 @@ void os::interrupt(Thread* thread) {
 
   // For JSR166. Unpark even if interrupt status already was set
     //唤醒在parker上等待的线程，parker用于实现Unsafe的park和unpark方法
+    //parker用于concurrent相关的锁，此处同样通过unpark唤醒
   if (thread->is_Java_thread())
     ((JavaThread*)thread)->parker()->unpark();
 
+    //Object.wait()唤醒
   ParkEvent * ev = thread->_ParkEvent ;
     //唤醒在_ParkEvent上等待的线程，_ParkEvent用于实现synchronized关键字
   if (ev != NULL) ev->unpark() ;
@@ -4782,6 +4860,7 @@ void os::Linux::set_signal_handler(int sig, bool set_installed) {
 // handle in order to support Java-level exception handling.
 
 void os::Linux::install_signal_handlers() {
+    // 信号处理函数只用设置一次...
   if (!signal_handlers_are_installed) {
     signal_handlers_are_installed = true;
 
@@ -4804,6 +4883,13 @@ void os::Linux::install_signal_handlers() {
       (*begin_signal_setting)();
     }
 
+    // 可在Linux系统中使用kill -l命令查看有哪些信号...
+    // 对SIGSEGV、SIGPIPE、SIGBUS、SIGILL、SIGFPE、SIGXFSZ信号设置处理函数
+    // 在signalhandler 调用了JVM_handler_linux_signal 而该函数在不同的架构下是不一样的，x86架构下的定义在os_linux_x86.cpp中。
+    /**
+     * 但是对信号SIGQUIT源码中并没有看到处理函数，实际上当java虚拟机启动Signal Dispatcher 线程的时候，
+     * 程序里调用了os::signal(SIGNBREAK,os::user_handler()) （os.cpp os::signal_init()）(该线程在打开 -Xrs的时候是不启动的)
+     */
     set_signal_handler(SIGSEGV, true);
     set_signal_handler(SIGPIPE, true);
     set_signal_handler(SIGBUS, true);
@@ -5184,6 +5270,7 @@ jint os::init_2(void)
   }
 
   Linux::signal_sets_init();
+  // 设置信号处理函数
   Linux::install_signal_handlers();
 
   // Check minimum allowable stack size for thread creation and to initialize
@@ -6029,11 +6116,14 @@ static struct timespec* compute_abstime(timespec* abstime, jlong millis) {
 int os::PlatformEvent::TryPark() {
   for (;;) {
     const int v = _Event ;
+      //_Event只能是0或者1
     guarantee ((v == 0) || (v == 1), "invariant") ;
+      //将_Event原子的置为0
     if (Atomic::cmpxchg (0, &_Event, v) == v) return v  ;
   }
 }
 
+// park用于将某个线程变成阻塞状态
 void os::PlatformEvent::park() {       // AKA "down()"
   // Invariant: Only the thread associated with the Event/PlatformEvent
   // may call park().
@@ -6041,29 +6131,39 @@ void os::PlatformEvent::park() {       // AKA "down()"
   int v ;
   for (;;) {
       v = _Event ;
+      //将其原子的减1
       if (Atomic::cmpxchg (v-1, &_Event, v) == v) break ;
   }
   guarantee (v >= 0, "invariant") ;
   if (v == 0) {
      // Do this the hard way by blocking ...
+      //获取锁
      int status = pthread_mutex_lock(_mutex);
      assert_status(status == 0, status, "mutex_lock");
      guarantee (_nParked == 0, "invariant") ;
+      //已park线程计数加1
      ++ _nParked ;
+      //_Event已经原子的减1，变成-1了
      while (_Event < 0) {
+         //无期限等待
         status = pthread_cond_wait(_cond, _mutex);
         // for some reason, under 2.7 lwp_cond_wait() may return ETIME ...
         // Treat this the same as if the wait was interrupted
         if (status == ETIME) { status = EINTR; }
         assert_status(status == 0 || status == EINTR, status, "cond_wait");
      }
+      //被唤醒了
+      //计数减1
      -- _nParked ;
 
+      //重置成0
     _Event = 0 ;
+      //释放锁
      status = pthread_mutex_unlock(_mutex);
      assert_status(status == 0, status, "mutex_unlock");
     // Paranoia to ensure our locked and lock-free paths interact
     // correctly with each other.
+      //让修改立即生效
     OrderAccess::fence();
   }
   guarantee (_Event >= 0, "invariant") ;
@@ -6075,6 +6175,7 @@ int os::PlatformEvent::park(jlong millis) {
   int v ;
   for (;;) {
       v = _Event ;
+      //将其原子的减1
       if (Atomic::cmpxchg (v-1, &_Event, v) == v) break ;
   }
   guarantee (v >= 0, "invariant") ;
@@ -6082,13 +6183,16 @@ int os::PlatformEvent::park(jlong millis) {
 
   // We do this the hard way, by blocking the thread.
   // Consider enforcing a minimum timeout value.
+    //计算等待的时间
   struct timespec abst;
   compute_abstime(&abst, millis);
 
   int ret = OS_TIMEOUT;
+    //获取锁
   int status = pthread_mutex_lock(_mutex);
   assert_status(status == 0, status, "mutex_lock");
   guarantee (_nParked == 0, "invariant") ;
+    //计数加1
   ++_nParked ;
 
   // Object.wait(timo) will return because of
@@ -6107,15 +6211,20 @@ int os::PlatformEvent::park(jlong millis) {
   // In that case, we should propagate the notify to another waiter.
 
   while (_Event < 0) {
+      //让线程休眠，底层是pthread_cond_timedwait
     status = os::Linux::safe_cond_timedwait(_cond, _mutex, &abst);
+      //WorkAroundNPTLTimedWaitHang的值默认是1
     if (status != 0 && WorkAroundNPTLTimedWaitHang) {
       pthread_cond_destroy (_cond);
       pthread_cond_init (_cond, os::Linux::condAttr()) ;
     }
+      //被中断后就返回EINTR，正常被唤醒就返回0，另外两个是等待超时
     assert_status(status == 0 || status == EINTR ||
                   status == ETIME || status == ETIMEDOUT,
                   status, "cond_timedwait");
+      //FilterSpuriousWakeups默认是true
     if (!FilterSpuriousWakeups) break ;                 // previous semantics
+      //如果超时了则退出循环
     if (status == ETIME || status == ETIMEDOUT) break ;
     // We consume and ignore EINTR and spurious wakeups.
   }
@@ -6124,15 +6233,18 @@ int os::PlatformEvent::park(jlong millis) {
      ret = OS_OK;
   }
   _Event = 0 ;
+    //解锁
   status = pthread_mutex_unlock(_mutex);
   assert_status(status == 0, status, "mutex_unlock");
   assert (_nParked == 0, "invariant") ;
   // Paranoia to ensure our locked and lock-free paths interact
   // correctly with each other.
+    //让修改立即生效
   OrderAccess::fence();
   return ret;
 }
 
+// unpark用于唤醒某个被park方法阻塞的线程
 void os::PlatformEvent::unpark() {
   // Transitions for _Event:
   //    0 :=> 1
@@ -6148,21 +6260,26 @@ void os::PlatformEvent::unpark() {
   // thread to block. This has the benefit of forcing a spurious return
   // from the first park() call after an unpark() call which will help
   // shake out uses of park() and unpark() without condition variables.
-
+    //将其原子的置为1，如果原来就是1，说明已经unpark过了，直接返回
   if (Atomic::xchg(1, &_Event) >= 0) return;
 
   // Wait for the thread associated with the event to vacate
+    //获取锁
   int status = pthread_mutex_lock(_mutex);
   assert_status(status == 0, status, "mutex_lock");
   int AnyWaiters = _nParked;
   assert(AnyWaiters == 0 || AnyWaiters == 1, "invariant");
+    //WorkAroundNPTLTimedWaitHang默认是true
   if (AnyWaiters != 0 && WorkAroundNPTLTimedWaitHang) {
     AnyWaiters = 0;
+      //发信号唤醒该线程，被唤醒后将_nParked置为0
     pthread_cond_signal(_cond);
   }
+    //释放锁
   status = pthread_mutex_unlock(_mutex);
   assert_status(status == 0, status, "mutex_unlock");
   if (AnyWaiters != 0) {
+      //pthread_cond_signal不要求获取锁，此处再次唤醒
     status = pthread_cond_signal(_cond);
     assert_status(status == 0, status, "cond_signal");
   }
@@ -6266,6 +6383,14 @@ static void unpackTime(timespec* absTime, bool isAbsolute, jlong time) {
   assert(absTime->tv_nsec < NANOSECS_PER_SEC, "tv_nsec >= nanos_per_sec");
 }
 
+/**
+ * park用于让某个线程处于阻塞状态，底层实现是pthread_cond_wait或者pthread_cond_timedwait
+ * linux中对Park的实现，
+ * 核心实际上就是使用了pthread库，通过它提供的互斥锁和条件等待等函数来实现park功能。
+ * _counter变量用于表示信号量，当可通过时为1不可通过时为0。如果为1就可以直接返回，因为已经有许可了，也就是先调用过unpark了。
+ * 接着对时间time进行转换，然后尝试获取互斥锁，只有成功获取互斥锁才能往下执行。
+ * 当time为0时调用不带超时的pthread_cond_wait进入阻塞而等待唤醒信号，否则调用带超时的pthread_cond_timedwait进入阻塞而等待唤醒信号。最终释放互斥锁。
+ */
 void Parker::park(bool isAbsolute, jlong time) {
   // Ideally we'd do something useful while spinning, such
   // as calling unpackTime().
@@ -6275,9 +6400,12 @@ void Parker::park(bool isAbsolute, jlong time) {
   // We depend on Atomic::xchg() having full barrier semantics
   // since we are doing a lock-free update to _counter.
     //判断信号量counter是否大于0，如果大于设为0返回
+    // 原 _counter 不为零，许可可用，不需等待
+    // 否则依赖于具有完整屏障语义的 Atomic::xchg() 对 _counter 进行无锁更新设置为0
+    //将_counter属性置为0，返回值大于0，说明正在执行unpark动作唤醒当前线程，再park让其休眠无意义
   if (Atomic::xchg(0, &_counter) > 0) return;
 
-    //获取当前线程
+    //获取当前线程(JavaThread)
   Thread* thread = Thread::current();
   assert(thread->is_Java_thread(), "Must be JavaThread");
   JavaThread *jt = (JavaThread *)thread;
@@ -6285,19 +6413,27 @@ void Parker::park(bool isAbsolute, jlong time) {
   // Optional optimization -- avoid state transitions if there's an interrupt pending.
   // Check interrupt before trying to wait
     //如果中途已经是interrupt了，那么立刻返回，不阻塞
+    // 检查中断，加锁
+    //如果线程已经中断
+    //如果当前线程设置了中断标志，调用park则直接返回，所以如果在park之前调用了
+    //interrupt就会直接返回
     if (Thread::is_interrupted(thread, false)) {
     return;
   }
 
   // Next, demultiplex/decode time arguments
     //记录当前绝对时间戳
+    // 高精度绝对时间变量
   timespec absTime;
     //如果park的超时时间已到，则返回
+    //如果time小于0，或者isAbsolute是true并且time等于0则直接返回
   if (time < 0 || (isAbsolute && time == 0) ) { // don't wait at all
     return;
   }
     //更换时间戳
+    //如果time大于0，则根据是否是高精度定时计算定时时间
   if (time > 0) {
+      //初始化absTime，计算等待到那个时间为止
     unpackTime(&absTime, isAbsolute, time);
   }
 
@@ -6309,10 +6445,18 @@ void Parker::park(bool isAbsolute, jlong time) {
   // holding the Parker:: mutex.  If safepoints are pending both the
   // the ThreadBlockInVM() CTOR and DTOR may grab Threads_lock.
     //进入安全点，利用该thread构造一个ThreadBlockInVM
+    //切换线程状态为_thread_blocked，会检查安全点
+    //进入安全点避免死锁
   ThreadBlockInVM tbivm(jt);
 
   // Don't wait if cannot get lock since interference arises from
   // unblocking.  Also. check interrupt before trying wait
+    //如果该线程已经中断或者尝试获取锁失败则返回，尝试获取锁失败说明有其他线程占用这个锁
+    //如果当前线程设置了中断标志，或者获取mutex互斥锁失败则直接返回
+    //由于Parker是每个线程都有的，所以_counter cond mutex都是每个线程都有的，
+    //不是所有线程共享的所以加锁失败只有两种情况，第一unpark已经加锁这时只需要返回即可，
+    //第二调用调用pthread_mutex_trylock出错。对于第一种情况就类似是unpark先调用的情况，所以
+    //直接返回。
   if (Thread::is_interrupted(thread, false) || pthread_mutex_trylock(_mutex) != 0) {
     return;
   }
@@ -6320,12 +6464,16 @@ void Parker::park(bool isAbsolute, jlong time) {
     //记录等待状态
   int status ;
     //中途再次检查许可，有则直接返回不等待
-  if (_counter > 0)  { // no wait needed
+    //如果_counter大于0，说明unpark已经调用完成了将_counter置为了1，
+    //现在只需将_counter置0，解锁，返回
+  if (_counter > 0)  { // no wait needed 跟一开始的xchg逻辑相同
     _counter = 0;
+      //解锁
     status = pthread_mutex_unlock(_mutex);
     assert (status == 0, "invariant") ;
     // Paranoia to ensure our locked and lock-free paths interact
     // correctly with each other and Java-level accesses.
+      //让修改立即生效
     OrderAccess::fence();
     return;
   }
@@ -6335,27 +6483,43 @@ void Parker::park(bool isAbsolute, jlong time) {
   // (This allows a debugger to break into the running thread.)
   sigset_t oldsigs;
   sigset_t* allowdebug_blocked = os::Linux::allowdebug_blocked_signals();
+  // 修改线程信号掩码，将旧掩码保存至oldsigs中，下面会恢复的.
   pthread_sigmask(SIG_BLOCK, allowdebug_blocked, &oldsigs);
 #endif
 
+    //修改线程状态为CONDVAR_WAIT
   OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
   jt->set_suspend_equivalent();
   // cleared by handle_special_suspend_equivalent_condition() or java_suspend_self()
 
   assert(_cur_index == -1, "invariant");
+    //如果time等于0，说明是相对时间也就是isAbsolute是fasle(否则前面就直接返回了),则直接挂起
   if (time == 0) {
     _cur_index = REL_INDEX; // arbitrary choice when not timed
+      //无期限等待，直到被唤醒
       //线程条件等待 线程等待信号触发，如果没有信号触发，无限期等待下去。
+      // 等待并自动释放 mutex 锁
+      // pthread_cond_wait内部调用了futex，而futex里面进行了系统调用sys_futex！那么futex是啥？参考下man 2 futex
+      //
     status = pthread_cond_wait (&_cond[_cur_index], _mutex) ;
-  } else {
+  } else { //如果time非0
+      //判断isAbsolute是false还是true，false的话使用_cond[0]，否则用_cond[1]
     _cur_index = isAbsolute ? ABS_INDEX : REL_INDEX;
+      //使用条件变量使得当前线程挂起
+      //底层是pthread_cond_timedwait，让当前线程在_mutex上等待指定的时间，如果这段时间范围内被唤醒了则返回0，否则返回非0值
       //线程等待一定的时间，如果超时或有信号触发，线程唤醒
+      // 计时等待并自动释放 mutex 锁
     status = os::Linux::safe_cond_timedwait (&_cond[_cur_index], _mutex, &absTime) ;
+      //如果挂起失败则销毁当前的条件变量重新初始化。
+      //WorkAroundNPTLTimedWaitHang的默认值是1
     if (status != 0 && WorkAroundNPTLTimedWaitHang) {
+        //销毁并重新初始化_cur_index对应的_cond
       pthread_cond_destroy (&_cond[_cur_index]) ;
       pthread_cond_init    (&_cond[_cur_index], isAbsolute ? NULL : os::Linux::condAttr());
     }
   }
+    //如果pthread_cond_wait成功则以下代码都是线程被唤醒后执行的。
+    //线程被唤醒了，此时counter会被置为1
   _cur_index = -1;
   assert_status(status == 0 || status == EINTR ||
                 status == ETIME || status == ETIMEDOUT,
@@ -6365,19 +6529,29 @@ void Parker::park(bool isAbsolute, jlong time) {
   pthread_sigmask(SIG_SETMASK, &oldsigs, NULL);
 #endif
 
+    //将counter重置为0
+    // 已经从 block 住状态中恢复返回了, 把 _counter 设 0.
   _counter = 0 ;
+    // 解锁
   status = pthread_mutex_unlock(_mutex) ;
   assert_status(status == 0, status, "invariant") ;
   // Paranoia to ensure our locked and lock-free paths interact
   // correctly with each other and Java-level accesses.
+    // 使用内存屏障使_counter对其它线程可见
   OrderAccess::fence();
 
   // If externally suspended while waiting, re-suspend
+    // 如果在park线程挂起的时候调用了stop或者suspend则还需要将线程挂起不能返回
   if (jt->handle_special_suspend_equivalent_condition()) {
     jt->java_suspend_self();
   }
 }
 
+/**
+ * unpark用于将某个处于休眠状态的线程唤醒
+ * 整体按照加锁->通知->解锁的顺序
+ * 先通过pthread_mutex_lock获取互斥锁，然后将_counter的值修改为1，即表示许可为1。最后通过pthread_cond_signal去唤醒前面park中进入阻塞的线程。
+ */
 void Parker::unpark() {
     //定义两个变量，staus用于判断是否获取锁
   int s, status ;
@@ -6388,31 +6562,48 @@ void Parker::unpark() {
     //存储原先变量_counter
   s = _counter;
     //把_counter设为1
+    //正常unpark完成counter等于1，park完成counter等于0
   _counter = 1;
+    //如果_counter是0则说明调用了park或者没调用(初始为counter0）
+    //这也说明park和unpark调用没有先后顺序。
   if (s < 1) {
     // thread might be parked
+      // 说明当前parker对应的线程挂起了，因为_cur_index初始是-1，并且等待条件变量的线程被唤醒
+      //后也会将_cur_index重置-1
     if (_cur_index != -1) {
       // thread is definitely parked
+        //WorkAroundNPTLTimedWaitHang默认值为1
+        //如果设置了WorkAroundNPTLTimedWaitHang先调用signal再调用unlock，否则相反
+        //这两个先后顺序都可以，在hotspot在Linux下默认使用这种方式
+        //即先调用signal再调用unlock
       if (WorkAroundNPTLTimedWaitHang) {
+          //发送信号，唤醒目标线程
         status = pthread_cond_signal (&_cond[_cur_index]);
         assert (status == 0, "invariant");
+          //解锁
         status = pthread_mutex_unlock(_mutex);
         assert (status == 0, "invariant");
       } else {
         // must capture correct index before unlocking
         int index = _cur_index;
+          //先解锁
         status = pthread_mutex_unlock(_mutex);
         assert (status == 0, "invariant");
+          //再唤醒
         status = pthread_cond_signal (&_cond[index]);
         assert (status == 0, "invariant");
       }
     } else {
+        //如果_cur_index == -1说明线程没在等待条件变量，则直接解锁
         //释放锁
+        //_cur_index等于-1，线程从休眠状态被唤醒后就是-1了
       pthread_mutex_unlock(_mutex);
       assert (status == 0, "invariant") ;
     }
   } else {
+      //如果_counter == 1,说明线程调用了一次或多次unpark但是没调用park，则直接解锁
       //释放锁
+      //_counter大于或者等于1，说明其已经执行过unpark了，不需要再次唤醒了
     pthread_mutex_unlock(_mutex);
     assert (status == 0, "invariant") ;
   }

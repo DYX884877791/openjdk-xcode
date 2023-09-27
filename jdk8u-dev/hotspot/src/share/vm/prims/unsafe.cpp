@@ -271,10 +271,14 @@ UNSAFE_ENTRY(jobject, Unsafe_GetObject(JNIEnv *env, jobject unsafe, jobject obj,
   return JNIHandles::make_local(env, v);
 UNSAFE_END
 
+// putObject的实现
 UNSAFE_ENTRY(void, Unsafe_SetObject(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jobject x_h))
   UnsafeWrapper("Unsafe_SetObject");
+    //x_h就是参数Object arg
   oop x = JNIHandles::resolve(x_h);
+    //obj实际就是参数Thread t
   oop p = JNIHandles::resolve(obj);
+    //index_oop_from_field_offset_long方法获取保存该属性的地址，oop_store负责将x写入该地址
   if (UseCompressedOops) {
     oop_store((narrowOop*)index_oop_from_field_offset_long(p, offset), x);
   } else {
@@ -1197,6 +1201,11 @@ UNSAFE_END
 
 // JSR166 ------------------------------------------------------------------
 
+/**
+ * compareAndSwapObject对应的本地实现如下，先分别获取三个对象的oop，对应为更新后的对象x、期望的对象e和待更新的对象p。
+ * 然后获取待更新对象p的地址，接着调用oopDesc::atomic_compare_exchange_oop来对JVM层面的对象进行CAS操作，如果返回值不等于期望对象e则表示更新失败，直接返回false。
+ * 最后是设置内存屏障，保证执行的顺序性和对其它线程的可见性。
+ */
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapObject(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jobject e_h, jobject x_h))
   UnsafeWrapper("Unsafe_CompareAndSwapObject");
   oop x = JNIHandles::resolve(x_h);
@@ -1210,12 +1219,19 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapObject(JNIEnv *env, jobject unsafe, 
   return success;
 UNSAFE_END
 
+/**
+ * 具体的三步逻辑为：
+ * 首先获取对象的oop，oop是JVM层一个对象的表示；
+ * 然后获取该oop对象中对应偏移的地址，也就是Java层对象中某个字段的地址；
+ * 最后通过Atomic::cmpxchg对指定地址去执行CPU级别的CAS操作。
+ */
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapInt(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jint e, jint x))
   UnsafeWrapper("Unsafe_CompareAndSwapInt");
   // 该方法定义在jniHandles.hpp中：
   oop p = JNIHandles::resolve(obj);
   // 然后调用index_oop_from_field_offset_long(p, offset);方法，其中offset为修改的字段在对象所占内存中的偏移位置，最终得到的addr就是该字段在内存中的位置，这里可以简单理解为对象地址加上offset。
   jint* addr = (jint *) index_oop_from_field_offset_long(p, offset);
+  // 我们知道不同类型的CPU的指令集是不同的，此外不同的操作系统汇编语言也可能不同，那么就导致不同类型的CPU和不同操作系统都需要编写不一样的汇编语言。
   // 得到字段地址addr之后就会调用核心的Atomic::cmpxchg方法，该方法定义在atomic.hpp中，除了cmpxchg，还有xchg、cmpxchg_ptr等等
   // cmpxchg实现在hotspot/src/share/vm/runtime/atomic.cpp中，最终会根据具体的宿主环境内联具体的实现，具体我们参照include的atomic.inline.hpp头文件
   // 以x86的linux环境为例，其引入的是atomic_linux_x86.inline.hpp头文件
@@ -1223,6 +1239,12 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapInt(JNIEnv *env, jobject unsafe, job
 UNSAFE_END
 
 /**
+ * compareAndSwapLong对应的本地实现也是在unsafe.cpp中，由于int是4字节的而long为8字节，所以底层的实现与compareAndSwapInt有些差别。
+ * 具体代码如下，前面两行仍然通过偏移量来获取对象中某个字段的地址，接下去根据VM_Version::supports_cx8()会分两种情况处理。
+ * 第一种是CPU指令支持8字节的CAS，那么则直接通过Atomic::cmpxchg来执行CAS操作。
+ * 第二种是CPU不支持8字节的CAS，此时需要MutexLockerEx锁的协助才能完成CAS，步骤是先加锁，再通过Atomic::load获取对应地址的值，如果值与期望值不相等则直接返回false表示失败，否则继续调用Atomic::store来修改内存值，最终会自动释放锁。
+ *   在CPU支持8字节的CAS情况下，不同CPU类型和不同操作系统同样需要编写不同的汇编语言。
+ *
  * 和compareAndSwapInt不一样的是，jlong类型的CAS操作需要判断宿主平台是否支持8字节的CAS操作，也就是通过VM_Version::supports_cx8方法进行判断。该方法定义在vm_version.hpp中：
  */
 UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapLong(JNIEnv *env, jobject unsafe, jobject obj, jlong offset, jlong e, jlong x))
@@ -1265,6 +1287,10 @@ UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute,
                              (uintptr_t) thread->parker(), (int) isAbsolute, time);
 #endif /* USDT2 */
   JavaThreadParkedState jtps(thread, time != 0);
+    //获取parker，让当前线程休眠
+  // 这是实现park的核心方法
+  // 每个thread都有一个parker(定义在hotspot\src\share\vm\runtime\park.hpp中)对应，由它来实现park操作。此外，由于不同的操作系统实现不一样，所以需要分多个系统各自实现
+  // 见hotspot/src/os/bsd/vm/os_bsd.cpp的Parker::park方法或者hotspot/src/os/linux/vm/os_linux.cpp
   thread->parker()->park(isAbsolute != 0, time);
 #ifndef USDT2
   HS_DTRACE_PROBE1(hotspot, thread__park__end, thread->parker());
@@ -1273,6 +1299,7 @@ UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute,
                           (uintptr_t) thread->parker());
 #endif /* USDT2 */
   if (event.should_commit()) {
+      //发布事件
     const oop obj = thread->current_park_blocker();
     if (time == 0) {
       post_thread_park_event(&event, obj, min_jlong, min_jlong);
@@ -1286,27 +1313,35 @@ UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute,
   }
 UNSAFE_END
 
+// Unsafe_Unpark会将JavaThread的parker属性缓存到Thread实例的nativeParkEventPointer属性中，方便下次调用unpark方法时可以快速获取关联的parker，然后执行unpark方法唤醒目标线程。
 UNSAFE_ENTRY(void, Unsafe_Unpark(JNIEnv *env, jobject unsafe, jobject jthread))
   UnsafeWrapper("Unsafe_Unpark");
   Parker* p = NULL;
   if (jthread != NULL) {
+      //获取关联的Thread实例oop
     oop java_thread = JNIHandles::resolve_non_null(jthread);
     if (java_thread != NULL) {
       jlong lp = java_lang_Thread::park_event(java_thread);
       if (lp != 0) {
+          //不为空
         // This cast is OK even though the jlong might have been read
         // non-atomically on 32bit systems, since there, one word will
         // always be zero anyway and the value set is always the same
         p = (Parker*)addr_from_java(lp);
       } else {
         // Grab lock if apparently null or using older version of library
+          //如果为空，说明是第一次访问
+          //获取锁Threads_lock
         MutexLocker mu(Threads_lock);
+          //获取关联的Thread实例oop
         java_thread = JNIHandles::resolve_non_null(jthread);
         if (java_thread != NULL) {
+            //获取关联的JavaThread
           JavaThread* thr = java_lang_Thread::thread(java_thread);
           if (thr != NULL) {
             p = thr->parker();
             if (p != NULL) { // Bind to Java thread for next time.
+                //设置Thread实例的nativeParkEventPointer属性，这样下次调用unpark方法时可以快速的获取parker指针
               java_lang_Thread::set_park_event(java_thread, addr_to_java(p));
             }
           }
@@ -1321,6 +1356,7 @@ UNSAFE_ENTRY(void, Unsafe_Unpark(JNIEnv *env, jobject unsafe, jobject jthread))
     HOTSPOT_THREAD_UNPARK(
                           (uintptr_t) p);
 #endif /* USDT2 */
+      //执行unpark方法唤醒目标线程
     p->unpark();
   }
 UNSAFE_END

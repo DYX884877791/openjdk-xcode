@@ -162,9 +162,18 @@ class CodeletMark: ResourceMark {
 
 // Wrapper classes to produce Interpreter/InterpreterGenerator from either
 // the c++ interpreter or the template interpreter.
+// hotspot解释器模块(hotspot\src\share\vm\interpreter)有两个实现：基于C++的解释器和基于汇编的模板解释器。hotspot默认使用比较快的模板解释器。
+//
+//  C++解释器 = bytecodeInterpreter* + cppInterpreter*
+//  模板解释器 = templateTable* + templateInterpreter*
+//  它们前者负责字节码的解释，后者负责解释器的运行时，共同完成解释功能。可以关注模板解释器。hotspot/src/share/vm/interpreter/templateInterpreter.hpp
+//
+
+
+
 // Interpreter是对外的一个解释器的包装类，通过宏定义的方式决定使用CppInterpreter或者TemplateInterpreter，
 // 前者称为C++解释器，每个指令都对应一段C++代码，通过switch/case的方式处理字节码，后者称为模板解释器，每个指令对应一段汇编指令，通过指令模板的方式处理字节码，JVM默认使用模板解释器
-// 其定义在hotspot src/share/vm/interpreter/interpreter.hpp中
+// 其定义在hotspot/src/share/vm/interpreter/interpreter.hpp中
 class Interpreter: public CC_INTERP_ONLY(CppInterpreter) NOT_CC_INTERP(TemplateInterpreter) {
 
   public:

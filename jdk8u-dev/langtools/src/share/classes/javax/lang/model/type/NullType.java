@@ -29,7 +29,7 @@ package javax.lang.model.type;
 /**
  * Represents the null type.
  * This is the type of the expression {@code null},
- *
+ * 代表null.
  * @author Joseph D. Darcy
  * @author Scott Seligman
  * @author Peter von der Ah&eacute;

@@ -58,7 +58,9 @@ extern "C" {
 函数返回一个指向最后一次出现在字符串s中的字符c的位置指针，如果c不在s中，返回NULL。
 PS：linux中提供了相应的函数：basename(s)，用来获取不带路径的文件名。
 */
-#define filename(x) strrchr(x, '/') ? strrchr(x, '/') + 1 : x
+#define get_filename(x) strrchr(x, '/') ? strrchr(x, '/') + 1 : x
+
+#define TO_STRING(x)  #x
 
 /* Trace source location helpers */
 #define SLOG_TRACE_LVL1(LINE) #LINE
@@ -75,8 +77,7 @@ PS：linux中提供了相应的函数：basename(s)，用来获取不带路径�
 #define SLOG_TAG_MAX            128
 #define SLOG_COLOR_MAX          16
 
-#define SLOG_FLAGS_CHECK(c, f) (((c) & (f)) == (f))
-#define SLOG_FLAGS_ALL          255
+#define SLOG_FLAGS_CHECK(g, f) ((g) >= (f))
 
 #define SLOG_NAME_DEFAULT       "slog"
 #define SLOG_NEWLINE            "\n"
@@ -84,6 +85,9 @@ PS：linux中提供了相应的函数：basename(s)，用来获取不带路径�
 #define SLOG_SPACE              " "
 #define SLOG_EMPTY              ""
 #define SLOG_NUL                '\0'
+
+// 逆序比较字符串s1是否以字符串s2结尾...
+int   str_ends_with(const char *s1, const char* s2);
 
 typedef struct SLogDate {
     uint16_t nYear;
@@ -101,15 +105,18 @@ void slog_get_date(slog_date_t *pDate);
 
 /* Log level flags */
 typedef enum {
-    SLOG_NOTAG = (1 << 0),
-    SLOG_NOTE = (1 << 1),
-    SLOG_INFO = (1 << 2),
-    SLOG_WARN = (1 << 3),
-    SLOG_DEBUG = (1 << 4),
-    SLOG_TRACE = (1 << 5),
-    SLOG_ERROR = (1 << 6),
-    SLOG_FATAL = (1 << 7)
+    SLOG_ALL = 255, // 所有级别
+    SLOG_TRACE = (1 << 5), // 跟踪级别
+    SLOG_DEBUG = (1 << 4), // 调试级别
+    SLOG_INFO = (1 << 3),  // 普通级别
+    SLOG_WARN = (1 << 2),  // 警告级别
+    SLOG_ERROR = (1 << 1), // 错误级别
+    SLOG_FATAL = (1 << 0), // 严重错误级别
+    SLOG_NONE = 0, // 关闭所有
+    SLOG_UNKNOWN = -1 // 未知级别
 } slog_flag_t;
+
+#define CHECK_FLAG(SLOG_FLAG_T, flags) if (str_ends_with(TO_STRING(SLOG_FLAG_T), flags) == 0) return SLOG_FLAG_T
 
 typedef int(*slog_cb_t)(const char *pLog, size_t nLength, slog_flag_t eFlag, void *pCtx);
 
@@ -131,19 +138,19 @@ typedef enum {
 #define slog_info(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 #define slog_warn(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 #define slog_debug(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_error(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 #define slog_trace(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_error(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 #define slog_fatal(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 
 /* slog short location */
-#define slog_s(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_note_s(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_info_s(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_warn_s(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_debug_s(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_error_s(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_trace_s(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_fatal_s(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_s(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_note_s(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_info_s(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_warn_s(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_debug_s(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_error_s(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_trace_s(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_fatal_s(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 
 
 typedef struct SLogConfig {
@@ -170,13 +177,16 @@ size_t slog_version(char *pDest, size_t nSize, uint8_t nMin);
 slog_config_t * slog_config_get();
 void slog_config_set(slog_config_t * pCfg);
 
+slog_flag_t slog_parse_flag(const char *flag);
+
+const char * slog_get_all_levels();
+
 void slog_separator_set(const char *pFormat, ...);
 void slog_callback_set(slog_cb_t callback, void *pContext);
 void slog_new_line(uint8_t nEnable);
 void slog_indent(uint8_t nEnable);
 
-void slog_enable(slog_flag_t eFlag);
-void slog_disable(slog_flag_t eFlag);
+void slog_flag_set(slog_flag_t eFlag);
 
 void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe);
 /*

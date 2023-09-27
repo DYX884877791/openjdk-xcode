@@ -668,7 +668,7 @@ void TemplateTable::daload() {
 }
 
 void TemplateTable::aaload() {
-  slog_trace("TemplateTable::aaload函数被调用了...");
+  slog_debug("进入hotspot/src/cpu/x86/vm/templateTable_x86_64.cpp中的TemplateTable::aaload函数...");
   //校验当前Template的itos与atos与指令配置是否相符
   //aaload指令的栈顶是int类型的，表示待加载的数组索引，对应这里的itos
   //aaload指令执行完成后栈顶的值是一个对象引用，表示读取的数组元素，对应这里的atos
@@ -2170,15 +2170,19 @@ void TemplateTable::_return(TosState state) {
   assert(_desc->calls_vm(),
          "inconsistent calls_vm information"); // call in remove_activation
 
+    //如果当前字节码是_return_register_finalizer，这个是OpenJDK特有的
   if (_desc->bytecode() == Bytecodes::_return_register_finalizer) {
     assert(state == vtos, "only valid state");
     __ movptr(c_rarg1, aaddress(0));
+      //c_rarg1保存了方法调用的oop，获取其klass
     __ load_klass(rdi, c_rarg1);
+      //获取类的access_flags，判断其是否实现了finalizer方法
     __ movl(rdi, Address(rdi, Klass::access_flags_offset()));
     __ testl(rdi, JVM_ACC_HAS_FINALIZER);
     Label skip_register_finalizer;
+      //如果未实现，则跳转到skip_register_finalizer
     __ jcc(Assembler::zero, skip_register_finalizer);
-
+      //如果实现了，则执行register_finalizer方法
     __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::register_finalizer), c_rarg1);
 
     __ bind(skip_register_finalizer);
@@ -2188,10 +2192,14 @@ void TemplateTable::_return(TosState state) {
   // Need to narrow in the return bytecode rather than in generate_return_entry
   // since compiled code callers expect the result to already be narrowed.
   if (state == itos) {
+      //如果返回值是int，则执行narrow方法，会根据方法的返回值类型做特殊处理，因为在JVM中char，byte，boolean三种
+      //都是作为int处理的，如果返回值类型是上述的三种之一则将返回值由4个字节调整成对应类型的字节数，返回值就是int类型
+      //的则不做任何处理
     __ narrow(rax);
   }
+    //86_64位下remove_activation实际定义时还有三个bool参数，此处没有传，就使用默认值true
   __ remove_activation(state, r13);
-
+    //跳转到方法调用栈帧恢复方法的调用方的正常执行
   __ jmp(r13);
 }
 
@@ -2400,12 +2408,16 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   const Register flags = rax;
   const Register bc = c_rarg3; // uses same reg as obj, so don't mix them
 
+    //给该字段创建一个ConstantPoolCacheEntry，该类表示常量池中某个方法或者字段的解析结果
   resolve_cache_and_index(byte_no, cache, index, sizeof(u2));
+    //发布jvmti事件
   jvmti_post_field_access(cache, index, is_static, false);
+    //加载该字段的偏移量，flags，如果是静态字段还需要解析该类class实例对应的oop
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   if (!is_static) {
     // obj is on the stack
+      //将被读取属性的oop放入obj中
     pop_and_check_object(obj);
   }
 
@@ -2419,17 +2431,22 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   assert(btos == 0, "change code, btos != 0");
 
   __ andl(flags, ConstantPoolCacheEntry::tos_state_mask);
+    //判断是否是byte类型
   __ jcc(Assembler::notZero, notByte);
   // btos
+    //读取该属性，并放入rax中
   __ load_signed_byte(rax, field);
   __ push(btos);
   // Rewrite bytecode to be faster
   if (!is_static) {
+      //将该指令改写成_fast_bgetfield，下一次执行时就是_fast_bgetfield
     patch_bytecode(Bytecodes::_fast_bgetfield, bc, rbx);
   }
+    //跳转到Done
   __ jmp(Done);
 
   __ bind(notByte);
+    //判断是否boolean类型
   __ cmpl(flags, ztos);
   __ jcc(Assembler::notEqual, notBool);
 
@@ -2444,6 +2461,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notBool);
+    //判断是否引用类型
   __ cmpl(flags, atos);
   __ jcc(Assembler::notEqual, notObj);
   // atos
@@ -2455,6 +2473,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notObj);
+    //判断是否int类型
   __ cmpl(flags, itos);
   __ jcc(Assembler::notEqual, notInt);
   // itos
@@ -2467,6 +2486,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notInt);
+    //判断是否char类型
   __ cmpl(flags, ctos);
   __ jcc(Assembler::notEqual, notChar);
   // ctos
@@ -2479,6 +2499,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notChar);
+    //判断是否short类型
   __ cmpl(flags, stos);
   __ jcc(Assembler::notEqual, notShort);
   // stos
@@ -2491,6 +2512,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notShort);
+    //判断是否long类型
   __ cmpl(flags, ltos);
   __ jcc(Assembler::notEqual, notLong);
   // ltos
@@ -2503,6 +2525,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notLong);
+    //判断是否float类型
   __ cmpl(flags, ftos);
   __ jcc(Assembler::notEqual, notFloat);
   // ftos
@@ -2520,6 +2543,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jcc(Assembler::notEqual, notDouble);
 #endif
   // dtos
+    // 只剩一种double类型
   __ movdbl(xmm0, field);
   __ push(dtos);
   // Rewrite bytecode to be faster
@@ -2539,7 +2563,15 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   //                                              Assembler::LoadStore));
 }
 
+/**
+ * _getstatic / _getfield用于读取静态或者实例属性，会将读取的结果放入栈顶中
+ *
+ *  _getstatic / _getfield适用于所有类型的字段属性读取，因此在具体实现时需要根据flags中保存的属性类型适配对应的处理逻辑，为了避免每次都要判断属性类型，
+ *  OpenJDK增加了几个自定义的带目标类型的属性读取的字节码指令，如_fast_igetfield，就专门用于读取int类型的实例属性
 
+ *
+ * @param byte_no
+ */
 void TemplateTable::getfield(int byte_no) {
   getfield_or_static(byte_no, false);
 }
@@ -2618,8 +2650,11 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   const Register flags = rax;
   const Register bc    = c_rarg3;
 
+    //找到该属性对应的ConstantPoolCacheEntry
   resolve_cache_and_index(byte_no, cache, index, sizeof(u2));
+    //发布事件
   jvmti_post_field_mod(cache, index, is_static);
+    //获取字段偏移量，flags，如果是静态属性获取对应类的class实例
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   // [jk] not needed currently
@@ -2640,21 +2675,28 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   __ shrl(flags, ConstantPoolCacheEntry::tos_state_shift);
 
   assert(btos == 0, "change code, btos != 0");
+    //判断是否byte类型
   __ andl(flags, ConstantPoolCacheEntry::tos_state_mask);
   __ jcc(Assembler::notZero, notByte);
 
   // btos
   {
+      //将栈顶的待写入值放入rax中
     __ pop(btos);
+      //待写入的值pop出去后，如果是实例属性则栈顶元素为准备写入的实例
+      //校验该实例是否为空，将其拷贝到obj寄存器中
     if (!is_static) pop_and_check_object(obj);
+      //将rax中的待写入值写入到filed地址处
     __ movb(field, rax);
     if (!is_static) {
+        //将该字节码改写成_fast_bputfield，下一次执行时直接执行_fast_bputfield，无需再次判断属性类型
       patch_bytecode(Bytecodes::_fast_bputfield, bc, rbx, true, byte_no);
     }
     __ jmp(Done);
   }
 
   __ bind(notByte);
+    //判断是否boolean类型
   __ cmpl(flags, ztos);
   __ jcc(Assembler::notEqual, notBool);
 
@@ -2671,6 +2713,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notBool);
+    //判断是否引用类型
   __ cmpl(flags, atos);
   __ jcc(Assembler::notEqual, notObj);
 
@@ -2687,6 +2730,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notObj);
+    //判断是否int类型
   __ cmpl(flags, itos);
   __ jcc(Assembler::notEqual, notInt);
 
@@ -2702,6 +2746,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notInt);
+    //判断是否char类型
   __ cmpl(flags, ctos);
   __ jcc(Assembler::notEqual, notChar);
 
@@ -2717,6 +2762,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notChar);
+    //判断是否short类型
   __ cmpl(flags, stos);
   __ jcc(Assembler::notEqual, notShort);
 
@@ -2732,6 +2778,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notShort);
+    //判断是否long类型
   __ cmpl(flags, ltos);
   __ jcc(Assembler::notEqual, notLong);
 
@@ -2747,6 +2794,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notLong);
+    //判断是否float类型
   __ cmpl(flags, ftos);
   __ jcc(Assembler::notEqual, notFloat);
 
@@ -2769,6 +2817,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
 
   // dtos
   {
+      //只剩一个,double类型
     __ pop(dtos);
     if (!is_static) pop_and_check_object(obj);
     __ movdbl(field, xmm0);
@@ -2787,13 +2836,18 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   __ bind(Done);
 
   // Check for volatile store
+    //判断是否volatile变量，如果不是则跳转到notVolatile
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
+    //如果是
   volatile_barrier(Assembler::Membar_mask_bits(Assembler::StoreLoad |
                                                Assembler::StoreStore));
   __ bind(notVolatile);
 }
 
+/**
+ * 这两个字节码指令用于写入静态属性或者实例属性
+ */
 void TemplateTable::putfield(int byte_no) {
   putfield_or_static(byte_no, false);
 }
@@ -2861,18 +2915,21 @@ void TemplateTable::fast_storefield(TosState state) {
   transition(state, vtos);
 
   ByteSize base = ConstantPoolCache::base_offset();
-
+    //发布jvmti事件
   jvmti_post_fast_field_mod();
 
   // access constant pool cache
+    //获取该字段对应的ConstantPoolCacheEntry
   __ get_cache_and_index_at_bcp(rcx, rbx, 1);
 
   // test for volatile with rdx
+    //获取该字段的flags
   __ movl(rdx, Address(rcx, rbx, Address::times_8,
                        in_bytes(base +
                                 ConstantPoolCacheEntry::flags_offset())));
 
   // replace index with field offset from cache entry
+    //获取该字段的偏移量
   __ movptr(rbx, Address(rcx, rbx, Address::times_8,
                          in_bytes(base + ConstantPoolCacheEntry::f2_offset())));
 
@@ -2885,6 +2942,9 @@ void TemplateTable::fast_storefield(TosState state) {
   __ andl(rdx, 0x1);
 
   // Get object from stack
+    //将待写入的实例对象pop到rcx中，注意此处并没有像putfield一样把待写入的值先pop到rax中，
+    //这是因为fast_storefield类的栈顶缓存类型不是vtos而是具体的写入值类型对应的类型，即上一个
+    //字节码指令执行完成后会自动将待写入的值放入rax中
   pop_and_check_object(rcx);
 
   // field address
@@ -2893,6 +2953,7 @@ void TemplateTable::fast_storefield(TosState state) {
   // access field
   switch (bytecode()) {
   case Bytecodes::_fast_aputfield:
+      //将rax中的属性值写入到field地址
     do_oop_store(_masm, field, rax, _bs->kind(), false);
     break;
   case Bytecodes::_fast_lputfield:
@@ -2923,6 +2984,7 @@ void TemplateTable::fast_storefield(TosState state) {
   }
 
   // Check for volatile store
+    //判断是否volatile变量
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
   volatile_barrier(Assembler::Membar_mask_bits(Assembler::StoreLoad |
@@ -2935,6 +2997,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   transition(atos, state);
 
   // Do the JVMTI work here to avoid disturbing the register state below
+    //发布JVMTI事件
   if (JvmtiExport::can_post_field_access()) {
     // Check to see if a field access watch has been set before we
     // take the time to call into the VM.
@@ -2958,6 +3021,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   }
 
   // access constant pool cache
+    //获取该字段对应的ConstantPoolCacheEntry
   __ get_cache_and_index_at_bcp(rcx, rbx, 1);
   // replace index with field offset from cache entry
   // [jk] not needed currently
@@ -2968,11 +3032,14 @@ void TemplateTable::fast_accessfield(TosState state) {
   //   __ shrl(rdx, ConstantPoolCacheEntry::is_volatile_shift);
   //   __ andl(rdx, 0x1);
   // }
+    //获取字段偏移量
   __ movptr(rbx, Address(rcx, rbx, Address::times_8,
                          in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
 
   // rax: object
+    //校验rax中实例对象oop，这里没有像getfield一样先把实例对象从栈顶pop到rax中，而是直接校验
+    //这是因为fast_accessfield类指令的栈顶缓存类型是atos而不是vtos，即上一个指令执行完后会自动将待读取的实例放入rax中
   __ verify_oop(rax);
   __ null_check(rax);
   Address field(rax, rbx, Address::times_1);
@@ -2980,6 +3047,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   // access field
   switch (bytecode()) {
   case Bytecodes::_fast_agetfield:
+      //将属性值拷贝到rax中
     __ load_heap_oop(rax, field);
     __ verify_oop(rax);
     break;
@@ -3895,7 +3963,7 @@ void TemplateTable::monitorenter() {
   // next instruction.
     //恢复字节码指令的正常执行
     //因为上面已经增加r13了，所以此处dispatch_next的第二个参数使用默认值0，即执行r13指向的字节码指令即可，不用跳转到下一个指令
-    __ dispatch_next(vtos);
+  __ dispatch_next(vtos);
 }
 
 // monitorexit指令用于释放锁

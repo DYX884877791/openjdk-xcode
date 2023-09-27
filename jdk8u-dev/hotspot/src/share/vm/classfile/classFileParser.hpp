@@ -40,7 +40,7 @@ class FieldLayoutInfo;
 // Parser for for .class files
 //
 // The bytes describing the class file structure is read from a Stream object
-
+// HotSpot定义了ClassFileParser类来辅助读取及保存类解析的相关信息
 class ClassFileParser VALUE_OBJ_CLASS_SPEC {
  private:
   bool _need_verify;
@@ -70,6 +70,7 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
   // if not transferred to the InstanceKlass upon successful class loading
   // in which case these pointers have been set to NULL.
   instanceKlassHandle _super_klass;
+  // 类中的属性通过名称就可以知道存储的相关信息，其中最主要的就是通过_cp保存常量池信息、通过_fields保存域信息、通过_methods保存方法、通过_klass保存类相关的信息。通过_stream属性可以方便地读取流的信息等
   ConstantPool*    _cp;
   Array<u2>*       _fields;
   Array<Method*>*  _methods;
@@ -203,6 +204,7 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
   enum { fixed_buffer_size = 128 };
   u_char linenumbertable_buffer[fixed_buffer_size];
 
+  // 这个属性保存的是字节码文件流。如果要读取Class文件的内容，首先需要获取文件对应的字节流，ClassFileStream 内部维护了一个buffer，该buffer指向Class文件所对应的字节流。
   ClassFileStream* _stream;              // Actual input stream
 
   enum { LegalClass, LegalField, LegalMethod }; // used to verify unqualified names
@@ -210,6 +212,10 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
   // Accessors
   ClassFileStream* stream()                        { return _stream; }
   void set_stream(ClassFileStream* st)             { _stream = st; }
+
+  /**
+   * 类还定义了许多重要的函数，例如解析常量池的parse_constant_pool()与parse_constant_pool_entries()函数、解析方法的parse_methods()函数、解析字段的parse_fields()函数等
+   */
 
   // Constant pool parsing
   void parse_constant_pool_entries(int length, TRAPS);

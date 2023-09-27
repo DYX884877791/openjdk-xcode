@@ -51,6 +51,22 @@
 #define PTHREAD_MUTEX_RECURSIVE PTHREAD_MUTEX_RECURSIVE_NP
 #endif
 
+int
+str_ends_with(const char *s1, const char* s2)
+{
+    unsigned int len1 = strlen(s1);
+    unsigned int len2 = strlen(s2);
+    if (len1 < len2) {
+        return -1;
+    }
+    for (unsigned int i = 1; i <= len2; i++) {
+        if (s1[len1 - i] != s2[len2 - i]) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 typedef struct slog {
     unsigned int nTdSafe:1;
     pthread_mutex_t mutex;
@@ -107,16 +123,14 @@ static const char *slog_get_indent(slog_flag_t eFlag)
     }
 
     switch (eFlag) {
-        case SLOG_NOTAG:
-            return SLOG_INDENT;
-        case SLOG_NOTE:
+        case SLOG_ALL:
+        case SLOG_TRACE:
+        case SLOG_DEBUG:
         case SLOG_INFO:
         case SLOG_WARN:
-             return SLOG_SPACE;
-        case SLOG_DEBUG:
-        case SLOG_TRACE:
-        case SLOG_FATAL:
+            return SLOG_SPACE;
         case SLOG_ERROR:
+        case SLOG_FATAL:
         default: break;
     }
 
@@ -127,30 +141,34 @@ static const char* slog_get_tag(slog_flag_t eFlag)
 {
     switch (eFlag)
     {
-        case SLOG_NOTE: return "NOTE";
+        case SLOG_ALL: return "ALL";
+        case SLOG_TRACE: return "TRACE";
+        case SLOG_DEBUG: return "DEBUG";
         case SLOG_INFO: return "INFO";
         case SLOG_WARN: return "WARN";
-        case SLOG_DEBUG: return "DEBUG";
         case SLOG_ERROR: return "ERROR";
-        case SLOG_TRACE: return "TRACE";
         case SLOG_FATAL: return "FATAL";
+        case SLOG_NONE: return "NONE";
         default: break;
     }
 
     return NULL;
 }
 
+
+const char* slog_get_all_levels() {
+    return "ALL,TRACE,DEBUG,INFO,WARN,ERROR,FATAL,NONE";
+}
+
 static const char* slog_get_color(slog_flag_t eFlag)
 {
     switch (eFlag)
     {
-        case SLOG_NOTAG:
-        case SLOG_NOTE: return SLOG_EMPTY;
+        case SLOG_TRACE: return SLOG_COLOR_CYAN;
+        case SLOG_DEBUG: return SLOG_COLOR_BLUE;
         case SLOG_INFO: return SLOG_COLOR_GREEN;
         case SLOG_WARN: return SLOG_COLOR_YELLOW;
-        case SLOG_DEBUG: return SLOG_COLOR_BLUE;
         case SLOG_ERROR: return SLOG_COLOR_RED;
-        case SLOG_TRACE: return SLOG_COLOR_CYAN;
         case SLOG_FATAL: return SLOG_COLOR_MAGENTA;
         default: break;
     }
@@ -384,8 +402,11 @@ void slog_display(slog_flag_t eFlag, const char *pFormat, ...)
         return;
     }
 
+    if (g_slog->config->nFlags == SLOG_NONE) {
+        return;
+    }
+
     slog_lock(g_slog);
-    slog_config_t *pCfg = g_slog->config;
 
     if ((SLOG_FLAGS_CHECK(g_slog->config->nFlags, eFlag)) &&
        (g_slog->config->nToScreen || g_slog->config->nToFile))
@@ -397,7 +418,7 @@ void slog_display(slog_flag_t eFlag, const char *pFormat, ...)
         ctx.pFormat = pFormat;
 
         void(*slog_display_args)(const slog_context_t *pCtx, va_list args);
-        slog_display_args = pCfg->nUseHeap ? slog_display_heap : slog_display_stack;
+        slog_display_args = g_slog->config->nUseHeap ? slog_display_heap : slog_display_stack;
 
         va_list args;
         va_start(args, pFormat);
@@ -450,42 +471,34 @@ void slog_config_set(slog_config_t *pCfg) {
     slog_unlock(g_slog);
 }
 
-void slog_enable(slog_flag_t eFlag)
-{
-
-    if (g_slog == NULL) {
-        fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
-        return;
+slog_flag_t slog_parse_flag(const char *flag) {
+    if (flag == NULL) {
+        fprintf(stderr, "Slog flag can not be parsed correctly!\n");
+        return SLOG_UNKNOWN;
     }
-
-    slog_lock(g_slog);
-    slog_config_t *pCfg = g_slog->config;
-
-
-    if (eFlag == SLOG_FLAGS_ALL) {
-        pCfg->nFlags = SLOG_FLAGS_ALL;
-    } else if (!SLOG_FLAGS_CHECK(pCfg->nFlags, eFlag)) {
-        pCfg->nFlags |= eFlag;
-    }
-
-    slog_unlock(g_slog);
+    CHECK_FLAG(SLOG_ALL, flag);
+    CHECK_FLAG(SLOG_TRACE, flag);
+    CHECK_FLAG(SLOG_DEBUG, flag);
+    CHECK_FLAG(SLOG_INFO, flag);
+    CHECK_FLAG(SLOG_WARN, flag);
+    CHECK_FLAG(SLOG_ERROR, flag);
+    CHECK_FLAG(SLOG_FATAL, flag);
+    CHECK_FLAG(SLOG_NONE, flag);
+    return SLOG_UNKNOWN;
 }
 
-void slog_disable(slog_flag_t eFlag)
+void slog_flag_set(slog_flag_t eFlag)
 {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!\n");
         return;
     }
-    slog_lock(g_slog);
-    slog_config_t *pCfg = g_slog->config;
-
-    if (eFlag == SLOG_FLAGS_ALL) {
-        pCfg->nFlags = 0;
-    } else if (SLOG_FLAGS_CHECK(pCfg->nFlags, eFlag)) {
-        pCfg->nFlags &= ~eFlag;
+    if (slog_get_tag(eFlag) == NULL) {
+        fprintf(stderr, "Slog do not determine level correctly, support one of following levels:[%s]!\n", slog_get_all_levels());
+        return;
     }
-
+    slog_lock(g_slog);
+    g_slog->config->nFlags = eFlag;
     slog_unlock(g_slog);
 }
 

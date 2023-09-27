@@ -44,6 +44,7 @@
 #include "utilities/macros.hpp"
 #include "utilities/stringUtils.hpp"
 #include "utilities/taskqueue.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif
@@ -178,7 +179,28 @@ static void logOption(const char* opt) {
   }
 }
 
+/**
+ * 解析命令行参数sloglevel得到slog_flag_t值
+ * 由命令行参数 -Dslog.level=ALL/TRACE/DEBUG/INFO/WARN/ERROR/FATAL/NONE来指定，默认为NONE...
+ */
+slog_flag_t Arguments::parse_slog_level_properties(JavaVMInitArgs* args) {
+    for (int index = 0; index < args->nOptions; index++) {
+        const JavaVMOption *option = args->options + index;
+        const char *tail;
+        if (match_option(option, "-Dslog.level=", &tail)) {
+            slog_flag_t eFlag = slog_parse_flag(tail);
+            return eFlag;
+        }
+    }
+    return SLOG_NONE;
+}
+
 // Process java launcher properties.
+/**
+ * 处理launcher属性
+ * 包括-Dsun.java.launcher和-Dsun.java.launcher.pid属性
+ * @param args
+ */
 void Arguments::process_sun_java_launcher_properties(JavaVMInitArgs* args) {
   // See if sun.java.launcher or sun.java.launcher.pid is defined.
   // Must do this before setting up other system properties,
@@ -3193,13 +3215,13 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         return JNI_ERR;
 #endif
       }
-    // -Xint
+    // -Xint：禁用JIT，所有字节码都被解释执行，这个模式的速度最慢的（启动很快，执行稍慢）
     } else if (match_option(option, "-Xint", &tail)) {
           set_mode_flags(_int);
-    // -Xmixed
+    // -Xmixed：混合模式，默认模式，让JIT根据程序运行的情况，有选择地将某些代码编译（开始解释执行，启动速度较快，对热点代码实行检测和编译）
     } else if (match_option(option, "-Xmixed", &tail)) {
           set_mode_flags(_mixed);
-    // -Xcomp
+    // -Xcomp：所有字节码第一次使用就都被编译成本地代码，然后再执行（执行很快，启动很慢。）
     } else if (match_option(option, "-Xcomp", &tail)) {
       // for testing the compiler; turn off all flags that inhibit compilation
           set_mode_flags(_comp);
@@ -3534,7 +3556,9 @@ void Arguments::fix_appclasspath() {
 
 static bool has_jar_files(const char* directory) {
   DIR* dir = os::opendir(directory);
-  if (dir == NULL) return false;
+  if (dir == NULL) {
+      return false;
+  }
 
   struct dirent *entry;
   bool hasJarFile = false;
@@ -4131,7 +4155,7 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
 }
 
 jint Arguments::apply_ergo() {
-
+    slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::apply_ergo函数...");
   // Set flags based on ergonomics.
   set_ergonomics_flags();
 

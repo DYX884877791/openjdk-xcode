@@ -532,7 +532,7 @@ public:
 
 protected:
   // OS data associated with the thread
-  OSThread* _osthread;  // Platform-specific thread information
+  OSThread* _osthread;  // Platform-specific thread information 特定于平台的线程信息
 
   // Thread local resource area for temporary allocation within the VM
   ResourceArea* _resource_area;
@@ -637,8 +637,8 @@ protected:
  public:
   volatile intptr_t _Stalled ;
   volatile int _TypeTag ;
-  ParkEvent * _ParkEvent ;                     // for synchronized()
-  ParkEvent * _SleepEvent ;                    // for Thread.sleep
+  ParkEvent * _ParkEvent ;                     // for synchronized() 用于 synchronized(), 实现 wait/notify
+  ParkEvent * _SleepEvent ;                    // for Thread.sleep 用于 Thread.sleep
   ParkEvent * _MutexEvent ;                    // for native internal Mutex/Monitor
   ParkEvent * _MuxEvent ;                      // for low-level muxAcquire-muxRelease
   int NativeSyncRecursion ;                    // diagnostic
@@ -783,7 +783,7 @@ class JavaThread: public Thread {
  private:
   bool           _in_asgct;                      // Is set when this JavaThread is handling ASGCT call
   JavaThread*    _next;                          // The next thread in the Threads list
-  oop            _threadObj;                     // The Java level thread object
+  oop            _threadObj;                     // The Java level thread object Java 级别线程对象
 
 #ifdef ASSERT
  private:
@@ -1763,7 +1763,7 @@ public:
 
   // JSR166 per-thread parker
 private:
-  Parker*    _parker;
+  Parker*    _parker; // 用于 LockSupport::park
 public:
   Parker*     parker() { return _parker; }
 

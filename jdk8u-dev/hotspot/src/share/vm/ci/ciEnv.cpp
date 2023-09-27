@@ -1134,7 +1134,7 @@ void ciEnv::register_method(ciMethod* target,
                         comp_level,
                         method_name,
                         entry_bci);
-          slog_trace("Installing osr method (%d) %s @ %d",
+          slog_debug("Installing osr method (%d) %s @ %d",
                      comp_level,
                      method_name,
                      entry_bci);

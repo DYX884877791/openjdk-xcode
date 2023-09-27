@@ -27,6 +27,10 @@ package java.lang.ref;
 
 
 /**
+ * PhantomReference通常用来实现一种更流畅的类似Object.finalize的清理功能，与SoftReference和WeakReference不同的是，PhantomReference的get方法永远返回null，
+ * 为了保证其所引用的对象一直处于可被回收的状态，并且当垃圾回收器判断某个对象只是被PhantomReference所引用，然后将PhantomReference加入到创建时传入的ReferenceQueue中，
+ * 这个时候垃圾回收器不会立即回收掉PhantomReference所引用的对象，而是等到所有的PhantomReference对象都放到ReferenceQueue中或者PhantomReference对象本身变得不可达。
+ * WeakReference也没有新增属性，改写了原有的get方法实现，永远返回null
  * Phantom reference objects, which are enqueued after the collector
  * determines that their referents may otherwise be reclaimed.  Phantom
  * references are most often used to schedule post-mortem cleanup actions.

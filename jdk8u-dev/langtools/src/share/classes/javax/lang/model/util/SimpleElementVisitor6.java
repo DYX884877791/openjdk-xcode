@@ -73,6 +73,9 @@ import static javax.lang.model.SourceVersion.*;
  * implementations.  Future versions of the API that are only required
  * to run on Java SE 8 and later may take advantage of default methods
  * in this situation.
+ * 对应jdk1.6的简单的visitor.
+ *
+ *  当visit方法是与jdk1.6的语法结构相关的,则会调用defaultAction方法.对应在jdk1.7或者之后的语法结构,则调用visitUnknown方法.
  *
  * @param <R> the return type of this visitor's methods.  Use {@code Void}
  *             for visitors that do not need to return results.
@@ -93,6 +96,7 @@ public class SimpleElementVisitor6<R, P> extends AbstractElementVisitor6<R, P> {
      * Default value to be returned; {@link #defaultAction
      * defaultAction} returns this value unless the method is
      * overridden.
+     * defaultAction 方法默认的返回值
      */
     protected final R DEFAULT_VALUE;
 
@@ -160,6 +164,8 @@ public class SimpleElementVisitor6<R, P> extends AbstractElementVisitor6<R, P> {
      * @return  the result of {@code defaultAction} or {@code visitUnknown}
      */
     public R visitVariable(VariableElement e, P p) {
+        // 如果VariableElement的种类不是RESOURCE_VARIABLE,则调用defaultAction方法,
+        // ElementKind.RESOURCE_VARIABLE 对应jdk1.7的资源变量
         if (e.getKind() != ElementKind.RESOURCE_VARIABLE)
             return defaultAction(e, p);
         else

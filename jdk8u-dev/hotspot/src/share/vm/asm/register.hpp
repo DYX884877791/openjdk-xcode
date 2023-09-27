@@ -37,7 +37,7 @@ typedef AbstractRegisterImpl* AbstractRegister;
 // use the debugging suport below. No virtual functions are used for efficiency.
 // They are canonicalized; i.e., registers are equal if their pointers are equal,
 // and vice versa. A concrete implementation may just map the register onto 'this'.
-
+// 所有表示寄存器的类的基类
 class AbstractRegisterImpl {
  protected:
   int value() const                              { return (int)(intx)this; }
@@ -83,6 +83,12 @@ class AbstractRegisterImpl {
 #define AS_REGISTER(type,name)         ((type)name##_##type##EnumValue)
 
 // REGISTER_DECLARATION和CONSTANT_REGISTER_DECLARATION宏的意思是将name和type两者关联起来
+/**
+ * 比如：
+ * extern const Register  rax;
+ * enum { rax_RegisterEnumValue = ((0)) }
+ * 使用枚举类给寄存器指定了一个常量值
+ */
 #define CONSTANT_REGISTER_DECLARATION(type, name, value) \
 extern const type name;                                  \
 enum { name##_##type##EnumValue = (value) }
@@ -94,6 +100,7 @@ enum { name##_##type##EnumValue = value##_##type##EnumValue }
 #define REGISTER_DEFINITION(type, name) \
 const type name = ((type)name##_##type##EnumValue)
 
+// RegisterImpl跟CPU架构相关，在register.hpp中通过宏的方式引入特定CPU架构的实现版本
 #ifdef TARGET_ARCH_x86
 # include "register_x86.hpp"
 #endif

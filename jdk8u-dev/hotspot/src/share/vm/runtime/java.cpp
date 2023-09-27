@@ -463,6 +463,10 @@ void before_exit(JavaThread * thread) {
   // A CAS or OSMutex would work just fine but then we need to manipulate
   // thread state for Safepoint. Here we use Monitor wait() and notify_all()
   // for synchronization.
+    // 注意：不要使用 Mutex 来保护整个 before_exit()，
+    // 因为 JVMTI post_thread_end_event 和 post_vm_death_event 将运行本机代码。
+    // CAS 或 OSMutex 可以正常工作，但是我们需要为 Safepoint 操作线程状态。
+    // 这里我们使用 Monitor wait() 和 notify_all() 进行同步。
   { MutexLocker ml(BeforeExit_lock);
     switch (_before_exit_status) {
     case BEFORE_EXIT_NOT_RUN:
@@ -481,6 +485,8 @@ void before_exit(JavaThread * thread) {
 
   // The only difference between this and Win32's _onexit procs is that
   // this version is invoked before any threads get killed.
+    // 主要是关闭之前的一些准备工作。
+    // 这个和 Win32 的 _onexit procs 之间的唯一区别是这个版本在任何线程被杀死之前被调用。
   ExitProc* current = exit_procs;
   while (current != NULL) {
     ExitProc* next = current->next();
@@ -490,28 +496,34 @@ void before_exit(JavaThread * thread) {
   }
 
   // Hang forever on exit if we're reporting an error.
+    // 如果我们报告错误，则在退出时永远挂起。
   if (ShowMessageBoxOnError && is_error_reported()) {
     os::infinite_sleep();
   }
 
   // Terminate watcher thread - must before disenrolling any periodic task
+    // 终止观察者线程 - 必须在取消注册任何周期性任务之前
   if (PeriodicTask::num_tasks() > 0)
     WatcherThread::stop();
 
   // Print statistics gathered (profiling ...)
+    // 收集的打印统计信息（分析...）
   if (Arguments::has_profile()) {
     FlatProfiler::disengage();
     FlatProfiler::print(10);
   }
 
   // shut down the StatSampler task
+    // 关闭 StatSampler 任务
   StatSampler::disengage();
   StatSampler::destroy();
 
   // Stop concurrent GC threads
+    // 停止并发 GC 线程
   Universe::heap()->stop();
 
   // Print GC/heap related information.
+    // 打印 GC/heap 相关信息。
   if (PrintGCDetails) {
     Universe::print();
     AdaptiveSizePolicyOutput(0);
@@ -539,11 +551,13 @@ void before_exit(JavaThread * thread) {
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
+    // 即使还没有 JVMTI 环境也总是调用，因为环境可能会延迟附加，并且 JVMTI 必须跟踪 VM 执行的阶段
   JvmtiExport::post_vm_death();
   Threads::shutdown_vm_agents();
 
   // Terminate the signal thread
   // Note: we don't wait until it actually dies.
+    // 终止信号线程 注意：我们不会等到它真正死掉。
   os::terminate_signal_thread();
 
   print_statistics();
@@ -582,14 +596,17 @@ void vm_exit(int code) {
 
   if (VMThread::vm_thread() != NULL) {
     // Fire off a VM_Exit operation to bring VM to a safepoint and exit
+      // 启动 VM_Exit 操作以将 VM 带到安全点并退出
     VM_Exit op(code);
     if (thread->is_Java_thread())
       ((JavaThread*)thread)->set_thread_state(_thread_in_vm);
     VMThread::execute(&op);
     // should never reach here; but in case something wrong with VM Thread.
+      // 永远不应该到达这里；但万一VM Thread有问题。
     vm_direct_exit(code);
   } else {
     // VM thread is gone, just exit
+      // VM线程不见了，直接退出
     vm_direct_exit(code);
   }
   ShouldNotReachHere();

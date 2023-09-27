@@ -87,6 +87,9 @@ Java_java_lang_ClassLoader_defineClass0(JNIEnv *env,
                                                    length, pd, NULL);
 }
 
+/**
+ * 主要是调用了JVM_DefineClassWithSource()加载类，跟着源码往下走，会发现最终调用的是 jvm.cpp 中的 jvm_define_class_common()方法。
+ */
 JNIEXPORT jclass JNICALL
 Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
                                         jobject loader,

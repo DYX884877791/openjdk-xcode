@@ -27,6 +27,9 @@ package java.lang.ref;
 
 
 /**
+ * WeakReference通常用来实现类似WeakMap的特殊Map，不能阻止key或者value被垃圾回收了，当垃圾回收器发现一个对象只是被WeakReference所引用就会回收掉该对象，
+ * 并将关联的WeakReference加入到创建时传入的ReferenceQueue中。WeakReference没有新增属性，只是定义了自己的构造方法而已
+ *
  * Weak reference objects, which do not prevent their referents from being
  * made finalizable, finalized, and then reclaimed.  Weak references are most
  * often used to implement canonicalizing mappings.

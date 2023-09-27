@@ -30,6 +30,28 @@
 # include "interp_masm_x86.hpp"
 #endif
 
+/**
+ * 在cpu/x86/vm/register_definitions_x86.cpp文件中定义的寄存器如下:
+ *
+ * const Register  noreg = ((Register)noreg_RegisterEnumValue)
+ * const Register  rax =   ((Register)rax_RegisterEnumValue)
+ * const Register  rcx =   ((Register)rcx_RegisterEnumValue)
+ * const Register  rdx =   ((Register)rdx_RegisterEnumValue)
+ * const Register  rbx =   ((Register)rbx_RegisterEnumValue)
+ * const Register  rsp =   ((Register)rsp_RegisterEnumValue)
+ * const Register  rbp =   ((Register)rbp_RegisterEnumValue)
+ * const Register  rsi =   ((Register)rsi_RegisterEnumValue)
+ * const Register  rdi =   ((Register)rdi_RegisterEnumValue)
+ * const Register  r8 =  ((Register)r8_RegisterEnumValue)
+ * const Register  r9 =  ((Register)r9_RegisterEnumValue)
+ * const Register  r10 = ((Register)r10_RegisterEnumValue)
+ * const Register  r11 = ((Register)r11_RegisterEnumValue)
+ * const Register  r12 = ((Register)r12_RegisterEnumValue)
+ * const Register  r13 = ((Register)r13_RegisterEnumValue)
+ * const Register  r14 = ((Register)r14_RegisterEnumValue)
+ * const Register  r15 = ((Register)r15_RegisterEnumValue)
+ * 当我们需要使用通用寄存器时，通过rax、rcx等变量引用就可以了。
+ */
 REGISTER_DEFINITION(Register, noreg);
 REGISTER_DEFINITION(Register, rax);
 REGISTER_DEFINITION(Register, rcx);
@@ -113,6 +135,19 @@ REGISTER_DEFINITION(Register, r12_heapbase);
 REGISTER_DEFINITION(Register, r15_thread);
 #endif // AMD64
 
+/**
+ * cpu/x86/vm/register_definitions_x86.cpp文件中定义的寄存器变量如下：
+ * const MMXRegister  mnoreg = ((MMXRegister)mnoreg_MMXRegisterEnumValue)
+ * const MMXRegister  mmx0 =   ((MMXRegister)mmx0_MMXRegisterEnumValue)
+ * const MMXRegister  mmx1 =   ((MMXRegister)mmx1_MMXRegisterEnumValue)
+ * const MMXRegister  mmx2 =   ((MMXRegister)mmx2_MMXRegisterEnumValue)
+ * const MMXRegister  mmx3 =   ((MMXRegister)mmx3_MMXRegisterEnumValue)
+ * const MMXRegister  mmx4 =   ((MMXRegister)mmx4_MMXRegisterEnumValue)
+ * const MMXRegister  mmx5 =   ((MMXRegister)mmx5_MMXRegisterEnumValue)
+ * const MMXRegister  mmx6 =   ((MMXRegister)mmx6_MMXRegisterEnumValue)
+ * const MMXRegister  mmx7 =   ((MMXRegister)mmx7_MMXRegisterEnumValue)
+ * 当我们需要使用MMX寄存器时，通过mmx0、mmx1等变量引用就可以了。
+ */
 REGISTER_DEFINITION(MMXRegister, mnoreg );
 REGISTER_DEFINITION(MMXRegister, mmx0 );
 REGISTER_DEFINITION(MMXRegister, mmx1 );

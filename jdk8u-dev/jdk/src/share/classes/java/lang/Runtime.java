@@ -833,6 +833,9 @@ public class Runtime {
         loadLibrary0(Reflection.getCallerClass(), libname);
     }
 
+    /**
+     * fromClass 调用者
+     */
     synchronized void loadLibrary0(Class<?> fromClass, String libname) {
         SecurityManager security = System.getSecurityManager();
         if (security != null) {

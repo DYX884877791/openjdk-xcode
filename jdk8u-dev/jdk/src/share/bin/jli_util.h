@@ -31,12 +31,15 @@
 #include <stdio.h>
 #include <jni.h>
 #define JLDEBUG_ENV_ENTRY "_JAVA_LAUNCHER_DEBUG"
-
+#define TO_STRING(x)  #x
 void *JLI_MemAlloc(size_t size);
 void *JLI_MemRealloc(void *ptr, size_t size);
 char *JLI_StringDup(const char *s1);
 void  JLI_MemFree(void *ptr);
+// 正序比较字符串s1是否以字符串s2开头...
 int   JLI_StrCCmp(const char *s1, const char* s2);
+// 逆序比较字符串s1是否以字符串s2结尾...
+int   JLI_StrRCCmp(const char *s1, const char* s2);
 
 typedef struct {
     char *arg;
@@ -48,15 +51,22 @@ int     JLI_GetStdArgc();
 
 #define JLI_StrLen(p1)          strlen((p1))
 #define JLI_StrChr(p1, p2)      strchr((p1), (p2))
+// strrchr 函数在字符串 s 中是从后到前（或者称为从右向左）查找字符 c，即搜索最后一次出现字符 c 的位置
 #define JLI_StrRChr(p1, p2)     strrchr((p1), (p2))
 #define JLI_StrCmp(p1, p2)      strcmp((p1), (p2))
 #define JLI_StrNCmp(p1, p2, p3) strncmp((p1), (p2), (p3))
 #define JLI_StrCat(p1, p2)      strcat((p1), (p2))
 #define JLI_StrCpy(p1, p2)      strcpy((p1), (p2))
 #define JLI_StrNCpy(p1, p2, p3) strncpy((p1), (p2), (p3))
+// 该函数用于找到子串（p2）在一个字符串（p1）中第一次出现的位置
 #define JLI_StrStr(p1, p2)      strstr((p1), (p2))
+// 从参数p1 字符串的开头计算连续的字符，这些字符都是参数p2 所指字符串中的字符。
+// 返回字符串p1开头连续包含字符串p2内的字符数目。 若strspn()返回的数值为n，则代表字符串p1 开头连续有n 个字符都是属于字符串p2内的字符。
 #define JLI_StrSpn(p1, p2)      strspn((p1), (p2))
+// 从参数s1 字符串的开头计算连续的字符，这些字符都不在参数s2 所指的字符串中。
+// 返回字符串s 开头连续不含字符串reject 内的字符数目。若strcspn()返回的数值为n，则代表字符串s 开头连续有n 个字符都不含字符串reject 内的字符。
 #define JLI_StrCSpn(p1, p2)     strcspn((p1), (p2))
+// 该函数在源字符串（p1）中按从前到后顺序找出最先含有搜索字符串（p2）中任一字符的位置并返回位置指针(char*)，若找不到则返回空指针NULL。
 #define JLI_StrPBrk(p1, p2)     strpbrk((p1), (p2))
 
 /* On Windows lseek() is in io.h rather than the location dictated by POSIX. */
@@ -134,7 +144,7 @@ extern "C" {
 函数返回一个指向最后一次出现在字符串s中的字符c的位置指针，如果c不在s中，返回NULL。
 PS：linux中提供了相应的函数：basename(s)，用来获取不带路径的文件名。
 */
-#define filename(x) strrchr(x, '/') ? strrchr(x, '/') + 1 : x
+#define get_filename(x) strrchr(x, '/') ? strrchr(x, '/') + 1 : x
 
 /* Trace source location helpers */
 #define SLOG_TRACE_LVL1(LINE) #LINE
@@ -151,8 +161,7 @@ PS：linux中提供了相应的函数：basename(s)，用来获取不带路径�
 #define SLOG_TAG_MAX            128
 #define SLOG_COLOR_MAX          16
 
-#define SLOG_FLAGS_CHECK(c, f) (((c) & (f)) == (f))
-#define SLOG_FLAGS_ALL          255
+#define SLOG_FLAGS_CHECK(g, f) ((g) >= (f))
 
 #define SLOG_NAME_DEFAULT       "slog"
 #define SLOG_NEWLINE            "\n"
@@ -177,15 +186,18 @@ void slog_get_date(slog_date_t *pDate);
 
 /* Log level flags */
 typedef enum {
-    SLOG_NOTAG = (1 << 0),
-    SLOG_NOTE = (1 << 1),
-    SLOG_INFO = (1 << 2),
-    SLOG_WARN = (1 << 3),
-    SLOG_DEBUG = (1 << 4),
-    SLOG_TRACE = (1 << 5),
-    SLOG_ERROR = (1 << 6),
-    SLOG_FATAL = (1 << 7)
+    SLOG_ALL = 255, // 所有级别
+    SLOG_TRACE = (1 << 5), // 跟踪级别
+    SLOG_DEBUG = (1 << 4), // 调试级别
+    SLOG_INFO = (1 << 3),  // 普通级别
+    SLOG_WARN = (1 << 2),  // 警告级别
+    SLOG_ERROR = (1 << 1), // 错误级别
+    SLOG_FATAL = (1 << 0), // 严重错误级别
+    SLOG_NONE = 0, // 关闭所有
+    SLOG_UNKNOWN = -1 // 未知级别
 } slog_flag_t;
+
+#define CHECK_FLAG(SLOG_FLAG_T, flags) if (JLI_StrRCCmp(TO_STRING(SLOG_FLAG_T), flags) == 0) return SLOG_FLAG_T
 
 typedef int(*slog_cb_t)(const char *pLog, size_t nLength, slog_flag_t eFlag, void *pCtx);
 
@@ -212,14 +224,14 @@ typedef enum {
 #define slog_fatal(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 
 /* slog short location */
-#define slog_s(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_note_s(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_info_s(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_warn_s(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_debug_s(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_error_s(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_trace_s(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
-#define slog_fatal_s(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_s(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_note_s(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_info_s(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_warn_s(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_debug_s(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_error_s(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_trace_s(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_fatal_s(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
 
 
 typedef struct SLogConfig {
@@ -246,13 +258,16 @@ size_t slog_version(char *pDest, size_t nSize, uint8_t nMin);
 slog_config_t * slog_config_get();
 void slog_config_set(slog_config_t * pCfg);
 
+slog_flag_t slog_parse_flag(const char *flag);
+
+const char * slog_get_all_levels();
+
 void slog_separator_set(const char *pFormat, ...);
 void slog_callback_set(slog_cb_t callback, void *pContext);
 void slog_new_line(uint8_t nEnable);
 void slog_indent(uint8_t nEnable);
 
-void slog_enable(slog_flag_t eFlag);
-void slog_disable(slog_flag_t eFlag);
+void slog_flag_set(slog_flag_t eFlag);
 
 void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe);
 /*

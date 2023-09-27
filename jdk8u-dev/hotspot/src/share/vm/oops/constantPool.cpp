@@ -45,9 +45,10 @@
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, TRAPS) {
+    // 参数length就表示常量池项的数量，调用ConstantPool::size()计算所需要分配内存的大小，然后创建ConstantPool对象返回。
   // Tags are RW but comment below applies to tags also.
   Array<u1>* tags = MetadataFactory::new_writeable_array<u1>(loader_data, length, 0, CHECK_NULL);
-
+    // 由方法实现可知，就是ConstantPool实例本身占用的内存大小加上length个指针长度
   int size = ConstantPool::size(length);
 
   // CDS considerations:
@@ -537,9 +538,11 @@ Symbol* ConstantPool::klass_name_at(int which) const {
   CPSlot entry = slot_at(which);
   if (entry.is_resolved()) {
     // Already resolved - return entry's name.
+      // 已经连接时，获取到的是指向InstanceKlass实例的指针
     assert(entry.get_klass()->is_klass(), "must be");
     return entry.get_klass()->name();
   } else {
+      // 未连接时，获取到的是指向Symbol实例的指针
     assert(entry.is_unresolved(), "must be either symbol or klass");
     return entry.get_symbol();
   }
@@ -711,6 +714,7 @@ oop ConstantPool::resolve_constant_at_impl(constantPoolHandle this_oop, int inde
       result_oop = this_oop->pseudo_string_at(index, cache_index);
       break;
     }
+          // 拿到String对象
     result_oop = string_at_impl(this_oop, index, cache_index, CHECK_NULL);
     break;
 
@@ -866,10 +870,16 @@ oop ConstantPool::resolve_bootstrap_specifier_at_impl(constantPoolHandle this_oo
 
 oop ConstantPool::string_at_impl(constantPoolHandle this_oop, int which, int obj_index, TRAPS) {
   // If the string has already been interned, this entry will be non-null
+    // 从常量池中的对象池中尝试拿到缓存对象。
   oop str = this_oop->resolved_references()->obj_at(obj_index);
   if (str != NULL) return str;
+    // 拿到ldc指向常量池下标最终对应的Utf8项
+    // 而从上文讲述的SymbolTable可以得知，Utf8项在JVM中使用Symbol对象表示。
+    // 所以这里拿到Symbol对象，而拿到Symbol对象，就拿到了具体数据
   Symbol* sym = this_oop->unresolved_string_at(which);
+    // 尝试从StringTable中拿到String对象，如果存在就返回，如果不存在就创建并返回。
   str = StringTable::intern(sym, CHECK_(NULL));
+    // 把对象添加到常量池中的对象池中
   this_oop->string_at_put(which, obj_index, str);
   assert(java_lang_String::is_instance(str), "must be string");
   return str;

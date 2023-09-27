@@ -32,14 +32,29 @@ class fieldDescriptor;
 class klassVtable;
 
 // ArrayKlass is the abstract baseclass for all array classes
-
+// ArrayKlass继承自Klass，是所有数组类的抽象基类
 class ArrayKlass: public Klass {
   friend class VMStructs;
  private:
+    // _dimension、_higher_dimension与_lower_dimension对于一维及多维数组的描述非常重要，属性值的设置相对简单
+    // int类型，表示数组的维度，记为n
   int      _dimension;         // This is n'th-dimensional array.
+    // Klass指针，表示对n+1维数组Klass的引用
   Klass* volatile _higher_dimension;  // Refers the (n+1)'th-dimensional array (if present).
+    // Klass指针，表示对n-1维数组Klass的引用
   Klass* volatile _lower_dimension;   // Refers the (n-1)'th-dimensional array (if present).
+    // int类型， 虚函数表的长度
+    /**
+     * _vtable_len的值为5，因为数组是引用类型，父类为Object类，而Object类中有5个虚方法可被用来继承和重写，如下：
+     * void finalize()
+     * boolean equals(Object)
+     * String toString()
+     * int hashCode()
+     * Object clone()
+     */
   int      _vtable_len;        // size of vtable for this klass
+    // oop， 数组元素对应的java/lang/Class对象的Oop
+    // 比如：对于一维基本类型的数组来说，这个值是java.lang.Class对象。Class对象使用oop对象来表示
   oop      _component_mirror;  // component type, as a java/lang/Class
 
  protected:

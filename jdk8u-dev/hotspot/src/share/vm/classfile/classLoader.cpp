@@ -1156,6 +1156,7 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
   st.print_raw(h_name->as_utf8());
   st.print_raw(".class");
     //获取文件名
+    // 通过st获取对应的文件名
   const char* file_name = st.as_string();
   ClassLoaderExt::Context context(class_name, file_name, THREAD);
 
@@ -1169,9 +1170,13 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     PerfClassTraceTime vmtimer(perf_sys_class_lookup_time(),
                                ((JavaThread*) THREAD)->get_thread_stat()->perf_timers_addr(),
                                PerfClassTraceTime::CLASS_LOAD);
+    // 遍历class_path找到要加载的类文件，获取到文件的绝对路径后就创建ClassFileStream对象。ClassPathEntry 是一个链表结构（因为class path有多个），
+    // 同时在ClassPathEntry中还声明了一个虚函数open_stream()。
+    // 这样就可以通过循环遍历链表上的结构，直到查找到某个路径下名称为name的文件为止，这时候open_stream()函数会返回ClassFileStream实例。
       //从第一个ClassPathEntry开始遍历所有的ClassPathEntry
     e = _first_entry;
     while (e != NULL) {
+        // 创建字节码文件流，每个被加载的Java类都对应着一个ClassLoaderData结构，ClassLoaderData内部通过链表维护着ClassLoader和ClassLoader加载的类
       stream = e->open_stream(file_name, CHECK_NULL);
         //如果检查返回false则返回null，check方法默认返回true
       if (!context.check(stream, classpath_index)) {
@@ -1187,6 +1192,7 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
   }
 
     //如果找到了目标class文件
+    // 在load_classfile()方法中获取到ClassFileStream实例后会调用ClassFileParser类中的parseClassFile()方法
   if (stream != NULL) {
     // class file found, parse it
       //构建一个ClassFileParser实例
@@ -1200,6 +1206,8 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     // this call to parseClassFile
     // We do not declare another ResourceMark here, reusing the one declared
     // at the start of the method
+    // 调用parseClassFile()方法后返回表示Java类的instanceKlass对象，最终方法返回的是操作instanceKlass对象的句柄instanceKlassHandle。
+        // 最终调用ClassFileParser解析Java字节码文件流
       //解析并加载class文件，注意此时并未开始链接
     instanceKlassHandle result = parser.parseClassFile(h_name,
                                                        loader_data,
@@ -1334,6 +1342,7 @@ void ClassLoader::initialize() {
   }
 #endif
     //设置加载核心jar包的搜索路径，从系统参数Arguments中获取
+    //设置bootstrap加载器路径
   setup_bootstrap_search_path();
     //如果是惰性启动加载，即启动时不加载rt.jar等文件
   if (LazyBootClassLoader) {

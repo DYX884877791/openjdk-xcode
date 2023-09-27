@@ -57,6 +57,15 @@ import javax.lang.model.type.*;
  * implementations.  Future versions of the API that are only required
  * to run on Java SE 8 and later may take advantage of default methods
  * in this situation.
+ * 具有默认行为的类型的访问者，适用于jdk 1.6.
+ * 警告：该类实现的Type EvestIdor接口可能会在将来添加一些方法，以适应添加到Java编程语言未来版本的新的、目前未知的语言结构。因此，名称以“visit”开头的方法将来可能会被添加到这个类中；为了避免不兼容，扩展这个类的类不应声明任何以“visit”开头的实例方法。
+ *
+ * 当添加了这种新的访问方法时，此类中的默认实现将调用visitUnknown方法。还将引入一个新的抽象类型访问者类来对应新版本的语言；该访问者中的访问方法具有不同的默认行为。当新访问者被引入时，该类中的一部分或者全部都将被废弃.
+ *
+ * 注意，在访问者界面中添加一个新的访问方法的默认实现，而不是直接在访问者界面中添加一个默认方法，因为Java SE 8语言特征不能用于这个版本的API，因为这个版本需要在Java SE 7上运行。仅在Java SE 8和以后运行的API的未来版本可能会在这种情况下利用默认方法。
+ *
+ * 泛型参数 R –> 该visit方法的返回值类型
+ * 泛型参数 P –> visit方法额外添加的参数
  *
  * @param <R> the return type of this visitor's methods.  Use {@link
  *            Void} for visitors that do not need to return results.

@@ -281,10 +281,12 @@ public class VM {
         // The maximum amount of allocatable direct buffer memory (in bytes)
         // from the system property sun.nio.MaxDirectMemorySize set by the VM.
         // The system property will be removed.
+         // hashTable的remove(Object key)
         String s = (String)props.remove("sun.nio.MaxDirectMemorySize");
         if (s != null) {
             if (s.equals("-1")) {
                 // -XX:MaxDirectMemorySize not given, take default
+                 // 返回 Java 虚拟机将尝试使用的最大内存量。如果没有固有限制，则将返回值 {@link java.lang.LongMAX_VALUE}。
                 directMemory = Runtime.getRuntime().maxMemory();
             } else {
                 long l = Long.parseLong(s);

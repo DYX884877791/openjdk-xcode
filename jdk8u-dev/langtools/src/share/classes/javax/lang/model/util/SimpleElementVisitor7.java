@@ -70,6 +70,10 @@ import static javax.lang.model.SourceVersion.*;
  * implementations.  Future versions of the API that are only required
  * to run on Java SE 8 and later may take advantage of default methods
  * in this situation.
+ * 对应jdk1.7的简单的visitor.
+ *
+ *  当visit方法是与jdk1.7和之前版本的语法结构相关的,则会调用defaultAction方法.
+ *
  *
  * @param <R> the return type of this visitor's methods.  Use {@code Void}
  *             for visitors that do not need to return results.
@@ -102,7 +106,7 @@ public class SimpleElementVisitor7<R, P> extends SimpleElementVisitor6<R, P> {
 
     /**
      * This implementation calls {@code defaultAction}.
-     *
+     * 可以看到在SimpleElementVisitor6还需判断是否是jdk1.7中的ElementKind.RESOURCE_VARIABLE,在这里就直接调用defaultAction了.
      * @param e {@inheritDoc}
      * @param p {@inheritDoc}
      * @return  the result of {@code defaultAction}
