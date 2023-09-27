@@ -30,6 +30,7 @@
 
 #include <unistd.h>
 #include <signal.h>
+#include <sys/errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -467,7 +468,7 @@ void AttachListener::vm_start() {
       debug_only(warning("failed to remove stale attach pid file at %s", fn));
     }
   } else {
-    perror("stat() failed...");
+    slog_error("调用stat库函数查看文件[%s]的属性出错[%s]...", fn, strerror(errno));
   }
 }
 
@@ -545,7 +546,7 @@ bool AttachListener::is_init_trigger() {
       return true;
     }
   }
-  perror("stat() failed...");
+  slog_error("调用stat库函数查看文件[%s]的属性出错[%s]...", fn, strerror(errno));
   return false;
 }
 

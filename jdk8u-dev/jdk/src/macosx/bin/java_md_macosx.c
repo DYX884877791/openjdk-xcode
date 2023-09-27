@@ -592,7 +592,7 @@ GetJVMPath(const char *jrepath, const char *jvmtype,
         JLI_Snprintf(jvmpath, jvmpathsize, "%s/lib/%s/" JVM_DLL, jrepath, jvmtypeUsed);
     }
 
-    JLI_TraceLauncher("Does `%s' exist ... ", jvmpath);
+    JLI_TraceLauncher("Does '%s' exist ... ", jvmpath);
 
     if (stat(jvmpath, &s) == 0) {
         JLI_TraceLauncher("yes.\n");
