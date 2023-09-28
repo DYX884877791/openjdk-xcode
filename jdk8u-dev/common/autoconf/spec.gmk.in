@@ -206,6 +206,8 @@ COOKED_JDK_UPDATE_VERSION:=@COOKED_JDK_UPDATE_VERSION@
 COOKED_BUILD_NUMBER:=@COOKED_BUILD_NUMBER@
 # These variables need to be generated here so that MILESTONE and
 # JDK_BUILD_NUMBER can be overridden on the make command line.
+# 拿JDK_VERSION 这个变量来说，找到它在 generated-configure.sh 中会被赋值
+# 从config.log中看到，MILESTONE的值为internal，BUILD_VARIANT_RELEASE的值为-debug
 ifeq ($(MILESTONE), fcs)
   RELEASE=$(JDK_VERSION)$(BUILD_VARIANT_RELEASE)
 else

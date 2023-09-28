@@ -20117,7 +20117,7 @@ fi
   if test "x$JDK_BUILD_NUMBER" = x; then
     JDK_BUILD_NUMBER=b00
     if test "x$USER_RELEASE_SUFFIX" = x; then
-      BUILD_DATE=`date '+%Y_%m_%d_%H_%M'`
+      BUILD_DATE=`date '+%Y_%m_%d_%H_%M_%S'`
       # Avoid [:alnum:] since it depends on the locale.
       CLEAN_USERNAME=`echo "$USER" | $TR -d -c 'abcdefghijklmnopqrstuvqxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'`
       USER_RELEASE_SUFFIX=`echo "${CLEAN_USERNAME}_${BUILD_DATE}" | $TR 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz'`

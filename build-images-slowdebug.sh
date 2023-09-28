@@ -3,9 +3,9 @@
 set -e
 
 BUILD_LOG="LOG=debug"
-BUILD_MODE=dev
+BUILD_MODE=normal
 TEST_JDK=false
-BUILD_JAVAFX=true
+BUILD_JAVAFX=false
 set_os() {
 	IS_LINUX=false
 	IS_DARWIN=false
@@ -139,13 +139,6 @@ configurejdk() {
             --includedir="$XCODE_DEVELOPER_PREFIX/Toolchains/XcodeDefault.xctoolchain/usr/include" \
             --with-boot-jdk="$BOOT_JDK""
 	fi
-    if $BUILD_JAVAFX ; then
-        # the javafx build requires 1.8.0-b40 or higher
-	BUILD_VERSION_CONFIG="--with-build-number=b88 \
-            --with-vendor-name="openjdk" \
-            --with-milestone="ea" \
-            --with-update-version=99"
-    fi
 	./configure $DARWIN_CONFIG $BUILD_VERSION_CONFIG \
             --with-debug-level=$DEBUG_LEVEL \
             --with-conf-name=$JDK_CONF \
@@ -179,9 +172,6 @@ progress() {
 #### build the world
 progress "building in $JDK_DIR"
 
-set_os
-
-
 
 JDK_IMAGE_DIR="$JDK_DIR/build/$JDK_CONF/images/j2sdk-image"
 
@@ -193,11 +183,12 @@ echo "RECONFIGURE_BUILD--->$RECONFIGURE_BUILD"
 echo "CLEAN_BUILD--->$CLEAN_BUILD"
 
 if [ true -o $RECONFIGURE_BUILD -o $CLEAN_BUILD ] ; then
-	# configurejdk
-	echo "configurejdk..."
+	echo "configure jdk..."
+	configurejdk
 fi
 
-# buildjdk
+echo "build jdk..."
+buildjdk
 
 progress "create distribution zip"
 

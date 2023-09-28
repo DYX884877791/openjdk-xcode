@@ -26,6 +26,9 @@
 package sun.misc;
 import java.io.PrintStream;
 
+/**
+ * 由jdk/make/gensrc/GensrcMisc.gmk文件进行替换，生成版本号。
+ */
 public class Version {
 
 
