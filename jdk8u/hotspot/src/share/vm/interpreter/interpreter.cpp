@@ -44,6 +44,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/stubRoutines.hpp"
 #include "runtime/timer.hpp"
+#include "utilities/slog.hpp"
 
 # define __ _masm->
 
@@ -85,13 +86,18 @@ void InterpreterCodelet::print_on(outputStream* st) const {
 // Implementation of  platform independent aspects of Interpreter
 
 void AbstractInterpreter::initialize() {
+    //避免二次初始化
   if (_code != NULL) return;
 
   // make sure 'imported' classes are initialized
+    //BytecodeCounter统计字节码总的执行次数
   if (CountBytecodes || TraceBytecodes || StopInterpreterAt) BytecodeCounter::reset();
+    //BytecodeHistogram统计每个字节码的执行次数
   if (PrintBytecodeHistogram)                                BytecodeHistogram::reset();
+    //BytecodePairHistogram统计字节码对的执行次数，字节码对是指两个连续的字节码
   if (PrintBytecodePairHistogram)                            BytecodePairHistogram::reset();
 
+    //InvocationCounters用于保存方法调用的次数，当次数达到某个阈值时会触发某个动作执行
   InvocationCounter::reinitialize(DelayCompilationDuringStartup);
 
 }
@@ -115,12 +121,15 @@ void AbstractInterpreter::print() {
 
 
 void interpreter_init() {
+  slog_trace("进入hotspot/src/share/vm/interpreter/interpreter.cpp中的interpreter_init函数...");
+    //初始化解释器
   Interpreter::initialize();
 #ifndef PRODUCT
   if (TraceBytecodes) BytecodeTracer::set_closure(BytecodeTracer::std_closure());
 #endif // PRODUCT
   // need to hit every safepoint in order to call zapping routine
   // register the interpreter
+    //通知libcollector stub已经生成并装载完成
   Forte::register_stub(
     "Interpreter",
     AbstractInterpreter::code()->code_start(),
@@ -128,6 +137,7 @@ void interpreter_init() {
   );
 
   // notify JVMTI profiler
+    // 发布JVMTI事件
   if (JvmtiExport::should_post_dynamic_code_generated()) {
     JvmtiExport::post_dynamic_code_generated("Interpreter",
                                              AbstractInterpreter::code()->code_start(),
@@ -172,7 +182,10 @@ static const BasicType types[Interpreter::number_of_result_handlers] = {
 void AbstractInterpreterGenerator::generate_all() {
 
 
+    //在CodeletMark中申请一个新的保存汇编代码的Stub和一个与之关联的InterpreterMacroAssembler实例
+    //CodeletMark销毁后自动销毁掉InterpreterMacroAssembler
   { CodeletMark cm(_masm, "slow signature handler");
+      //generate_slow_signature_handler方法最终调用InterpreterRuntime::slow_signature_handler方法实现
     Interpreter::_slow_signature_handler = generate_slow_signature_handler();
   }
 
@@ -183,19 +196,26 @@ void AbstractInterpreterGenerator::generate_all() {
 
 AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m) {
   // Abstract method?
+    //如果是抽象方法，直接返回abstract
   if (m->is_abstract()) return abstract;
 
   // Method handle primitive?
+    //如果是MethodHandle内部的私有方法
   if (m->is_method_handle_intrinsic()) {
+      //vmIntrinsics::ID就是用来给部分特殊方法打标的
     vmIntrinsics::ID id = m->intrinsic_id();
+      //校验ID是否合法，ID也是一个枚举，判断是否在枚举值范围内
     assert(MethodHandles::is_signature_polymorphic(id), "must match an intrinsic");
+      //根据ID计算MethodKind枚举值
     MethodKind kind = (MethodKind)( method_handle_invoke_FIRST +
                                     ((int)id - vmIntrinsics::FIRST_MH_SIG_POLY) );
+      //校验计算的MethodKind枚举值是否合法
     assert(kind <= method_handle_invoke_LAST, "parallel enum ranges");
     return kind;
   }
 
 #ifndef CC_INTERP
+    //如果是updateCRC32等本地方法，CRC32是一种文件签名算法
   if (UseCRC32Intrinsics && m->is_native()) {
     // Use optimized stub code for CRC32 native methods.
     switch (m->intrinsic_id()) {
@@ -209,16 +229,21 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
   // Native method?
   // Note: This test must come _before_ the test for intrinsic
   //       methods. See also comments below.
+    //如果是本地方法
   if (m->is_native()) {
+      //不能是MethodHandle内部的私有方法
     assert(!m->is_method_handle_intrinsic(), "overlapping bits here, watch out");
+      //根据本地方式是否是同步和非同步方法
     return m->is_synchronized() ? native_synchronized : native;
   }
 
   // Synchronized?
+    // 如果是同步方法
   if (m->is_synchronized()) {
     return zerolocals_synchronized;
   }
 
+    //如果是构造方法，且要求在初始化时注册finalizer方法
   if (RegisterFinalizersAtInit && m->code_size() == 1 &&
       m->intrinsic_id() == vmIntrinsics::_Object_init) {
     // We need to execute the special return bytecode to check for
@@ -227,6 +252,7 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
   }
 
   // Empty method?
+    // 如果是空方法
   if (m->is_empty_method()) {
     return empty;
   }
@@ -236,6 +262,7 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
   //       otherwise we will run into problems with JDK 1.2, see also
   //       AbstractInterpreterGenerator::generate_method_entry() for
   //       for details.
+    //如果是特殊的函数计算方法
   switch (m->intrinsic_id()) {
     case vmIntrinsics::_dsin  : return java_lang_math_sin  ;
     case vmIntrinsics::_dcos  : return java_lang_math_cos  ;
@@ -252,16 +279,34 @@ AbstractInterpreter::MethodKind AbstractInterpreter::method_kind(methodHandle m)
   }
 
   // Accessor method?
+    //获取属性的方法，如this.a，a是属性，对应的字节码指令就是getfield
   if (m->is_accessor()) {
     assert(m->size_of_parameters() == 1, "fast code for accessors assumes parameter size = 1");
     return accessor;
   }
 
   // Note: for now: zero locals for all non-empty methods
+    //其他的非本地非空非初始化的普通方法
   return zerolocals;
 }
 
 
+// 为了能尽快找到某个Java方法对应的entry_point入口，把这种对应关系保存到了_entry_table中，所以entry_for_kind()函数才能快速的获取到方法对应的entry_point入口
+//
+// 那么何时会调用set_entry_for_kind()函数呢，答案就在TemplateInterpreterGenerator::generate_all()函数中，generate_all()函数
+// 会调用generate_method_entry()函数生成每种Java方法的entry_point，每生成一个对应方法类型的entry_point就保存到_entry_table中。
+//
+// 在HotSpot启动时就会调用generate_all这个函数生成各种Java方法的entry_point。调用栈如下：
+// TemplateInterpreterGenerator::generate_all()   templateInterpreter.cpp
+// InterpreterGenerator::InterpreterGenerator()   templateInterpreter_x86_64.cpp
+// TemplateInterpreter::initialize()              templateInterpreter.cpp
+// interpreter_init()                             interpreter.cpp
+// init_globals()                                 init.cpp
+// Threads::create_vm()                           thread.cpp
+// JNI_CreateJavaVM()                             jni.cpp
+// InitializeJVM()                                java.c
+// JavaMain()                                     java.c
+// start_thread()                                 pthread_create.c
 void AbstractInterpreter::set_entry_for_kind(AbstractInterpreter::MethodKind kind, address entry) {
   assert(kind >= method_handle_invoke_FIRST &&
          kind <= method_handle_invoke_LAST, "late initialization only for MH entry points");
@@ -487,6 +532,7 @@ void AbstractInterpreterGenerator::bang_stack_shadow_pages(bool native_call) {
   }
 }
 
+// 初始化一个假的地址，真实的address是在MethodHandles::generate_adapters()方法中调用MethodHandlesAdapterGenerator::generate()方法生成的
 void AbstractInterpreterGenerator::initialize_method_handle_entries() {
   // method handle entry kinds are generated later in MethodHandlesAdapterGenerator::generate:
   for (int i = Interpreter::method_handle_invoke_FIRST; i <= Interpreter::method_handle_invoke_LAST; i++) {

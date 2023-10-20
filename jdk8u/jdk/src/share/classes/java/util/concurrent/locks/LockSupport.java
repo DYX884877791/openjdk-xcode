@@ -37,6 +37,10 @@ package java.util.concurrent.locks;
 import sun.misc.Unsafe;
 
 /**
+ * LockSupport是实现Java Lock接口的关键，里面定义的方法都是静态方法，且底层实现都是调用sun.misc.Unsafe的方法，其中大部分都是本地方法，
+ * 其本地方法实现都在hotspot\src\share\vm\prims\Unsafe.cpp中，并不是在正常的jdk\src\share\native目录下，其本地方法的注册通过JVM_RegisterUnsafeMethods方法实现，
+ * 对应于Unsafe类的静态registerNatives本地方法，即当Unsafe类加载的时候就会通过上述方法完成Unsafe类中其他本地方法的注册。
+ *
  * Basic thread blocking primitives for creating locks and other
  * synchronization classes.
  *
@@ -122,10 +126,13 @@ public class LockSupport {
 
     private static void setBlocker(Thread t, Object arg) {
         // Even though volatile, hotspot doesn't need a write barrier here.
+        // 将arg写入Thread的parkBlocker属性，该属性是包内访问的
         UNSAFE.putObject(t, parkBlockerOffset, arg);
     }
 
     /**
+     * unpark方法只有一个版本，注意unpark不一定对当前线程，也可能是其他某个线程
+     *
      * Makes available the permit for the given thread, if it
      * was not already available.  If the thread was blocked on
      * {@code park} then it will unblock.  Otherwise, its next call
@@ -141,7 +148,11 @@ public class LockSupport {
             UNSAFE.unpark(thread);
     }
 
+    // 下面的众多park()重载方法，其用途都是让某个线程处于阻塞（休眠）状态，操作系统不会再给该线程分配CPU时间片
+
     /**
+     * 跟park相比就是parkBlocker不一样
+     *
      * Disables the current thread for thread scheduling purposes unless the
      * permit is available.
      *
@@ -276,6 +287,12 @@ public class LockSupport {
     }
 
     /**
+     * 执行普通的挂起，isAbsolute是false，time是0。
+     * 三种情况：
+     *   1.在调用park()之前调用了unpark或者interrupt则park直接返回，不会挂起。
+     *   2.如果未调用，则park会挂起当前线程。
+     *   3.park未知原因调用出错则直接返回（一般不会出现）
+     *
      * Disables the current thread for thread scheduling purposes unless the
      * permit is available.
      *
@@ -305,6 +322,14 @@ public class LockSupport {
     }
 
     /**
+     * 跟park相比增加了阻塞的时间限制，单位是纳秒
+     * isAbsolute是false，time大于0，则会实现高精度计时。
+     * 三种情况：
+     *      1.在调用park()之前调用了unpark或者interrupt则park直接返回，不会挂起。
+     *      2.如果未调用则会挂起当前线程，但是在挂起time ns时如果未收到唤醒信号也会返回继续执行。
+     *      3.park未知原因调用出错则直接返回（一般不会出现）
+     * 还有一个重载的多了一个Object blocker参数的parkNanos方法...
+     *
      * Disables the current thread for thread scheduling purposes, for up to
      * the specified waiting time, unless the permit is available.
      *
@@ -339,6 +364,14 @@ public class LockSupport {
     }
 
     /**
+     * 单位是毫秒
+     * 此时isAbsolute是true，time可以为任意数值。
+     *   四种情况：
+     *       1.在调用park()之前调用了unpark或者interrupt则park直接返回，不会挂起。
+     *       2.如果time <= 0则直接返回。
+     *       3.如果之前未调用park unpark并且time > 0,则会挂起当前线程，但是在挂起time ms时如果未收到唤醒信号也会返回继续执行。
+     *       4.park未知原因调用出错则直接返回（一般不会出现）
+     *
      * Disables the current thread for thread scheduling purposes, until
      * the specified deadline, unless the permit is available.
      *

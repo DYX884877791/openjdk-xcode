@@ -1060,6 +1060,14 @@ public final class System {
     }
 
     /**
+     * System.loadLibrary(String)方法用来加载动态链接库的，String参数是指定动态链接库的模块名的而非真实的文件名的。
+     * System还有另外一个load(String)方法，也是用来加载动态链接库的，不过String参数是库文件的绝对路径名，
+     * 比如System.loadLibrary("HelloWorld") 可以替换成System.load("/home/openjdk/cppTest/HelloWorld.so")。
+     * 两者的区别在于前者的库文件位置是配置化的，更灵活；而后者是代码写死的，适用于测试场景，生产不建议使用
+     *
+     * load方法要求fileName必须是绝对路径，JVM解析时会去除路径部分和文件后缀得到文件名，利用文件名生成该动态链接库的模块名，
+     * 比如文件名是HelloWorld，JVM中用JNI_OnLoad_HelloWorld来表示这个模块；loadLibrary方法则直接使用JNI_OnLoad_libname作为模块名。
+     *
      * Loads the native library specified by the filename argument.  The filename
      * argument must be an absolute path name.
      *
@@ -1101,6 +1109,13 @@ public final class System {
     }
 
     /**
+     * 加载由 <code>libname<code> 参数指定的本机库。
+     *       <code>libname<code> 参数不得包含任何特定于平台的前缀、文件扩展名或路径。
+     *       如果名为 <code>libname<code> 的本机库与 VM 静态链接，
+     *       则调用该库导出的 JNI_OnLoad_<code>libname<code> 函数。有关更多详细信息，
+     *       请参阅 JNI 规范。
+     *       否则，libname 参数将从系统库位置加载并以与实现相关的方式映射到本机库映像。
+     *
      * Loads the native library specified by the <code>libname</code>
      * argument.  The <code>libname</code> argument must not contain any platform
      * specific prefix, file extension or path. If a native library
@@ -1137,6 +1152,8 @@ public final class System {
     }
 
     /**
+     * System.mapLibraryName是一个本地方法，表示将库名映射成特定平台下的库文件名
+     *
      * Maps a library name into a platform-specific string representing
      * a native library.
      *
@@ -1164,6 +1181,8 @@ public final class System {
 
 
     /**
+     * initializeSystemClass不是给我们调用的，这个方法会在vm线程初始化后被虚拟机调用。其定义在hotspot/src/share/vm/runtime/thread.cpp中
+     *
      * Initialize the system class.  Called after thread initialization.
      */
     private static void initializeSystemClass() {
@@ -1176,6 +1195,11 @@ public final class System {
         // initialization. So make sure the "props" is available at the
         // very beginning of the initialization and all system properties to
         // be put into it directly.
+        // VM 可能会在“props”初始化期间调用 JNU_NewStringPlatform() 来设置那些编码
+        // 敏感属性（user.home、user.name、boot.class.path 等），
+        // 在这些属性中它可能需要通过 System.getProperty() 访问，
+        // 在初始化的早期阶段已经初始化（放入“props”）的相关系统编码属性。
+        // 因此，请确保“props”在初始化的一开始就可用，并且所有系统属性都可以直接放入其中。
         props = new Properties();
         initProperties(props);  // initialized by the VM
 
@@ -1193,6 +1217,13 @@ public final class System {
         // Save a private copy of the system properties object that
         // can only be accessed by the internal implementation.  Remove
         // certain system properties that are not intended for public access.
+        // 某些系统配置可能由 VM 选项控制，例如用于支持自动装箱的对象标识语义的最大直接内存量和整数缓存大小。
+        // 通常，库将从 VM 设置的属性中获取这些值。如果属性仅供内部实现使用，
+        // 则应从系统属性中删除这些属性。
+        //
+        // 例如，参见 java.lang.Integer.IntegerCache 和 sun.misc.VM.saveAndRemoveProperties 方法。
+        //
+        // 保存只能由内部实现访问的系统属性对象的私有副本。删除某些不打算供公众访问的系统属性。
         sun.misc.VM.saveAndRemoveProperties(props);
 
 
@@ -1200,6 +1231,7 @@ public final class System {
         StaticProperty.jdkSerialFilter();   // Load StaticProperty to cache the property values
         sun.misc.Version.init();
 
+        // 文件流
         FileInputStream fdIn = new FileInputStream(FileDescriptor.in);
         FileOutputStream fdOut = new FileOutputStream(FileDescriptor.out);
         FileOutputStream fdErr = new FileOutputStream(FileDescriptor.err);
@@ -1209,29 +1241,38 @@ public final class System {
 
         // Load the zip library now in order to keep java.util.zip.ZipFile
         // from trying to use itself to load this library later.
+        // 现在加载 zip 库，以防止 java.util.zip.ZipFile 稍后尝试使用自身加载此库。
         loadLibrary("zip");
 
         // Setup Java signal handlers for HUP, TERM, and INT (where available).
+        // 为 HUP、TERM 和 INT（如果可用）设置 Java 信号处理程序。
         Terminator.setup();
 
         // Initialize any miscellenous operating system settings that need to be
         // set for the class libraries. Currently this is no-op everywhere except
         // for Windows where the process-wide error mode is set before the java.io
         // classes are used.
+        // 初始化需要为类库设置的任何其他操作系统设置。
+        // 目前，除了在使用 java.io 类之前设置了进程范围的错误模式的 Windows 之外，
+        // 这在任何地方都是无操作的。
         sun.misc.VM.initializeOSEnvironment();
 
         // The main thread is not added to its thread group in the same
         // way as other threads; we must do it ourselves here.
+        // 主线程不像其他线程那样添加到它的线程组中；我们必须在这里自己做。
         Thread current = Thread.currentThread();
         current.getThreadGroup().add(current);
 
         // register shared secrets
+        // 注册共享secrets
         setJavaLangAccess();
 
         // Subsystems that are invoked during initialization can invoke
         // sun.misc.VM.isBooted() in order to avoid doing things that should
         // wait until the application class loader has been set up.
         // IMPORTANT: Ensure that this remains the last initialization action!
+        // 在初始化期间调用的子系统可以调用 sun.misc.VM.isBooted() 以避免执行应该等到应用程序类加载器设置完成的事情。
+        // 重要提示：确保这仍然是最后的初始化操作！
         sun.misc.VM.booted();
     }
 

@@ -2018,26 +2018,37 @@ int (*ObjectMonitor::SpinCallbackFunction)(intptr_t, int) = NULL ;
 // Spinning: Fixed frequency (100%), vary duration
 
 
+// 默认配置下自旋的次数是会自适应调整的，可以通过参数指定自旋固定的次数，注意在自旋的过程中会判断是否进入安全点同步，如果是则终止自旋。
 int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
 
     // Dumb, brutal spin.  Good for comparative measurements against adaptive spinning.
+    //Knob_FixedSpin默认是0，表示固定自旋的次数(JDK1.6之前默认为10，之后默认为0)
     int ctr = Knob_FixedSpin ;
     if (ctr != 0) {
+        //每一次while循环都是一次自旋，在指定的次数内抢占成功就是成功，否则失败
         while (--ctr >= 0) {
+            //尝试抢占该锁，如果成功返回1
             if (TryLock (Self) > 0) return 1 ;
+            //抢占失败，该方法直接返回0
             SpinPause () ;
         }
         return 0 ;
     }
 
+    //Knob_PreSpin的默认值是10
     for (ctr = Knob_PreSpin + 1; --ctr >= 0 ; ) {
       if (TryLock(Self) > 0) {
         // Increase _SpinDuration ...
         // Note that we don't clamp SpinDuration precisely at SpinLimit.
         // Raising _SpurDuration to the poverty line is key.
+          //抢占成功
         int x = _SpinDuration ;
+          //Knob_SpinLimit的默认值是5000
         if (x < Knob_SpinLimit) {
+            //增加_SpinDuration
+            //Knob_Poverty的默认值是1000，Knob_BonusB对的默认值是100
            if (x < Knob_Poverty) x = Knob_Poverty ;
+            //即_SpinDuration的最小值是1100，最大值是5000
            _SpinDuration = x + Knob_BonusB ;
         }
         return 1 ;
@@ -2060,15 +2071,19 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
     // hold the duration constant but vary the frequency.
 
     ctr = _SpinDuration  ;
+    //Knob_SpinBase的默认值是10
     if (ctr < Knob_SpinBase) ctr = Knob_SpinBase ;
     if (ctr <= 0) return 0 ;
 
+    //Knob_SuccRestrict默认为0
     if (Knob_SuccRestrict && _succ != NULL) return 0 ;
+    //Knob_OState默认为3，NotRunnable用于判断目标线程是否退出，如果已退出则终止自旋
     if (Knob_OState && NotRunnable (Self, (Thread *) _owner)) {
        TEVENT (Spin abort - notrunnable [TOP]);
        return 0 ;
     }
 
+    //Knob_MaxSpinners默认为-1
     int MaxSpin = Knob_MaxSpinners ;
     if (MaxSpin >= 0) {
        if (_Spinner > MaxSpin) {
@@ -2076,6 +2091,7 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
           return 0 ;
        }
        // Slighty racy, but benign ...
+        //原子的将_Spinner属性加1，不断循环直到修改成功
        Adjust (&_Spinner, 1) ;
     }
 
@@ -2085,8 +2101,11 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
     // to succeed.
     int hits    = 0 ;
     int msk     = 0 ;
+    //Knob_CASPenalty默认值是-1
     int caspty  = Knob_CASPenalty ;
+    //Knob_OXPenalty默认值是-1
     int oxpty   = Knob_OXPenalty ;
+    //Knob_SpinSetSucc默认值是1
     int sss     = Knob_SpinSetSucc ;
     if (sss && _succ == NULL ) _succ = Self ;
     Thread * prv = NULL ;
@@ -2108,12 +2127,17 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
       // This is in keeping with the "no loitering in runtime" rule.
       // We periodically check to see if there's a safepoint pending.
       if ((ctr & 0xFF) == 0) {
+          //0xFF就是256，即每自旋256次就需要检查是否开启了安全点同步
          if (SafepointSynchronize::do_call_back()) {
+             //do_call_back返回true，说明进入了安全点同步
             TEVENT (Spin: safepoint) ;
+             //跳转到Abort
             goto Abort ;           // abrupt spin egress
          }
+          //Knob_UsePause默认值是1
          if (Knob_UsePause & 1) SpinPause () ;
 
+          //SpinCallbackFunction默认为NULL
          int (*scb)(intptr_t,int) = SpinCallbackFunction ;
          if (hits > 50 && scb != NULL) {
             int abend = (*scb)(SpinCallbackArgument, 0) ;
@@ -2142,6 +2166,7 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
       if ((hits & 0xF) == 0) {
         // The 0xF, above, corresponds to the exponent.
         // Consider: (msk+1)|msk
+          //BackOffMask默认值是0
         msk = ((msk << 2)|3) & BackOffMask ;
       }
 
@@ -2157,6 +2182,7 @@ int ObjectMonitor::TrySpin_VaryDuration (Thread * Self) {
 
       Thread * ox = (Thread *) _owner ;
       if (ox == NULL) {
+          //该锁未被占用，通过cas抢占，
          ox = (Thread *) Atomic::cmpxchg_ptr (Self, &_owner, NULL) ;
          if (ox == NULL) {
             // The CAS succeeded -- this thread acquired ownership

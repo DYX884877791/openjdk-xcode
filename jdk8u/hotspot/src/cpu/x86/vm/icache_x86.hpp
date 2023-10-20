@@ -38,9 +38,13 @@
 // necessary if stores weren't ordered.  Fortunately, they are on all known
 // x86 implementations.
 
+// ICache继承自AbstractICache，表示一个用来更新处理器的汇编指令缓存的接口，任何时候JVM修改了汇编指令，就必须刷新指令缓存。
+// AbstractICache定义在hotspot src/share/vm/runtime/icache.hpp中，其定义的属性只有一个
+// ICache的实现跟特定的CPU架构有关，通过icache.hpp中的宏定义引入
 class ICache : public AbstractICache {
  public:
 #ifdef AMD64
+    // x86下的ICache未添加新的方法和属性，就重新定义了枚举
   enum {
     stub_size      = 64, // Size of the icache flush stub in bytes
     line_size      = 64, // Icache line size in bytes

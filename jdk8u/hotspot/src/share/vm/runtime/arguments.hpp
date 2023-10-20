@@ -29,6 +29,7 @@
 #include "runtime/perfData.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/top.hpp"
+#include "utilities/slog.hpp"
 
 // Arguments parses the command line and recognizes options
 
@@ -557,6 +558,8 @@ class Arguments : AllStatic {
         CompileOnlyMethodsNum, CompileOnlyMethods, CompileOnlyAllClasses
       );
   }
+
+  static slog_flag_t parse_slog_level_properties(JavaVMInitArgs* args);
 
   // Java launcher properties
   static void process_sun_java_launcher_properties(JavaVMInitArgs* args);

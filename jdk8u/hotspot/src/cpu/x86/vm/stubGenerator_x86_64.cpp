@@ -39,6 +39,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "runtime/thread.inline.hpp"
 #include "utilities/top.hpp"
+#include "utilities/slog.hpp"
 #ifdef COMPILER2
 #include "opto/runtime.hpp"
 #endif
@@ -47,6 +48,7 @@
 // For a more detailed description of the stub routine structure
 // see the comment in stubRoutines.hpp
 
+// __是_masm->的别名，masm是StubCodeGenerator中的属性，MacroAssembler*，表示汇编代码的生成器
 #define __ _masm->
 #define TIMES_OOP (UseCompressedOops ? Address::times_4 : Address::times_8)
 #define a__ ((Assembler*)_masm)->
@@ -77,6 +79,10 @@ static address handle_unsafe_access() {
   return npc;
 }
 
+/**
+ * StubGenerator继承自StubCodeGenerator，但是没有添加任何新的属性，其对外的public方法只有一个构造方法，
+ * 其他的都是用来生成单个Stub的私有方法，这些私有方法通过generate_initial和generate_all调用
+ */
 class StubGenerator: public StubCodeGenerator {
  private:
 
@@ -123,6 +129,25 @@ class StubGenerator: public StubCodeGenerator {
   //   1 [ return address       ]
   //   2 [ parameter size       ]
   //   3 [ thread               ]
+  //
+  // 上图的rbp的位置就是一个新的栈帧的起始地址，是执行StubRoutines::call_stub()方法前的一个栈帧的rsp指针，开始调用call_stub方法，
+  // call_stub的前6个参数会依次拷贝c_rarg0到c_rarg5 6个寄存器中，对应于下列一段代码
+  //  // save register parameters
+  //#ifndef _WIN64
+  //    __ movptr(parameters,   c_rarg5); // parameters
+  //    __ movptr(entry_point,  c_rarg4); // entry_point
+  //#endif
+  //    __ movptr(method,       c_rarg3); // method
+  //    __ movl(result_type,  c_rarg2);   // result type
+  //    __ movptr(result,       c_rarg1); // result
+  //    __ movptr(call_wrapper, c_rarg0); // call wrapper
+  //
+  // 因为x86的CPU的寄存器最多只能传递6个参数， call_stub()的第七个参数parameter_size和第8个参数thread就通过上一栈帧来传递了，
+  // 因此注释中parameter size相对于的rbp的偏移是2个字宽，thread的偏移是3个字宽。参数准备好后就会将当前rbp的地址保存，即上面的saved rbp，
+  // 然后将rsp寄存器的值复制到rbp中，即rbp指向了原来的rsp的位置，rsp再往上即低地址方向移动若干个字段，至此一个新的栈帧形成了，
+  // 然后就开始依次将c_rarg0到c_rarg5 6个寄存器，rbx，r12-r15寄存器的数据拷贝到栈帧中，即对应注释中rbp到rsp_after_call的一段，
+  // 接着就是将方法调用的参数依次从JavaCallArguments中取出，放到占中，即对应注释中rsp_after_call到rsp的一段，参数复制完毕后就是执行Java方法调用，
+  // 又是开启一个新的栈帧了
   //
   // Windows Arguments:
   //    c_rarg0:   call wrapper address                   address
@@ -213,21 +238,53 @@ class StubGenerator: public StubCodeGenerator {
     return Address(rbp, (xmm_save_base - (reg - xmm_save_first) * 2) * wordSize);
   }
 #endif
-
+    /**
+     * _call_stub_entry的代码生成：
+     * _call_stub_entry是一个stub调用点，主要生成一段函数调用返回汇编指令，其过程类似中断，由于寄存器数量少需要共享使用因此需要将寄存器中的内容先保存，
+     * 函数执行结束以后再归还，HotSpot完全使用栈来模拟函数调用过程，_call_stub_entry在虚拟机中只生成一次，并将生成的汇编代码保存在内存中。
+     * 1. __ 前缀格式会调用汇编器生成汇编代码并存储在BufferBlob中，返回汇编代码地址
+     * 2. 以栈基rbp为准计算入参在栈中的位置，如rsp_after_call_off=-12 偏移量为-12*8 = -96，以此类推
+     * 3. 开始入栈，分配栈空间，在执行任何操作前先保存各寄存器的数据到上面第2步分配的栈地址处，获取寄存器控制权
+     * 4. 传递入参进入栈，调用java方法(其实还是一个stub调用点entry_point)
+     * 5. 保存entry_point返回结果
+     * 6. 参数出栈
+     * 7. 将之前保存在栈中的各寄存器的值恢复到寄存器中
+     * 8. 重置栈顶指针，返回，归还控制权给调用方
+     *
+     * 注意：
+     * 这里的generate_call_stub只完成了函数调用的第一步，真正的Java函数还没调起，它对应一个entry_point也是一个stub调用点。这个调用点在哪里生成呢？
+     * hotspot/src/share/vm/runtime/init.cpp中的init_globals函数调用了interpreter_init()函数...
+     *
+     *
+     * 执行Java方法调用的思路整体上是先将用来传递参数的所有寄存器的值拷贝到栈帧中，再从栈帧中将必要的方法调用参数，参数个数，Method*等复制到寄存器中，
+     * 然后执行方法调用，调用结束再从栈帧中将参数寄存器中的值恢复至执行方法调用前的状态，在恢复rsp，rbp等就可以正常退出调用了。
+     * 这里涉及了诸多底层调用栈帧的演变，寄存器和汇编指令的使用相关的知识
+     *
+     */
   address generate_call_stub(address& return_address) {
+    slog_debug("进入hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp中的generate_call_stub函数...");
+        //rsp_after_call_off和call_wrapper_off都是定义的枚举，表示对应项相对于rbp的偏移字节数
+        //比如call_wrapper_off就是JavaCallWrapper实例相对于rbp的偏移字节数
+        //这里是校验栈帧的属性和当前系统的属性是否一致
     assert((int)frame::entry_frame_after_call_words == -(int)rsp_after_call_off + 1 &&
            (int)frame::entry_frame_call_wrapper_offset == (int)call_wrapper_off,
            "adjust this code");
     StubCodeMark mark(this, "StubRoutines", "call_stub");
+        //汇编器会将生成的例程在内存中线性排列。所以取当前汇编器生成的上个例程最后一行汇编指令的地址，用来作为即将生成的新例程的首地址
+        //获取写入汇编代码的内存地址
+        // pc()是MacroAssembler的方法，返回MacroAssembler绑定的CodeSection的end地址
     address start = __ pc();
 
+        //根据各项的偏移量计算各项的存储位置
     // same as in generate_catch_exception()!
+        //以栈基rbp为准计算入参在栈中的位置
     const Address rsp_after_call(rbp, rsp_after_call_off * wordSize);
 
     const Address call_wrapper  (rbp, call_wrapper_off   * wordSize);
     const Address result        (rbp, result_off         * wordSize);
     const Address result_type   (rbp, result_type_off    * wordSize);
     const Address method        (rbp, method_off         * wordSize);
+        //entry_point就是解释器的调用入口
     const Address entry_point   (rbp, entry_point_off    * wordSize);
     const Address parameters    (rbp, parameters_off     * wordSize);
     const Address parameter_size(rbp, parameter_size_off * wordSize);
@@ -241,22 +298,66 @@ class StubGenerator: public StubCodeGenerator {
     const Address r12_save(rbp, r12_off * wordSize);
     const Address rbx_save(rbp, rbx_off * wordSize);
 
+        // 开辟新的栈帧
     // stub code
+        // 这两段代码直接生成机器指令，不过为了查看机器指令，我们可以借助HSDB工具将其反编译为可读性更强的汇编指令。
+        // push   %rbp
+        // mov    %rsp,%rbp
+        // sub    $0x60,%rsp　
+        // 这3条汇编是非常典型的开辟新栈帧的指令
+        //enter方法是保存rbp寄存器到栈中，然后把rsp中的值拷贝到rbp中
     __ enter();
+        //sub指令是减去特定值，这里是将rsp往低地址方向移动指定的偏移量，至此一个新的栈帧展开了
     __ subptr(rsp, -rsp_after_call_off * wordSize);
 
     // save register parameters
+        // 即不是WIN64系统
 #ifndef _WIN64
+        //将c_rarg5即r9寄存器的值拷贝到parameters地址上
     __ movptr(parameters,   c_rarg5); // parameters
+        //将c_rarg4即r8寄存器的值拷贝到entry_point地址上
     __ movptr(entry_point,  c_rarg4); // entry_point
 #endif
 
+        // 下面就是将call_helper()传递的6个在寄存器中的参数存储到CallStub()栈帧中了，除了存储这几个参数外，还需要存储其它寄存器中的值，
+        // 因为函数接下来要做的操作是为Java方法准备参数并调用Java方法，我们并不知道Java方法会不会破坏这些寄存器中的值，所以要保存下来，等调用完成后进行恢复。
+        // 生成的汇编代码如下：
+        // mov      %r9,-0x8(%rbp)
+        // mov      %r8,-0x10(%rbp)
+        // mov      %rcx,-0x18(%rbp)
+        // mov      %edx,-0x20(%rbp)
+        // mov      %rsi,-0x28(%rbp)
+        // mov      %rdi,-0x30(%rbp)
+        // mov      %rbx,-0x38(%rbp)
+        // mov      %r12,-0x40(%rbp)
+        // mov      %r13,-0x48(%rbp)
+        // mov      %r14,-0x50(%rbp)
+        // mov      %r15,-0x58(%rbp)
+        // // stmxcsr是将MXCSR寄存器中的值保存到-0x60(%rbp)中
+        // stmxcsr  -0x60(%rbp)
+        // mov      -0x60(%rbp),%eax
+        // and      $0xffc0,%eax // MXCSR_MASK = 0xFFC0
+        // // cmp通过第2个操作数减去第1个操作数的差，根据结果来设置eflags中的标志位。
+        // // 本质上和sub指令相同，但是不会改变操作数的值
+        // cmp      0x1762cb5f(%rip),%eax  # 0x00007fdf5c62d2c4
+        // // 当ZF=1时跳转到目标地址
+        // je       0x00007fdf45000772
+        // // 将m32加载到MXCSR寄存器中
+        // ldmxcsr  0x1762cb52(%rip)      # 0x00007fdf5c62d2c4
+
+        //  保存寄存器中的值到栈上
+        // 将c_rarg3即rcx寄存器的值拷贝到method地址上
     __ movptr(method,       c_rarg3); // method
+        // 将c_rarg2即rdx寄存器的值拷贝到method地址上
     __ movl(result_type,  c_rarg2);   // result type
+        // 将c_rarg1即rsi寄存器的值拷贝到method地址上
     __ movptr(result,       c_rarg1); // result
+        // 将c_rarg0即rdi寄存器的值拷贝到method地址上
     __ movptr(call_wrapper, c_rarg0); // call wrapper
 
     // save regs belonging to calling function
+        // 将调用者负责保存的寄存器的值保存到栈上
+        // 将下列寄存器的值复制到对应的地址上
     __ movptr(rbx_save, rbx);
     __ movptr(r12_save, r12);
     __ movptr(r13_save, r13);
@@ -275,6 +376,7 @@ class StubGenerator: public StubCodeGenerator {
 #else
     const Address mxcsr_save(rbp, mxcsr_off * wordSize);
     {
+        //Label表示跳转指令用到的标签
       Label skip_ldmx;
       __ stmxcsr(mxcsr_save);
       __ movl(rax, mxcsr_save);
@@ -288,7 +390,13 @@ class StubGenerator: public StubCodeGenerator {
 #endif
 
     // Load up thread register
+        //将thread处的栈中的数据拷贝到r15_thread即r15寄存器中
+        // 加载线程寄存器
+        // 生成的汇编代码如下：
+        // mov    0x18(%rbp),%r15
+        // mov    0x1764212b(%rip),%r12   # 0x00007fdf5c6428a8
     __ movptr(r15_thread, thread);
+        //heapbase的重新初始化
     __ reinit_heapbase();
 
 #ifdef ASSERT
@@ -303,38 +411,131 @@ class StubGenerator: public StubCodeGenerator {
 #endif
 
     // pass parameters if any
+        // 如果在调用函数时有参数的话需要传递参数
+        // 因为要调用Java方法，所以会为Java方法压入实际的参数，也就是压入parameter size个从parameters开始取的参数
+        // 这里是个循环，用于传递参数，相当于如下代码：
+        // while(%esi){
+        //    rax = *arg
+        //    push_arg(rax)
+        //    arg++;   // ptr++
+        //    %esi--;  // counter--
+        // }
+        // 生成的汇编代码如下：
+        // // 将栈中parameter size送到%ecx中
+        // mov    0x10(%rbp),%ecx
+        // // 做与运算，只有当%ecx中的值为0时才等于0
+        // test   %ecx,%ecx
+        // // 没有参数需要传递，直接跳转到parameters_done即可
+        // je     0x00007fdf4500079a
+        // // -- loop --
+        // // 汇编执行到这里，说明paramter size不为0,需要传递参数
+        // mov    -0x8(%rbp),%rdx
+        // mov    %ecx,%esi
+        // mov    (%rdx),%rax
+        // add    $0x8,%rdx
+        // dec    %esi
+        // push   %rax
+        // // 跳转到loop
+        // jne    0x00007fdf4500078e
+        // BLOCK_COMMENT宏可以在汇编代码中添加注释
     BLOCK_COMMENT("pass parameters if any");
     Label parameters_done;
+        // parameter_size拷贝到c_rarg3即rcx寄存器中
     __ movl(c_rarg3, parameter_size);
+        // 校验c_rarg3的数值是否合法。两操作数作与运算,仅修改标志位,不回送结果
     __ testl(c_rarg3, c_rarg3);
+        // 如果不合法则跳转到parameters_done分支上
     __ jcc(Assembler::zero, parameters_done);
 
+        // 如果执行下面的逻辑，那么就表示parameter_size的值不为0,也就是需要为
+        // 调用的java方法提供参数
     Label loop;
+        // 将地址parameters包含的数据即参数对象的指针拷贝到c_rarg2寄存器中
     __ movptr(c_rarg2, parameters);       // parameter pointer
+        // 将c_rarg3中值拷贝到c_rarg1中，即将参数个数复制到c_rarg1中
     __ movl(c_rarg1, c_rarg3);            // parameter counter is in c_rarg1
+        // 打标
     __ BIND(loop);
+        // 将c_rarg2指向的内存中包含的地址复制到rax中
     __ movptr(rax, Address(c_rarg2, 0));// get parameter
+        // c_rarg2中的参数对象的指针加上指针宽度8字节，即指向下一个参数
     __ addptr(c_rarg2, wordSize);       // advance to next parameter
+        // 将c_rarg1中的值减一
     __ decrementl(c_rarg1);             // decrement counter
+        // 传递方法调用参数
     __ push(rax);                       // pass parameter
+        // 如果参数个数大于0则跳转到loop继续
     __ jcc(Assembler::notZero, loop);
 
+        // 当把需要调用Java方法的参数准备就绪后，接下来就会调用Java方法。这里需要重点提示一下Java解释执行时的方法调用约定，不像C/C++在x86下的调用约定一样，不需要通过寄存器来传递参数，
+        // 而是通过栈来传递参数的，说的更直白一些，是通过局部变量表来传递参数的，所以CallStub()函数栈帧中的argument word1 … argument word n其实是被调用的Java方法局部变量表的一部分。
+
+        // 调用Java方法即调用entry_point
     // call Java function
+
+        // 生成的汇编代码如下：
+        // // 将Method*送到%rbx中
+        // mov     -0x18(%rbp),%rbx
+        // // 将entry_point送到%rsi中
+        // mov     -0x10(%rbp),%rsi
+        // // 将调用者的栈顶指针保存到%r13中
+        // mov     %rsp,%r13
+        // // 调用Java方法
+        // callq   *%rsi
+        // 注意调用callq指令后，会将callq指令的下一条指令的地址压栈，再跳转到第1操作数指定的地址，也就是*%rsi表示的地址。压入下一条指令的地址是为了让函数能通过跳转到栈上的地址从子函数返回。
+        // callq指令调用的是entry_point
+        // 打标
     __ BIND(parameters_done);
+        // 将method地址包含的数据即Method*拷贝到rbx中
     __ movptr(rbx, method);             // get Method*
+        // 将解释器的入口地址拷贝到c_rarg1寄存器中
     __ movptr(c_rarg1, entry_point);    // get entry_point
+        // 将rsp寄存器的数据拷贝到r13寄存器中
     __ mov(r13, rsp);                   // set sender sp
     BLOCK_COMMENT("call Java function");
+        // 调用解释器的解释函数，从而调用Java方法，后续就是 entry_point 的工作啦。
+        // 调用的时候传递c_rarg1，也就是解释器的入口地址 entry_point
     __ call(c_rarg1);
 
     BLOCK_COMMENT("call_stub_return_address:");
+        //获取此时的汇编代码写入位置
     return_address = __ pc();
 
+        // 调用Java方法后弹出栈帧及处理返回结果，同时还需要执行退栈操作，也就是将栈恢复到调用Java方法之前的状态
+
+        // 这里我们要关注result和result_type，result在调用call_helper()函数时就会传递，也就是会指示call_helper()函数将调用Java方法后的返回值存储在哪里。
+        // 对于类型为JavaValue的result来说，其实在调用之前就已经设置了返回类型，所以如上的result_type变量只需要从JavaValue中获取结果类型即可。
+        // 例如，调用Java主类的main()方法时，在jni_CallStaticVoidMethod()函数和jni_invoke_static()函数中会设置返回类型为T_VOID，也就是main()方法返回void
+        // 生成的汇编代码如下：
+        // // 栈中的-0x28位置保存result
+        // mov    -0x28(%rbp),%rdi
+        // // 栈中的-0x20位置保存result type
+        // mov    -0x20(%rbp),%esi
+        // cmp    $0xc,%esi         // 是否为T_OBJECT类型
+        // je     0x00007fdf450007f6
+        // cmp    $0xb,%esi         // 是否为T_LONG类型
+        // je     0x00007fdf450007f6
+        // cmp    $0x6,%esi         // 是否为T_FLOAT类型
+        // je     0x00007fdf450007fb
+        // cmp    $0x7,%esi         // 是否为T_DOUBLE类型
+        // je     0x00007fdf45000801
+
+        // // 如果是T_INT类型，直接将返回结果%eax写到栈中-0x28(%rbp)的位置
+        // mov    %eax,(%rdi)
+
+        // // -- exit --
+
+        // // 将rsp_after_call的有效地址拷到rsp中
+        // lea    -0x60(%rbp),%rsp
     // store result depending on type (everything that is not
     // T_OBJECT, T_LONG, T_FLOAT or T_DOUBLE is treated as T_INT)
+        // 保存方法调用结果依赖于结果类型，只要不是T_OBJECT, T_LONG, T_FLOAT or T_DOUBLE，都当做T_INT处理
+        // 将result地址的值拷贝到c_rarg0中，也就是将方法调用的结果保存在rdi寄存器中，注意result为函数返回值的地址
     __ movptr(c_rarg0, result);
     Label is_long, is_float, is_double, exit;
+        // 将result_type地址的值拷贝到c_rarg1中，也就是将方法调用的结果返回的类型保存在esi寄存器中
     __ movl(c_rarg1, result_type);
+        // 根据结果类型的不同跳转到不同的处理分支
     __ cmpl(c_rarg1, T_OBJECT);
     __ jcc(Assembler::equal, is_long);
     __ cmpl(c_rarg1, T_LONG);
@@ -345,11 +546,19 @@ class StubGenerator: public StubCodeGenerator {
     __ jcc(Assembler::equal, is_double);
 
     // handle T_INT case
+        // 当逻辑执行到这里时，处理的就是T_INT（也就是int）类型，
+        // 将rax中的值写入c_rarg0保存的地址指向的内存中
+        // 调用函数后如果返回值是int类型，则根据调用约定
+        // 会存储在eax中
     __ movl(Address(c_rarg0, 0), rax);
 
     __ BIND(exit);
 
     // pop parameters
+        // lea指令将地址加载到寄存器中
+        // 将rsp_after_call中保存的有效地址拷贝到rsp中，即将rsp往高地址方向移动了，原来的方法调用参数相当于pop掉了
+        // 原来的方法调用实参argument 1、...、argument n，
+        // 相当于从栈中弹出，所以下面语句执行的是退栈操作
     __ lea(rsp, rsp_after_call);
 
 #ifdef ASSERT
@@ -374,6 +583,15 @@ class StubGenerator: public StubCodeGenerator {
       __ movdqu(as_XMMRegister(i), xmm_save(i));
     }
 #endif
+        // 接下来恢复之前保存的caller-save寄存器，这也是调用约定的一部分
+        // 生成的汇编代码如下：
+        // mov      -0x58(%rbp),%r15
+        // mov      -0x50(%rbp),%r14
+        // mov      -0x48(%rbp),%r13
+        // mov      -0x40(%rbp),%r12
+        // mov      -0x38(%rbp),%rbx
+        // ldmxcsr  -0x60(%rbp)
+        //恢复其他寄存器的值，即恢复方法调用前的现场
     __ movptr(r15, r15_save);
     __ movptr(r14, r14_save);
     __ movptr(r13, r13_save);
@@ -387,15 +605,49 @@ class StubGenerator: public StubCodeGenerator {
     __ ldmxcsr(mxcsr_save);
 #endif
 
+        // 在弹出了为调用Java方法保存的实际参数及恢复caller-save寄存器后，继续执行退栈操作
+        // 生成的汇编代码如下：
+        // // %rsp加上0x60，也就是执行退栈操作，也就相
+        // // 当于弹出了callee_save寄存器和压栈的那6个参数
+        // add    $0x60,%rsp
+        // pop    %rbp
+        // // 方法返回，指令中的q表示64位操作数，就是指的栈中存储的return address是64位的
+        // retq
+        // 记得在之前 CallStub新栈帧的创建时，通过如下的汇编完成了新栈帧的创建：
+        // push   %rbp
+        // mov    %rsp,%rbp
+        // sub    $0x60,%rsp
+        // 现在要退出这个栈帧时要在%rsp指向的地址加上$0x60，同时恢复%rbp的指向。然后就是跳转到return address指向的指令继续执行了
     // restore rsp
+        // 恢复rsp
     __ addptr(rsp, -rsp_after_call_off * wordSize);
 
     // return
+        // 恢复rbp
     __ pop(rbp);
+        //退出
     __ ret(0);
+
+        // 当Java方法返回int类型时（如果返回char、boolean、short等类型时统一转换为int类型），根据Java方法调用约定，这个返回的int值会存储到%rax中；
+        // 如果返回对象，那么%rax中存储的就是这个对象的地址，那后面到底怎么区分是地址还是int值呢？
+        // 答案是通过返回类型区分即可；如果返回非int，非对象类型的值呢？我们继续看generate_call_stub()函数的实现逻辑：
+        // 对应的汇编代码如下：
+        // // -- is_long --
+        // mov    %rax,(%rdi)
+        // jmp    0x00007fdf450007d4
+        //
+        // // -- is_float --
+        // vmovss %xmm0,(%rdi)
+        // jmp    0x00007fdf450007d4
+        //
+        // // -- is_double --
+        // vmovsd %xmm0,(%rdi)
+        // jmp    0x00007fdf450007d4
+        // 当返回long类型时也存储到%rax中，因为Java的long类型是64位，我们分析的代码也是x86下64位的实现，所以%rax寄存器也是64位，能够容纳64位数；当返回为float或double时，存储到%xmm0中。
 
     // handle return types different from T_INT
     __ BIND(is_long);
+        //调用不同的指令将rax中的值写入c_rarg0的地址对应的内存中
     __ movq(Address(c_rarg0, 0), rax);
     __ jmp(exit);
 
@@ -538,12 +790,23 @@ class StubGenerator: public StubCodeGenerator {
   //
   // Result:
   //    *dest <- ex, return (orig *dest)
+  // generate_atomic_xchg生成的函数相当于jint atomic::xchg(jint exchange_value, volatile jint* dest)，
+  // 即原子的将exchange_value设置到dest指向的内存中，如果设置成功则返回原来的值
   address generate_atomic_xchg() {
+      //通过StubCodeMark的构造和析构函数来执行必要的资源初始化和销毁
     StubCodeMark mark(this, "StubRoutines", "atomic_xchg");
+      //__是_masm->的别名，masm是StubCodeGenerator中的属性，MacroAssembler*，表示汇编代码的生成器
+      //pc()是MacroAssembler的方法，返回MacroAssembler绑定的CodeSection的end地址
     address start = __ pc();
 
+      //movl()也是MacroAssembler的方法，对应movl汇编指令，其入参是两个Register，即寄存器
+      //rax和c_rarg0分别对应rax寄存器和通常用于保存第一个参数的rdi寄存器
+      //这里是将rdi寄存器中的数据拷贝到rax中
     __ movl(rax, c_rarg0); // Copy to eax we need a return value anyhow
+      //将rax中的值同c_rarg1寄存器即rsi寄存器中保存的地址上的值原子的交换，如果交换成功，rax中的值就是原来dest的值
+      //可以先读取dest的值，然后再执行原子交换，如果交换的结果是之前读取的dest的值说明当前线程加锁成功
     __ xchgl(rax, Address(c_rarg1, 0)); // automatic LOCK
+      //ret表示调用结束，返回
     __ ret(0);
 
     return start;
@@ -1430,6 +1693,16 @@ class StubGenerator: public StubCodeGenerator {
   }
 
 
+  // 本方法的参数：
+  //   aligned - true => 如果为true，则表示输入输出都已经按照8字节对齐了
+  //   name    - stub的名字
+  //   entry   - 就是address*,无特别意义
+  //
+  // 调用此stub的参数:
+  //   c_rarg0   - 原数组的地址
+  //   c_rarg1   - 目标数组的地址
+  //   c_rarg2   - 元素个数
+  //
   // Arguments:
   //   aligned - true => Input and output aligned on a HeapWord == 8-byte boundary
   //             ignored
@@ -1450,15 +1723,20 @@ class StubGenerator: public StubCodeGenerator {
   //   used by generate_conjoint_byte_copy().
   //
   address generate_disjoint_byte_copy(bool aligned, address* entry, const char *name) {
+      //让Assamber关联的CodeSection按指定的内存大小对齐
     __ align(CodeEntryAlignment);
+      //通过StubCodeMark的构造和析构函数执行初始化和善后处理工作
     StubCodeMark mark(this, "StubRoutines", name);
+      //获取Assamber关联的CodeSection的end属性，即汇编代码写入的起始地址
     address start = __ pc();
 
+      //Label表示跳转指令用到的标签
     Label L_copy_bytes, L_copy_8_bytes, L_copy_4_bytes, L_copy_2_bytes;
     Label L_copy_byte, L_exit;
-    const Register from        = rdi;  // source array address
-    const Register to          = rsi;  // destination array address
-    const Register count       = rdx;  // elements count
+      //Register表示寄存器
+    const Register from        = rdi;  // source array address 原数组地址
+    const Register to          = rsi;  // destination array address 目标数组地址
+    const Register count       = rdx;  // elements count 元素个数
     const Register byte_count  = rcx;
     const Register qword_count = count;
     const Register end_from    = from; // source array end address
@@ -1466,26 +1744,35 @@ class StubGenerator: public StubCodeGenerator {
     // End pointers are inclusive, and if count is not zero they point
     // to the last unit copied:  end_to[0] := end_from[0]
 
+      // 往下移动rbp，开启一个新的栈帧
     __ enter(); // required for proper stackwalking of RuntimeStub frame
+      // 验证rdx寄存器中保存的数值是一个32位的int
     assert_clean_int(c_rarg2, rax);    // Make sure 'count' is clean int.
 
     if (entry != NULL) {
+        //将end属性赋值给entry
       *entry = __ pc();
        // caller can pass a 64-bit byte count here (from Unsafe.copyMemory)
       BLOCK_COMMENT("Entry:");
     }
 
+      //window下将r9和r10寄存器中的数据拷贝到rdi和rsi寄存器中，从而与Linux等保持一致
     setup_arg_regs(); // from => rdi, to => rsi, count => rdx
                       // r9 and r10 may be used to save non-volatile registers
 
     // 'from', 'to' and 'count' are now valid
+      //将count对应的rdx寄存器的值拷贝到byte_count对应的寄存器rcx
     __ movptr(byte_count, count);
+      //shr是逻辑右移指令，即将count的值右移3位
     __ shrptr(count, 3); // count => qword_count
 
     // Copy from low to high addresses.  Use 'to' as scratch.
+      //lea指令用来加载有效地址到指定的寄存器
     __ lea(end_from, Address(from, qword_count, Address::times_8, -8));
     __ lea(end_to,   Address(to,   qword_count, Address::times_8, -8));
+      //neg指令用来对操作数取补，qword_count变成count的负数
     __ negptr(qword_count); // make the count negative
+      //jmp指令用来跳转到指定的地址
     __ jmp(L_copy_bytes);
 
     // Copy trailing qwords
@@ -1518,11 +1805,15 @@ class StubGenerator: public StubCodeGenerator {
     // Check for and copy trailing byte
   __ BIND(L_copy_byte);
     __ testl(byte_count, 1);
+      //检查byte_count的值是否是零，如果是则跳转到L_exit
     __ jccb(Assembler::zero, L_exit);
+      //将rax的值拷贝到end_from往后的8字节上
     __ movb(rax, Address(end_from, 8));
+      //将end_to往后8个字节的地址拷贝到rax中
     __ movb(Address(end_to, 8), rax);
 
   __ BIND(L_exit);
+      //恢复原来的寄存器的值
     restore_arg_regs();
     inc_counter_np(SharedRuntime::_jbyte_array_copy_ctr); // Update counter after rscratch1 is free
     __ xorptr(rax, rax); // return 0
@@ -1530,6 +1821,7 @@ class StubGenerator: public StubCodeGenerator {
     __ ret(0);
 
     // Copy in multi-bytes chunks
+      //复制qword_count字节的数据
     copy_bytes_forward(end_from, end_to, qword_count, rax, L_copy_bytes, L_copy_8_bytes);
     __ jmp(L_copy_4_bytes);
 
@@ -4156,6 +4448,8 @@ class StubGenerator: public StubCodeGenerator {
 
     StubRoutines::_forward_exception_entry = generate_forward_exception();
 
+      // 函数指针指向的函数的实现逻辑，这个逻辑是通过调用generate_call_stub()函数来实现的。
+      // 经过查看后我们发现这个函数指针指向的并不是一个C++函数，而是一个机器指令片段，我们可以将其看为C++函数经过C++编译器编译后生成的机器指令片段即可。
     StubRoutines::_call_stub_entry =
       generate_call_stub(StubRoutines::_call_stub_return_address);
 
@@ -4286,14 +4580,19 @@ class StubGenerator: public StubCodeGenerator {
 
  public:
   StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
+      // generate_initial和generate_all两个方法都是给StubRoutines中的static public的函数调用地址赋值，即生成stub
+      // StubGenerator顾名思义就是用来生成Stub的，这里的Stub实际是一段可执行的汇编代码，具体来说就是生成StubRoutines中定义的
+      // 多个public static的函数调用点，调用方可以将其作为一个经过优化后的函数直接使用。
     if (all) {
       generate_all();
     } else {
+        //如果传入false执行的是initial相关的代码
       generate_initial();
     }
   }
 }; // end class declaration
 
 void StubGenerator_generate(CodeBuffer* code, bool all) {
+    // 进入StubGenerator g的构造方法，如上
   StubGenerator g(code, all);
 }

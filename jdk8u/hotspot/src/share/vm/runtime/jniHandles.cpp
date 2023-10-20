@@ -30,6 +30,7 @@
 #include "runtime/jniHandles.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/thread.inline.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
 #endif
@@ -281,6 +282,7 @@ void JNIHandleBlock::zap() {
 }
 
 JNIHandleBlock* JNIHandleBlock::allocate_block(Thread* thread)  {
+  slog_debug("进入hotspot/src/share/vm/runtime/jniHandles.cpp中的JNIHandleBlock::allocate_block函数...");
   assert(thread == NULL || thread == Thread::current(), "sanity check");
   JNIHandleBlock* block;
   // Check the thread-local free list for a block so we don't

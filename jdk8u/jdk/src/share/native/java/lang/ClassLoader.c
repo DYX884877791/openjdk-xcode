@@ -87,6 +87,9 @@ Java_java_lang_ClassLoader_defineClass0(JNIEnv *env,
                                                    length, pd, NULL);
 }
 
+/**
+ * 主要是调用了JVM_DefineClassWithSource()加载类，跟着源码往下走，会发现最终调用的是 jvm.cpp 中的 jvm_define_class_common()方法。
+ */
 JNIEXPORT jclass JNICALL
 Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
                                         jobject loader,
@@ -290,6 +293,9 @@ static void *procHandle;
 
 static jboolean initIDs(JNIEnv *env)
 {
+    //handleID,jniVersionID,loadedID都是静态全局变量，表示NativeLibrary类的handle，jniVersion，loaded三个属性的属性ID
+    //可通过属性ID设置实例的属性
+    //当第一次加载库文件的时候会根据NativeLibrary类初始化这些静态属性
     if (handleID == 0) {
         jclass this =
             (*env)->FindClass(env, "java/lang/ClassLoader$NativeLibrary");
@@ -318,7 +324,9 @@ typedef void (JNICALL *JNI_OnUnload_t)(JavaVM *, void *);
  */
 static void *findJniFunction(JNIEnv *env, void *handle,
                                     const char *cname, jboolean isLoad) {
+    //字符串指针数组，实际是{"JNI_OnLoad"}
     const char *onLoadSymbols[] = JNI_ONLOAD_SYMBOLS;
+    //实际是{"JNI_OnUnload"}
     const char *onUnloadSymbols[] = JNI_ONUNLOAD_SYMBOLS;
     const char **syms;
     int symsLen;
@@ -328,6 +336,7 @@ static void *findJniFunction(JNIEnv *env, void *handle,
     int len;
 
     // Check for JNI_On(Un)Load<_libname> function
+    // 根据isLoad判断 JNI_On(Un)Load<_libname>
     if (isLoad) {
         syms = onLoadSymbols;
         symsLen = sizeof(onLoadSymbols) / sizeof(char *);
@@ -337,18 +346,24 @@ static void *findJniFunction(JNIEnv *env, void *handle,
     }
     for (i = 0; i < symsLen; i++) {
         // cname + sym + '_' + '\0'
+        //检查拼起来的JNI_On(Un)Load<_libname>的长度是否大于最大值FILENAME_MAX
         if ((len = (cname != NULL ? strlen(cname) : 0) + strlen(syms[i]) + 2) >
             FILENAME_MAX) {
             goto done;
         }
+        //给jniFunctionName分配内存
         jniFunctionName = malloc(len);
         if (jniFunctionName == NULL) {
             JNU_ThrowOutOfMemoryError(env, NULL);
             goto done;
         }
+        //拼成JNI_On(Un)Load<_libname>，拼成的字符串作为底层ddl查找的参数，libname就是要查找的库文件，JNI_OnLoad就是在库文件中查找的目标函数名
         buildJniFunctionName(syms[i], cname, jniFunctionName);
+        //查找该方法是否已加载
         entryName = JVM_FindLibraryEntry(handle, jniFunctionName);
+        //释放内存
         free(jniFunctionName);
+        //如果不为空则终止循环，返回entryName
         if(entryName) {
             break;
         }
@@ -372,26 +387,35 @@ Java_java_lang_ClassLoader_00024NativeLibrary_load
     jthrowable cause;
     void * handle;
 
+    //jniVersionID等初始化
     if (!initIDs(env))
         return;
 
+    //将java String对象的字符串复制到cname 字符数组中
     cname = JNU_GetStringPlatformChars(env, name, 0);
     if (cname == 0)
         return;
+    //如果未加载则加载该库文件
     handle = isBuiltin ? procHandle : JVM_LoadLibrary(cname);
+    //如果加载完成
     if (handle) {
         JNI_OnLoad_t JNI_OnLoad;
+        //获取该库文件中的JNI_OnLoad函数
         JNI_OnLoad = (JNI_OnLoad_t)findJniFunction(env, handle,
                                                isBuiltin ? cname : NULL,
                                                JNI_TRUE);
+        //如果库文件包含了JNI_OnLoad函数
         if (JNI_OnLoad) {
             JavaVM *jvm;
+            //通过JNIEnv获取对应的JavaVM
             (*env)->GetJavaVM(env, &jvm);
+            //获取库文件要求的jniVersion
             jniVersion = (*JNI_OnLoad)(jvm, NULL);
         } else {
             jniVersion = 0x00010001;
         }
 
+        //如果出现异常
         cause = (*env)->ExceptionOccurred(env);
         if (cause) {
             (*env)->ExceptionClear(env);
@@ -402,6 +426,7 @@ Java_java_lang_ClassLoader_00024NativeLibrary_load
             goto done;
         }
 
+        //如果库文件要求的jniVersion不支持则抛出异常
         if (!JVM_IsSupportedJNIVersion(jniVersion) ||
             (isBuiltin && jniVersion < JNI_VERSION_1_8)) {
             char msg[256];
@@ -414,6 +439,7 @@ Java_java_lang_ClassLoader_00024NativeLibrary_load
             }
             goto done;
         }
+        //如果库文件要求的jniVersion支持则设置NativeLibrary实例的jniVersion属性
         (*env)->SetIntField(env, this, jniVersionID, jniVersion);
     } else {
         cause = (*env)->ExceptionOccurred(env);
@@ -424,10 +450,12 @@ Java_java_lang_ClassLoader_00024NativeLibrary_load
         }
         goto done;
     }
+    //如果加载成功，则设置NativeLibrary实例的handle属性和loaded属性
     (*env)->SetLongField(env, this, handleID, ptr_to_jlong(handle));
     (*env)->SetBooleanField(env, this, loadedID, JNI_TRUE);
 
  done:
+    //释放cname对应的内存
     JNU_ReleaseStringPlatformChars(env, name, cname);
 }
 
@@ -508,42 +536,54 @@ Java_java_lang_ClassLoader_findBuiltinLib
     void *ret;
     const char *onLoadSymbols[] = JNI_ONLOAD_SYMBOLS;
 
+    //非空校验
     if (name == NULL) {
         JNU_ThrowInternalError(env, "NULL filename for native library");
         return NULL;
     }
+    //初始化procHandle，实际是一个dlopen函数的指针
     procHandle = getProcessHandle();
+    //将name中的字符串拷贝到cname中
     cname = JNU_GetStringPlatformChars(env, name, 0);
     if (cname == NULL) {
         return NULL;
     }
     // Copy name Skipping PREFIX
+    //校验cname的长度是否大于前缀长度加上后缀长度
     len = strlen(cname);
     if (len <= (prefixLen+suffixLen)) {
         JNU_ReleaseStringPlatformChars(env, name, cname);
         return NULL;
     }
+    //libName初始化
     libName = malloc(len + 1); //+1 for null if prefix+suffix == 0
     if (libName == NULL) {
         JNU_ReleaseStringPlatformChars(env, name, cname);
         JNU_ThrowOutOfMemoryError(env, NULL);
         return NULL;
     }
+    //跳过前缀将cname复制到libName中
     if (len > prefixLen) {
         strcpy(libName, cname+prefixLen);
     }
+    //释放cname对应的内存
     JNU_ReleaseStringPlatformChars(env, name, cname);
 
     // Strip SUFFIX
+    //将后缀起始字符置为\0，标记字符串结束，即相当于去掉了后缀
     libName[strlen(libName)-suffixLen] = '\0';
 
     // Check for JNI_OnLoad_libname function
+    //查找该libname是否存在
     ret = findJniFunction(env, procHandle, libName, JNI_TRUE);
     if (ret != NULL) {
+        //如果存在返回，用libname构造一个java String并返回
         lib = JNU_NewStringPlatform(env, libName);
+        //释放libName的内存
         free(libName);
         return lib;
     }
+    //如果不存在，释放libName的内存，返回NULL
     free(libName);
     return NULL;
 }

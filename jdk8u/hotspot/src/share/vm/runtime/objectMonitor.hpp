@@ -70,7 +70,9 @@ class ObjectWaiter : public StackObj {
 
 // It is also used as RawMonitor by the JVMTI
 
-
+/**
+ * ObjectMonitor不仅是重量级锁的实现，还是Object的wait/notify/notifyAll方法的底层核心实现。
+ */
 class ObjectMonitor {
  public:
   enum {
@@ -230,7 +232,9 @@ public:
   // WARNING: this must be the very first word of ObjectMonitor
   // This means this class can't use any virtual member functions.
 
+    // 锁对象oop的原始对象头
   volatile markOop   _header;       // displaced object header word - mark
+    // 关联的锁对象oop
   void*     volatile _object;       // backward object pointer - strong root
 
   double SharingPad [1] ;           // temp to reduce false sharing
@@ -240,24 +244,31 @@ public:
   // read from other threads.
 
  protected:                         // protected for jvmtiRawMonitor
+    // 占用当前锁的线程
   void *  volatile _owner;          // pointer to owning thread OR BasicLock
   volatile jlong _previous_owner_tid; // thread id of the previous owner of the monitor
+    //记录嵌套（递归）加锁的次数，最外层的锁的_recursions属性为0
   volatile intptr_t  _recursions;   // recursion count, 0 for first entry
  private:
+    // 表明当前owner原来持有轻量级锁
   int OwnerIsThread ;               // _owner is (Thread *) vs SP/BasicLock
+    // cxq链表头元素
   ObjectWaiter * volatile _cxq ;    // LL of recently-arrived threads blocked on entry.
                                     // The list is actually composed of WaitNodes, acting
                                     // as proxies for Threads.
  protected:
+    // EntryList 链表头元素
   ObjectWaiter * volatile _EntryList ;     // Threads blocked on entry or reentry.
  private:
   Thread * volatile _succ ;          // Heir presumptive thread - used for futile wakeup throttling
   Thread * volatile _Responsible ;
   int _PromptDrain ;                // rqst to drain cxq into EntryList ASAP
 
+    // 用来记录正在自旋的线程数
   volatile int _Spinner ;           // for exit->spinner handoff optimization
   volatile int _SpinFreq ;          // Spin 1-out-of-N attempts: success rate
   volatile int _SpinClock ;
+    //用来控制自旋的总次数
   volatile int _SpinDuration ;
   volatile intptr_t _SpinState ;    // MCS/CLH list of spinners
 
@@ -265,15 +276,19 @@ public:
   // type int, or int32_t but not intptr_t.  There's no reason
   // to use 64-bit fields for these variables on a 64-bit JVM.
 
+    // 抢占该锁的线程数
   volatile intptr_t  _count;        // reference count to prevent reclaimation/deflation
                                     // at stop-the-world time.  See deflate_idle_monitors().
                                     // _count is approximately |_WaitSet| + |_EntryList|
  protected:
+    // 调用wait方法后等待的线程数
   volatile intptr_t  _waiters;      // number of waiting threads
  private:
  protected:
+    // 调用wait方法后等待的ObjectWaiter链表
   ObjectWaiter * volatile _WaitSet; // LL of threads wait()ing on the monitor
  private:
+    // 操作WaitSet链表的锁
   volatile int _WaitSetLock;        // protects Wait Queue - simple spinlock
 
  public:

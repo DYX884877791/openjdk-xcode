@@ -36,12 +36,43 @@
 #ifndef _JAVASOFT_JNI_H_
 #define _JAVASOFT_JNI_H_
 
+/*
+ * JNI 机制
+ * JNI 是 Java Native Interface 的缩写，它提供了若干的 API 实现了Java和其他语言的通信（主要是C和C++）。
+ *
+ * JNI的适用场景：
+ *  当我们有一些旧的库，已经使用C语言编写好了，如果要移植到Java上来，非常浪费时间，而JNI可以支持Java程序与C语言编写的库进行交互，这样就不必要进行移植了。
+ *  或者是与硬件、操作系统进行交互、提高程序的性能等，都可以使用JNI。需要注意的一点是需要保证本地代码能工作在任何Java虚拟机环境。
+ *
+ * JNI的副作用：一旦使用JNI，Java程序将丢失了Java平台的两个优点：
+ *
+ *  1、 程序不再跨平台，要想跨平台，必须在不同的系统环境下程序编译配置本地语言部分。
+ *  2、程序不再是绝对安全的，本地代码的使用不当可能会导致整个程序崩溃。一个通用规则是，调用本地方法应该集中在少数的几个类当中，这样就降低了Java和其他语言之间的耦合。
+ *
+ * 该头文件定义了如下内容：
+ *
+ * 1.  JNI的类型：如jboolean、jshort和jobject等；
+ * 2.  一些枚举和常量：如JNI_FALSE、JNI_TRUE和JNI函数返回值等；
+ * 3. JNI接口指针：对C语言，JNIEnv即是JNI接口指针，它指向JNINativeInterface_结构体，该结构体定义了所有JNI函数的指针
+ */
 #include <stdio.h>
 #include <stdarg.h>
 
-/* jni_md.h contains the machine-dependent typedefs for jbyte, jint
-   and jlong */
-
+/**
+ * jni_md.h contains the machine-dependent typedefs for jbyte, jint and jlong
+ *
+ * 上文jni.h除了包含两个系统头文件外，紧接着便包含了jni_md.h文件，md表示machine-dependent。jni_md.h定义了平台相关的类型
+ * 如jbyte、jint和jlong，还有JNIEXPORT、JNIIMPORT和JNICALL宏，因此该文件在不同平台对应的目录均有出现。不同平台该文件路径如下表所示：
+ *
+ * 平台类型	        相对路径
+ * Linux/Solaris	jdk/src/solaris/javavm/export/jni_md.h
+ * Windows	        jdk/src/windows/javavm/export/jni_md.h
+ * Mac OS X	        jdk/src/macosx/javavm/export/jni_md.h
+ *
+ * hotspot子目录中也有jni.h和jni_md.h头文件，其中jni.h与JDK中的相似，路径是hotspot/src/share/vm/prims/jni.h，但是jni_md.h文件有较大区别。
+ * 进一步查看位于hotspot目录下的JavaVM的定义发现同jdk目录下的定义完全一样，初步判断jdk中JavaVM定义相当于接口，具体的实现在hotspot目录下，两者是隔离的src目录所以有两份定义的头文件。
+ *
+ */
 #include "jni_md.h"
 
 #ifdef __cplusplus
@@ -175,6 +206,10 @@ typedef enum _jobjectType {
 /*
  * used in RegisterNatives to describe native method name, signature,
  * and function pointer.
+ *
+ * name表示java方法名字符串的指针，signature表示方法描述符字符串的指针，fnPtr是该java方法对应的本地方法实现的函数指针。
+ * 那么问题来了，怎样获取方法描述符字符串?
+ * 答案是javap -s命令
  */
 
 typedef struct {
@@ -191,6 +226,14 @@ struct JNINativeInterface_;
 
 struct JNIEnv_;
 
+/*
+ * JNIEnv对象同JavaVM对象，两者都是在同一个头文件jni.h中定义，定义方式一样，JNIEnv定义的方法更多
+ * 根据方法命名推断其功能可知JNIEnv是java代码在JVM正常执行的核心，包含字节码指令的解释和同底层操作系统的交互等，JavaVM主要用于JVM退出。
+ *
+ * JavaVM和JNIEnv对象的赋值和JVM各模块的初始化都是在JNI_CreateJavaVM函数中完成，这个函数是从libjvm动态链接库中获取的:
+ *
+ * JNI_CreateJavaVM函数也在本头文件中声明了:
+ */
 #ifdef __cplusplus
 typedef JNIEnv_ JNIEnv;
 #else
@@ -205,6 +248,10 @@ struct JNIInvokeInterface_;
 
 struct JavaVM_;
 
+/*
+ * __cplusplus宏表示当前系统支持C++，通常服务器操作系统如CentOS都支持C++，只有嵌入式这类微型操作系统不支持C++，纯C开发，
+ * 我们只关注C++下的JavaVM实现即可，进一步查看两者的具体定义可知，JavaVM_只是对JNIInvokeInterface_下的方法指针做了一个包装，将其转换成类方法而已
+ */
 #ifdef __cplusplus
 typedef JavaVM_ JavaVM;
 #else
@@ -217,6 +264,7 @@ struct JNINativeInterface_ {
     void *reserved2;
 
     void *reserved3;
+    // 下面的这些函数定义都是在hotspot/src/share/vm/prims/jni.cpp中
     jint (JNICALL *GetVersion)(JNIEnv *env);
 
     jclass (JNICALL *DefineClass)
@@ -1887,6 +1935,9 @@ typedef struct JavaVMAttachArgs {
 
 /* End VM-specific. */
 
+/*
+ * 而JNIInvokeInterface_结构体就只有方法指针，reserved0等保留的方法
+ */
 struct JNIInvokeInterface_ {
     void *reserved0;
     void *reserved1;

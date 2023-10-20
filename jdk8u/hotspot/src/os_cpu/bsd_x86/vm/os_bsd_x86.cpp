@@ -845,8 +845,18 @@ size_t os::Bsd::default_guard_size(os::ThreadType thr_type) {
 // ** P1 (aka bottom) and size ( P2 = P1 - size) are the address and stack size returned from
 //    pthread_attr_getstack()
 
+/**
+ * Java的线程栈布局分为三部分,从上往下看,
+ * 第一部分是glibc的守护页,此处是修改字节码用的,第二部分是vm的守护内存页,第三部分是正常的栈区.
+ *  在之前的初始化过程中已经最先把guard page的部分先压入栈中了,包括red,yellow和reserve部分的内存页.
+ *  此图的标识比较迷惑,很明显,此处java线程的栈底是P1,但是图中标识为P2.代码中也给出了stack_base是lowaddress加上size的和,所以这里stak_base其实就是栈顶.可见java线程的栈的设计是向下生长的,在计算出当前的栈底之后,在其上(图中所示)加入了glibc区.
+ *
+ */
 static void current_stack_region(address * bottom, size_t * size) {
 #ifdef __APPLE__
+    /**
+     * 下面三个方法都是系统库的方法,分别是获取当前栈指,栈顶和大小,而目前我们依然还在0号线程内,所以此时获取的都是0号线程内的栈信息.
+     */
   pthread_t self = pthread_self();
   void *stacktop = pthread_get_stackaddr_np(self);
   *size = pthread_get_stacksize_np(self);
@@ -904,6 +914,7 @@ address os::current_stack_base() {
   address bottom;
   size_t size;
   current_stack_region(&bottom, &size);
+    // 这是stack_base，其实应该算作是stack_top
   return (bottom + size);
 }
 

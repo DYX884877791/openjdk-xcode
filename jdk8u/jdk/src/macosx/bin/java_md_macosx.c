@@ -591,7 +591,7 @@ GetJVMPath(const char *jrepath, const char *jvmtype,
         JLI_Snprintf(jvmpath, jvmpathsize, "%s/lib/%s/" JVM_DLL, jrepath, jvmtypeUsed);
     }
 
-    JLI_TraceLauncher("Does `%s' exist ... ", jvmpath);
+    JLI_TraceLauncher("Does '%s' exist ... ", jvmpath);
 
     if (stat(jvmpath, &s) == 0) {
         JLI_TraceLauncher("yes.\n");
@@ -684,6 +684,7 @@ GetJREPath(char *path, jint pathsize, const char * arch, jboolean speculative)
 jboolean
 LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 {
+    slog_debug("进入jdk/src/macosx/bin/java_md_macosx.c中的LoadJavaVM函数...");
     Dl_info dlinfo;
     void *libjvm;
 
@@ -702,6 +703,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
     }
+    slog_debug("成功获取到JNI_CreateJavaVM的函数指针，指针的值为 %p", ifn->CreateJavaVM);
 
     ifn->GetDefaultJavaVMInitArgs = (GetDefaultJavaVMInitArgs_t)
         dlsym(libjvm, "JNI_GetDefaultJavaVMInitArgs");
@@ -709,6 +711,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
     }
+    slog_debug("成功获取到JNI_GetDefaultJavaVMInitArgs的函数指针，指针的值为 %p", ifn->GetDefaultJavaVMInitArgs);
 
     ifn->GetCreatedJavaVMs = (GetCreatedJavaVMs_t)
     dlsym(libjvm, "JNI_GetCreatedJavaVMs");
@@ -716,6 +719,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
     }
+    slog_debug("成功获取到JNI_GetCreatedJavaVMs的函数指针，指针的值为 %p", ifn->GetCreatedJavaVMs);
 
     return JNI_TRUE;
 }
@@ -864,10 +868,12 @@ void SplashFreeLibrary() {
 }
 
 /*
+ * 在ContinueInNewThread0中，父线程首先利用pthread库函数创建新线程执行JavaMain函数的代码，然后调用pthread_join函数将自己阻塞。
  * Block current thread and continue execution in a new thread
  */
 int
 ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void * args) {
+    slog_debug("进入jdk/src/macosx/bin/java_md_macosx.c中的ContinueInNewThread0函数...");
     int rslt;
     pthread_t tid;
     pthread_attr_t attr;
@@ -878,8 +884,17 @@ ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void
       pthread_attr_setstacksize(&attr, stack_size);
     }
 
+    /**
+     * pthread_create函数成功的话就返回0。
+     *
+     * 创建了一个线程，因为传入的参数continuation函数指针所执行函数的返回值是int，而pthread_create的第三个参数是void*(*p)(void*)
+     * 所以这里强制类型转换，void *(*)(void*)就表示一个函数指针，参数和返回值都是void*
+     */
+    slog_debug("即将调用pthread_create创建一个线程...");
     if (pthread_create(&tid, &attr, (void *(*)(void*))continuation, (void*)args) == 0) {
+      slog_debug("创建线程成功,线程的tid为0x%zx...", tid);
       void * tmp;
+        // 使用pthread_join让创建的线程先执行完，再执行后续的 rslt = (int)tmp;
       pthread_join(tid, &tmp);
       rslt = (int)tmp;
     } else {
@@ -921,6 +936,11 @@ JLI_GetJavaVMInstance()
 void
 RegisterThread()
 {
+    /**
+     * https://www.firfor.cn/articles/2022/05/30/1653926378731.html
+     * https://zhuanlan.zhihu.com/p/523280432
+     * 主要是向垃圾回收器注册自己的线程.如果没有注册则会报错.
+     */
     objc_registerThreadWithCollector();
 }
 
@@ -1029,6 +1049,7 @@ int
 JVMInit(InvocationFunctions* ifn, jlong threadStackSize,
                  int argc, char **argv,
                  int mode, char *what, int ret) {
+    slog_debug("进入jdk/src/macosx/bin/java_md_macosx.c中的JVMInit函数...");
     if (sameThread) {
         JLI_TraceLauncher("In same thread\n");
         // need to block this thread against the main thread
@@ -1075,6 +1096,7 @@ void PostJVMInit(JNIEnv *env, jstring mainClass, JavaVM *vm) {
 jboolean
 ProcessPlatformOption(const char* arg)
 {
+    slog_debug("进入jdk/src/macosx/bin/java_md_macosx.c中的ProcessPlatformOption函数...");
     if (JLI_StrCmp(arg, "-XstartOnFirstThread") == 0) {
        SetXStartOnFirstThreadArg();
        return JNI_TRUE;

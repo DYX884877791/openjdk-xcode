@@ -45,9 +45,11 @@
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, TRAPS) {
+    // 参数length就表示常量池项的数量，调用ConstantPool::size()计算所需要分配内存的大小，然后创建ConstantPool对象返回。
   // Tags are RW but comment below applies to tags also.
   Array<u1>* tags = MetadataFactory::new_writeable_array<u1>(loader_data, length, 0, CHECK_NULL);
 
+    // 由方法实现可知，就是ConstantPool实例本身占用的内存大小加上length个指针长度
   int size = ConstantPool::size(length);
 
   // CDS considerations:
@@ -201,33 +203,44 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
   // It is not safe to rely on the tag bit's here, since we don't have a lock, and the entry and
   // tag is not updated atomicly.
 
+    //获取指定位置的数据项，判断其是否已解析
   CPSlot entry = this_oop->slot_at(which);
   if (entry.is_resolved()) {
+      //如果已解析但是不是Klass类型则抛出异常
     assert(entry.get_klass()->is_klass(), "must be");
     // Already resolved - return entry.
+      //返回解析结果
     return entry.get_klass();
   }
 
   // Acquire lock on constant oop while doing update. After we get the lock, we check if another object
   // already has updated the object
+    //判断调用方线程是否是Java线程，不能是本地的C++线程
   assert(THREAD->is_Java_thread(), "must be a Java thread");
   bool do_resolve = false;
   bool in_error = false;
 
   // Create a handle for the mirror. This will preserve the resolved class
   // until the loader_data is registered.
+    //用于创建目标类Class即InstanceMirrorKlass实例的Handle
   Handle mirror_handle;
 
   Symbol* name = NULL;
   Handle       loader;
+    //获取常量池的锁
   {  MonitorLockerEx ml(this_oop->lock());
 
+      //进一步校验，如果未解析
     if (this_oop->tag_at(which).is_unresolved_klass()) {
+        //如果是因为解析异常导致未解析，则将in_error置为true
       if (this_oop->tag_at(which).is_unresolved_klass_in_error()) {
         in_error = true;
       } else {
+          //准备开始解析
         do_resolve = true;
+          //获取完整类名
         name   = this_oop->unresolved_klass_at(which);
+          //根据当前常量池所属的Klass实例获取加载该Klass实例的类加载器
         loader = Handle(THREAD, this_oop->pool_holder()->class_loader());
       }
     }
@@ -241,33 +254,42 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
   // or any internal exception fields such as cause or stacktrace.  But since the
   // detail message is often a class name or other literal string, we will repeat it if
   // we can find it in the symbol table.
+    //解析失败抛出异常
   if (in_error) {
     throw_resolution_error(this_oop, which, CHECK_0);
   }
 
   if (do_resolve) {
     // this_oop must be unlocked during resolve_or_fail
+      // 执行resolve_or_fail时常量池必须处于非锁定状态
     oop protection_domain = this_oop->pool_holder()->protection_domain();
     Handle h_prot (THREAD, protection_domain);
+      //通过SystemDictionary调用类加载器Oop解析目标类
     Klass* k_oop = SystemDictionary::resolve_or_fail(name, loader, h_prot, true, THREAD);
     KlassHandle k;
     if (!HAS_PENDING_EXCEPTION) {
+        //如果解析成功
       k = KlassHandle(THREAD, k_oop);
       // preserve the resolved klass.
+        //初始化mirror_handle
       mirror_handle = Handle(THREAD, k_oop->java_mirror());
       // Do access check for klasses
+        //校验访问权限
       verify_constant_pool_resolve(this_oop, k, THREAD);
     }
 
     // Failed to resolve class. We must record the errors so that subsequent attempts
     // to resolve this constant pool entry fail with the same error (JVMS 5.4.3).
+      //解析失败，必须记录具体的失败原因，这样后面的解析都会以同样的原因失败
     if (HAS_PENDING_EXCEPTION) {
         MonitorLockerEx ml(this_oop->lock());
 
         // some other thread has beaten us and has resolved the class.
+        //校验是否因为并发导致解析失败，即有一个线程解析成功
         if (this_oop->tag_at(which).is_klass()) {
           CLEAR_PENDING_EXCEPTION;
           entry = this_oop->resolved_klass_at(which);
+            //返回解析成功的结果
           return entry.get_klass();
         }
 
@@ -276,6 +298,7 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
         save_and_throw_exception(this_oop, which, constantTag(JVM_CONSTANT_UnresolvedClass), CHECK_0);
     }
 
+      //如果需要根据类加载并且当前类不是数组类型的
     if (TraceClassResolution && !k()->oop_is_array()) {
       // skip resolving the constant pool so that this code get's
       // called the next time some bytecodes refer to this class.
@@ -286,6 +309,7 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
         // try to identify the method which called this function.
         vframeStream vfst(JavaThread::current());
         if (!vfst.at_end()) {
+            //获取触发当前解析的代码行号和源代码文件名
           line_number = vfst.method()->line_number_from_bci(vfst.bci());
           Symbol* s = vfst.method()->method_holder()->source_file_name();
           if (s != NULL) {
@@ -293,6 +317,7 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
           }
         }
       }
+        //如果待加载类不是当前常量池所属的类
       if (k() != this_oop->pool_holder()) {
         // only print something if the classes are different
         if (source_file != NULL) {
@@ -309,8 +334,10 @@ Klass* ConstantPool::klass_at_impl(constantPoolHandle this_oop, int which, TRAPS
     } else {
       MonitorLockerEx ml(this_oop->lock());
       // Only updated constant pool - if it is resolved.
+        //获取锁进一步校验常量池该项数据是否未解析
       do_resolve = this_oop->tag_at(which).is_unresolved_klass();
       if (do_resolve) {
+          //如果未解析则将接解析结果存入常量池
         this_oop->klass_at_put(which, k());
       }
     }
@@ -513,9 +540,11 @@ Symbol* ConstantPool::klass_name_at(int which) const {
   CPSlot entry = slot_at(which);
   if (entry.is_resolved()) {
     // Already resolved - return entry's name.
+      // 已经连接时，获取到的是指向InstanceKlass实例的指针
     assert(entry.get_klass()->is_klass(), "must be");
     return entry.get_klass()->name();
   } else {
+      // 未连接时，获取到的是指向Symbol实例的指针
     assert(entry.is_unresolved(), "must be either symbol or klass");
     return entry.get_symbol();
   }
@@ -621,12 +650,15 @@ void ConstantPool::save_and_throw_exception(constantPoolHandle this_oop, int whi
     // being loaded due to virtual machine errors like StackOverflow
     // and OutOfMemoryError, etc, or if the thread was hit by stop()
     // Needs clarification to section 5.4.3 of the VM spec (see 6308271)
+      //如果不是链接类错误则直接抛出异常不用记录，如StackOverflow
   } else if (this_oop->tag_at(which).value() != error_tag) {
     Symbol* message = exception_message(this_oop, which, tag, PENDING_EXCEPTION);
+      //记录解析失败异常
     SystemDictionary::add_resolution_error(this_oop, which, error, message);
     this_oop->tag_at_put(which, error_tag);
   } else {
     // some other thread put this in error state
+      //如果是其他线程已经记录了异常原因则获取具体原因然后抛出异常
     throw_resolution_error(this_oop, which, CHECK);
   }
 
@@ -684,6 +716,7 @@ oop ConstantPool::resolve_constant_at_impl(constantPoolHandle this_oop, int inde
       result_oop = this_oop->pseudo_string_at(index, cache_index);
       break;
     }
+      // 拿到String对象
     result_oop = string_at_impl(this_oop, index, cache_index, CHECK_NULL);
     break;
 
@@ -839,10 +872,16 @@ oop ConstantPool::resolve_bootstrap_specifier_at_impl(constantPoolHandle this_oo
 
 oop ConstantPool::string_at_impl(constantPoolHandle this_oop, int which, int obj_index, TRAPS) {
   // If the string has already been interned, this entry will be non-null
+    // 从常量池中的对象池中尝试拿到缓存对象。
   oop str = this_oop->resolved_references()->obj_at(obj_index);
   if (str != NULL) return str;
+    // 拿到ldc指向常量池下标最终对应的Utf8项
+    // 而从上文讲述的SymbolTable可以得知，Utf8项在JVM中使用Symbol对象表示。
+    // 所以这里拿到Symbol对象，而拿到Symbol对象，就拿到了具体数据
   Symbol* sym = this_oop->unresolved_string_at(which);
+    // 尝试从StringTable中拿到String对象，如果存在就返回，如果不存在就创建并返回。
   str = StringTable::intern(sym, CHECK_(NULL));
+    // 把对象添加到常量池中的对象池中
   this_oop->string_at_put(which, obj_index, str);
   assert(java_lang_String::is_instance(str), "must be string");
   return str;

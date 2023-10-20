@@ -36,34 +36,54 @@ class nmethodLocker;
 //
 // An entry in the compile queue.  It represents a pending or current
 // compilation.
+// CompileTask继承自CHeapObj，表示编译队列中的一个编译任务，其定义位于hospot/src/share/vm/compiler/compileBroker.hpp中。
+// CompileTask定义方法大部分是属性操作相关的和日志打印相关的，重点关注用来创建CompileTask实例的allocate方法，
+// 用来释放CompileTask实例内存的free方法，用来初始化CompileTask的initialize方法的实现。
 class CompileTask : public CHeapObj<mtCompiler> {
   friend class VMStructs;
 
  private:
+    // 空闲的编译任务队列
   static CompileTask* _task_free_list;
 #ifdef ASSERT
   static int          _num_allocated_tasks;
 #endif
 
+    // 该任务的锁
   Monitor*     _lock;
   uint         _compile_id;
+    // 该编译任务对应的方法
   Method*      _method;
+    // _method所属的klass的引用
   jobject      _method_holder;
+    // 栈上替换方法相对于字节码基地址的偏移
   int          _osr_bci;
+    // 编译任务的状态
   bool         _is_complete;
   bool         _is_success;
   bool         _is_blocking;
+    // 编译级别
   int          _comp_level;
+    // 栈上替换方法对应的字节码的字节数
   int          _num_inlined_bytecodes;
+    // nmethodLocker是nmethod的一个容器，用来保存编译完成的代码。
+    // 负责保存编译结果的_code_handle属性不是在initialize方法中完成初始化的，而是通过另外的set_code/set_code_handle方法完成初始化的
   nmethodLocker* _code_handle;  // holder of eventual result
+    // 编译任务队列中的下一个和上一个任务
   CompileTask* _next, *_prev;
   bool         _is_free;
   // Fields used for logging why the compilation was initiated:
+    // 取值os::elapsed_counter()，表示JVM启动到现在的累计时间
   jlong        _time_queued;  // in units of os::elapsed_counter()
+    // 触发这个方法编译的方法
   Method*      _hot_method;   // which method actually triggered this task
+    // _hot_method所属的klass的引用
   jobject      _hot_method_holder;
+    // 触发方法编译的调用次数
   int          _hot_count;    // information about its invocation counter
+    // 编译任务的备注
   const char*  _comment;      // more info about the task
+    // 编译任务失败原因
   const char*  _failure_reason;
 
  public:
@@ -86,8 +106,12 @@ class CompileTask : public CHeapObj<mtCompiler> {
   bool         is_success() const                { return _is_success; }
 
   nmethodLocker* code_handle() const             { return _code_handle; }
+    //  set_code_handle的调用方有两个：
+    // 其中CompileBroker::compiler_thread_loop方法调用此方法初始化_code_handle，CompileTaskWrapper析构方法中将 _code_handle置为NULL。
   void         set_code_handle(nmethodLocker* l) { _code_handle = l; }
   nmethod*     code() const;                     // _code_handle->code()
+    // set_code的调用方有两个：
+    // ciEnv::register_method方法是在nmethod初始化完成后将其设置到_code_handle的_nm属性，CompileTask::free是将 _code_handle的_nm属性置空。
   void         set_code(nmethod* nm);            // _code_handle->set_code(nm)
 
   Monitor*     lock() const                      { return _lock; }
@@ -194,6 +218,7 @@ class CompilerCounters : public CHeapObj<mtCompiler> {
 // CompileQueue
 //
 // A list of CompileTasks.
+// CompileQueue同样继承自CHeapObj，表示CompileTask队列，其同样定义位于compileBroker.hpp中。CompileQueue定义的属性比较简单，主要是实现队列的必要属性
 class CompileQueue : public CHeapObj<mtCompiler> {
  private:
   const char* _name;
@@ -202,6 +227,8 @@ class CompileQueue : public CHeapObj<mtCompiler> {
   CompileTask* _first;
   CompileTask* _last;
 
+    // _first_stale属性表示一段时间内不再被调用的方法的编译任务队列，通过CompileTask本身的_next/_prev属性构成队列
+    // CompileQueue的构造方法将_first_stale属性置为空，purge_stale_tasks方法是遍历_first_stale队列，remove_and_mark_stale方法用于将某个任务从编译任务队列中移除，然后添加到_first_stale队列中
   CompileTask* _first_stale;
 
   int _size;
@@ -246,6 +273,7 @@ class CompileQueue : public CHeapObj<mtCompiler> {
 //
 // Assign this task to the current thread.  Deallocate the task
 // when the compilation is complete.
+// CompileTaskWrapper就是一个包装器，通过构造方法将编译任务设置为编译线程的当前执行任务，通过析构函数完成编译任务的释放清理
 class CompileTaskWrapper : StackObj {
 public:
   CompileTaskWrapper(CompileTask* task);
@@ -256,6 +284,8 @@ public:
 // Compilation
 //
 // The broker for all compilation requests.
+// 编译器管理器  CompileBroker 就负责编译器的初始化，管理等等，根据注释 The broker for all compilation requests 就能看出他负责所有编译请求的处理
+// CompileBroker定义在compileBroker.hpp中，表示一个负责接收并处理编译请求的经纪人，提供对外的编译相关的高度封装的方法。CompileBroker定义的属性都是静态属性
 class CompileBroker: AllStatic {
  friend class Threads;
   friend class CompileTaskWrapper;
@@ -271,28 +301,38 @@ class CompileBroker: AllStatic {
 
 
  private:
+    // CompileBroker状态
   static bool _initialized;
   static volatile bool _should_block;
 
   // This flag can be used to stop compilation or turn it back on
+    // 打标用，用来表示是否停止编译或者开启编译
   static volatile jint _should_compile_new_jobs;
 
   // The installed compiler(s)
+    // 长度固定为2，安装的编译器实例
   static AbstractCompiler* _compilers[2];
 
   // These counters are used for assigning id's to each compilation
+    // 临时保存的编译ID
   static volatile jint _compilation_id;
   static volatile jint _osr_compilation_id;
 
+    // 上一次编译的编译类型，是一个枚举值，no_compile, normal_compile, osr_compile, native_compile
   static int  _last_compile_type;
+    // 上一次的编译级别
   static int  _last_compile_level;
+    // char数组，上一次编译的方法名
   static char _last_method_compiled[name_buffer_length];
 
+    // C1和C2的编译任务队列
   static CompileQueue* _c2_compile_queue;
   static CompileQueue* _c1_compile_queue;
 
+    // 编译线程数组
   static GrowableArray<CompilerThread*>* _compiler_threads;
 
+    // 除此之外还有统计编译次数等数据的PerfCounter，PerfVariable类的属性。
   // performance counters
   static PerfCounter* _perf_total_compilation;
   static PerfCounter* _perf_native_compilation;

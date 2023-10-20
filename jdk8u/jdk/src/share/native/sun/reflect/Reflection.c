@@ -29,6 +29,11 @@
 JNIEXPORT jclass JNICALL Java_sun_reflect_Reflection_getCallerClass__
 (JNIEnv *env, jclass unused)
 {
+    /**
+	 * 返回调用 JVM_GetCallerClass 的本机方法的直接调用者类。由于反射机制，Method.invoke 和其他帧被跳过。
+	 * 深度参数必须为 -1 (JVM_DEPTH)。调用者应该被标记为 sun.reflect.CallerSensitive。如果没有正确标记，JVM 将抛出错误
+     * JVM_GetCallerClass(JNIEnv *env, int depth);
+     */
     return JVM_GetCallerClass(env, JVM_CALLER_DEPTH);
 }
 

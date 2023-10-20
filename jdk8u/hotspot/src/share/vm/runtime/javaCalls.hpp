@@ -54,20 +54,61 @@
 // Its purpose is to allocate/deallocate a new handle block and to save/restore the last
 // Java fp/sp. A pointer to the JavaCallWrapper is stored on the stack.
 
+/**
+ * JavaCallWrapper的定义位于每次执行Java方法调用时都需要创建一个新的JavaCallWrapper实例，然后在方法调用结束销毁这个实例，
+ * 通过JavaCallWrapper实例的创建和销毁来保存方法调用前当前线程的上一个栈帧，重新分配或者销毁一个handle block，保存和重置Java调用栈的fp/sp。
+ * JavaCallWrapper实例的指针保存在调用栈上。
+ *
+ * JavaCallWrapper的核心方法就是其构造方法和析构方法，其他方法都是读取相关属性的
+ */
 class JavaCallWrapper: StackObj {
   friend class VMStructs;
  private:
+    // 关联的Java线程实例
   JavaThread*      _thread;                 // the thread to which this call belongs
+    //实际保存JNI引用的内存块的指针
   JNIHandleBlock*  _handles;                // the saved handle block
+    //准备调用的Java方法
   Method*          _callee_method;          // to be able to collect arguments if entry frame is top frame
+    //执行方法调用的接受对象实例
   oop              _receiver;               // the receiver of the call (if a non-static call)
 
+    //用于记录线程的执行状态，比如pc计数器
   JavaFrameAnchor  _anchor;                 // last thread anchor state that we must restore
 
+    //保存方法调用结果对象
   JavaValue*       _result;                 // result value
 
  public:
   // Construction/destruction
+    /**
+     * C++中用构造函数和析构函数来初始化和清理对象，这两个函数将会被编译器自动调用。对象的初始化和清理是非常重要的，如果我们不提供构造函数与析构函数，编译器会自动提供两个函数的空实现。
+     *
+     * 构造函数：主要作用于创建函数时对对象成员的属性赋值。
+     * 析构函数：主要作用于在对象销毁前，执行一些清理工作（如释放new开辟在堆区的空间）。
+     *
+     * 主要特点：
+     * 构造函数语法：类名(){}
+     * 1.构造函数，没有返回值也不写void
+     * 2.函数名称与类名相同
+     * 3.构造函数可以有参数，因此可以发生重载
+     * 4.程序在调用对象时候会自动调用构造，无须手动调用，而且只会调用一次
+     *
+     * 析构函数语法： ~类名(){}
+     * 1.析构函数，没有返回值也不写void
+     * 2.函数名称与类名相同,在名称前加上符号 ~
+     * 3.析构函数不可以有参数，因此不可以发生重载
+     * 4.程序在对象销毁前会自动调用析构，无须手动调用，而且只会调用一次
+     *
+     * 其余特点：
+     *
+     * 构造函数和析构函数是一种特殊的公有成员函数，每一个类都有一个默认的构造函数和析构函数；
+     * 构造函数在类定义时由系统自动调用，析构函数在类被销毁时由系统自动调用；
+     * 构造函数的名称和类名相同，一个类可以有多个构造函数，只能有一个析构函数。不同的构造函数之间通过参数个数和参数类型来区分；
+     * 我们可以在构造函数中给类分配资源，在类的析构函数中释放对应的资源。
+     * 如果程序员没有提供构造和析构，系统会默认提供，空实现
+     * 构造函数 和 析构函数，必须定义在public里面，才可以调用
+     */
    JavaCallWrapper(methodHandle callee_method, Handle receiver, JavaValue* result, TRAPS);
   ~JavaCallWrapper();
 

@@ -28,6 +28,13 @@
 // This information is used by the matcher and the register allocator to
 // describe individual registers and classes of registers within the target
 // archtecture.
+// OpenJDK Hotspot ad文件，是用ADL（Architecture Description Language）写的一个文件，用来描述一个目标架构的相关信息，通常位于src/hotspot/cpu/xxx/xxx.ad（xxx为具体的架构名称）。
+// ADL有一个很旧的官方文档，描述了其基本的语法信息，位于hotspot/src/share/vm/adlc/Doc/Syntax.doc[1]。之前，PLCT实验室也有一篇文章介绍ADL的语法[2]。(https://zhuanlan.zhihu.com/p/489011490)
+//
+// ad文件通常会使用ADL描述一个架构的三个基本信息：指令集、寄存器组和流水线信息，这三个信息被用在编译器后端的三个主要环节：指令选择、寄存器分配和指令调度中。
+// ad文件会被交给ADL Compiler进行编译，生成对应的代码。ADL编译器将ADL文件（.ad后缀）编译成代码，并将其整合到优化即时编译器(OJIT)中，从而为目标体系结构生成高效和正确的代码。
+// ADL描述了三种基本的不同类型的架构特征，包括目标体系结构的指令集(和相关的操作数)、目标体系结构的寄存器集以及寄存器分配器的相关信息以及用于调度目的的体系结构流水线(pipeline)。
+// 这部分描述，可以从Syntax.doc获取相关信息
 
 register %{
 //----------Architecture Description Register Definitions----------------------

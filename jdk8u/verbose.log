@@ -1,0 +1,16 @@
+the boot jdk path is /Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home
+~/Developer/Software/openjdk8u/jdk8u-xcode10 ~/Developer/Software/openjdk8u/jdk8u-xcode10
+~/Developer/Software/openjdk8u/jdk8u-xcode10
+building in /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u
+RECONFIGURE_BUILD--->true
+CLEAN_BUILD--->false
+configure jdk...
+configure jdk
+~/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u ~/Developer/Software/openjdk8u/jdk8u-xcode10
+check_autoconf_timestamps
+Warning: The configure source files is newer than the generated files.
+Running autogen.sh to correct the situation
+Using autoconf at /usr/local/bin/autoconf [autoconf (GNU Autoconf) 2.71]
+Generating generated-configure.sh
+(No custom hook found at /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u/jdk/make/closed/autoconf/custom-hook.m4)
+Running generated-configure.sh

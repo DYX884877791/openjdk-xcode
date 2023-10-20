@@ -82,6 +82,9 @@
 #include "utilities/dtrace.hpp"
 #include "utilities/events.hpp"
 #include "utilities/histogram.hpp"
+extern "C" {
+  #include "utilities/slog.hpp"
+}
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -1309,12 +1312,14 @@ enum JNICallType {
 
 
 static void jni_invoke_static(JNIEnv *env, JavaValue* result, jobject receiver, JNICallType call_type, jmethodID method_id, JNI_ArgumentPusher *args, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/prims/jni.cpp中的jni_invoke_static函数...");
   methodHandle method(THREAD, Method::resolve_jmethod_id(method_id));
 
   // Create object to hold arguments for the JavaCall, and associate it with
   // the jni parser
   ResourceMark rm(THREAD);
   int number_of_parameters = method->size_of_parameters();
+    // 这里进一步将要传给Java的参数转换为JavaCallArguments对象传下去
   JavaCallArguments java_args(number_of_parameters);
   args->set_java_argument_object(&java_args);
 
@@ -1326,6 +1331,8 @@ static void jni_invoke_static(JNIEnv *env, JavaValue* result, jobject receiver, 
   result->set_type(args->get_ret_type());
 
   // Invoke the method. Result is returned as oop.
+    // 真正底层实现的开始。这个方法只是层皮，把JavaCalls::call_helper()
+    // 用os::os_exception_wrapper()包装起来，目的是设置HotSpot VM的C++层面的异常处理
   JavaCalls::call(result, method, &java_args, CHECK);
 
   // Convert result
@@ -1406,8 +1413,12 @@ static void jni_invoke_nonstatic(JNIEnv *env, JavaValue* result, jobject receive
 
 static instanceOop alloc_object(jclass clazz, TRAPS) {
   KlassHandle k(THREAD, java_lang_Class::as_Klass(JNIHandles::resolve_non_null(clazz)));
+    // 检查目标class是否有效
   k()->check_valid_for_instantiation(false, CHECK_NULL);
+    // 确保class初始化完成
   InstanceKlass::cast(k())->initialize(CHECK_NULL);
+    // 分配对象内存，返回的instanceOop不是Handle
+    // JNI创建对象实际走的是InstanceKlass::allocate_instance方法，跟InterpreterRuntime::_new方法的实现基本一致。
   instanceOop ih = InstanceKlass::cast(k())->allocate_instance(THREAD);
   return ih;
 }
@@ -1419,6 +1430,9 @@ DT_RETURN_MARK_DECL(AllocObject, jobject
                     , HOTSPOT_JNI_ALLOCOBJECT_RETURN(_ret_ref));
 #endif /* USDT2 */
 
+/**
+ *  除Java代码中通过new关键字创建对象外，也可通过JNI的AllocObject方法或者NewObject方法完成，两者的区别在于前者只是完成对象内存分配，不会调用构造方法，后者会执行构造方法
+ */
 JNI_ENTRY(jobject, jni_AllocObject(JNIEnv *env, jclass clazz))
   JNIWrapper("AllocObject");
 
@@ -1429,9 +1443,12 @@ JNI_ENTRY(jobject, jni_AllocObject(JNIEnv *env, jclass clazz))
                                 env, clazz);
 #endif /* USDT2 */
   jobject ret = NULL;
+    // 打印Trace日志
   DT_RETURN_MARK(AllocObject, jobject, (const jobject&)ret);
 
+    // 分配对象内存
   instanceOop i = alloc_object(clazz, CHECK_NULL);
+    // 为其创建一个本地引用
   ret = JNIHandles::make_local(env, i);
   return ret;
 JNI_END
@@ -1454,10 +1471,12 @@ JNI_ENTRY(jobject, jni_NewObjectA(JNIEnv *env, jclass clazz, jmethodID methodID,
   jobject obj = NULL;
   DT_RETURN_MARK(NewObjectA, jobject, (const jobject&)obj);
 
+    // 同AllocObject，分配对象内存
   instanceOop i = alloc_object(clazz, CHECK_NULL);
   obj = JNIHandles::make_local(env, i);
   JavaValue jvalue(T_VOID);
   JNI_ArgumentPusherArray ap(methodID, args);
+    // 调用构造方法
   jni_invoke_nonstatic(env, &jvalue, obj, JNI_NONVIRTUAL, methodID, &ap, CHECK_NULL);
   return obj;
 JNI_END
@@ -1595,16 +1614,22 @@ static jmethodID get_method_id(JNIEnv *env, jclass clazz, const char *name_str,
   // Method*s.
   klass()->initialize(CHECK_NULL);
 
+    /**
+     * 查找构造方法时调用InstanceKlass类中的find_method()函数，这个函数不会查找超类；查找普通方法时，调用Klass类中的lookup_method()
+     * 或InstanceKlass类中的lookup_method_in_ordered_interfaces()函数，这两个函数会从父类和接口中查找
+     */
   Method* m;
-  if (name == vmSymbols::object_initializer_name() ||
-      name == vmSymbols::class_initializer_name()) {
+  if (name == vmSymbols::object_initializer_name() || // name为<init>
+      name == vmSymbols::class_initializer_name()) {  // name为<clinit>
     // Never search superclasses for constructors
+    // 在查找构造函数时，只查找当前类中的构造函数，不查找超类构造函数
     if (klass->oop_is_instance()) {
       m = InstanceKlass::cast(klass())->find_method(name, signature);
     } else {
       m = NULL;
     }
   } else {
+    // 在特定类中查找方法
     m = klass->lookup_method(name, signature);
     if (m == NULL &&  klass->oop_is_instance()) {
       m = InstanceKlass::cast(klass())->lookup_method_in_ordered_interfaces(name, signature);
@@ -1613,6 +1638,7 @@ static jmethodID get_method_id(JNIEnv *env, jclass clazz, const char *name_str,
   if (m == NULL || (m->is_static() != is_static)) {
     THROW_MSG_0(vmSymbols::java_lang_NoSuchMethodError(), name_str);
   }
+    // 获取方法对应的methodID，methodID指定后不会变，所以可以重复使用methodID
   return m->jmethod_id();
 }
 
@@ -2506,8 +2532,13 @@ DT_VOID_RETURN_MARK_DECL(CallStaticVoidMethodA
                          , HOTSPOT_JNI_CALLSTATICVOIDMETHODA_RETURN());
 #endif /* USDT2 */
 
+/**
+ * HotSpot VM里对JNI的CallStaticVoidMethod的实现。
+ * 留意要传给Java方法的参数以C的可变长度参数传入，这个函数将其收集打包为JNI_ArgumentPusherVaArg对象
+ */
 JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID methodID, ...))
   JNIWrapper("CallStaticVoidMethod");
+    slog_debug("进入hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethod函数...");
 #ifndef USDT2
   DTRACE_PROBE3(hotspot_jni, CallStaticVoidMethod__entry, env, cls, methodID);
 #else /* USDT2 */
@@ -2527,6 +2558,7 @@ JNI_END
 
 JNI_ENTRY(void, jni_CallStaticVoidMethodV(JNIEnv *env, jclass cls, jmethodID methodID, va_list args))
   JNIWrapper("CallStaticVoidMethodV");
+    slog_debug("进入hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethodV函数...");
 #ifndef USDT2
   DTRACE_PROBE3(hotspot_jni, CallStaticVoidMethodV__entry, env, cls, methodID);
 #else /* USDT2 */
@@ -4003,7 +4035,9 @@ static Method* find_prefixed_native(KlassHandle k,
 }
 
 static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, address entry, TRAPS) {
+    // 根据方法名和方法签名查找对应的Method
   Method* method = k()->lookup_method(name, signature);
+    // 查找失败抛出异常
   if (method == NULL) {
     ResourceMark rm;
     stringStream st;
@@ -4011,6 +4045,7 @@ static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, addr
              Method::name_and_sig_as_C_string(k(), name, signature));
     THROW_MSG_(vmSymbols::java_lang_NoSuchMethodError(), st.as_string(), false);
   }
+    // 如果不是本地方法抛出异常
   if (!method->is_native()) {
     // trying to register to a non-native method, see if a JVM TI agent has added prefix(es)
     method = find_prefixed_native(k, name, signature, THREAD);
@@ -4023,12 +4058,15 @@ static bool register_native(KlassHandle k, Symbol* name, Symbol* signature, addr
     }
   }
 
+    // 如果方法调用地址不为空，则设置set_native_function
   if (entry != NULL) {
     method->set_native_function(entry,
       Method::native_bind_event_is_interesting);
   } else {
+    // 如果为空，则将其重置成初始状态
     method->clear_native_function();
   }
+    // 打印日志
   if (PrintJNIResolving) {
     ResourceMark rm(THREAD);
     tty->print_cr("[Registering JNI native method %s.%s]",
@@ -4045,11 +4083,15 @@ DT_RETURN_MARK_DECL(RegisterNatives, jint
                     , HOTSPOT_JNI_REGISTERNATIVES_RETURN(_ret_ref));
 #endif /* USDT2 */
 
+/**
+ * jni_RegisterNatives用于注册本地方法的实现，即完成本地方法与本地实现代码的绑定
+ */
 JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
                                     const JNINativeMethod *methods,
                                     jint nMethods))
   JNIWrapper("RegisterNatives");
 #ifndef USDT2
+    // DTRACE_PROBE4和DT_RETURN_MARK都是打印DTRACE日志
   DTRACE_PROBE4(hotspot_jni, RegisterNatives__entry, env, clazz, methods, nMethods);
 #else /* USDT2 */
   HOTSPOT_JNI_REGISTERNATIVES_ENTRY(
@@ -4058,8 +4100,10 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
   jint ret = 0;
   DT_RETURN_MARK(RegisterNatives, jint, (const jint&)ret);
 
+    // 获取方法所属的klass
   KlassHandle h_k(thread, java_lang_Class::as_Klass(JNIHandles::resolve_non_null(clazz)));
 
+    // 遍历JNINativeMethod数组
   for (int index = 0; index < nMethods; index++) {
     const char* meth_name = methods[index].name;
     const char* meth_sig = methods[index].signature;
@@ -4068,9 +4112,11 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
     // The class should have been loaded (we have an instance of the class
     // passed in) so the method and signature should already be in the symbol
     // table.  If they're not there, the method doesn't exist.
+    // 获取方法名和方法签名在符号表中对应的符号，因为指定方法已经完成加载所以这两个符号都已经存在
     TempNewSymbol  name = SymbolTable::probe(meth_name, meth_name_len);
     TempNewSymbol  signature = SymbolTable::probe(meth_sig, (int)strlen(meth_sig));
 
+    // 这两个符号引用任意一个为空则抛出异常
     if (name == NULL || signature == NULL) {
       ResourceMark rm;
       stringStream st;
@@ -4079,8 +4125,10 @@ JNI_ENTRY(jint, jni_RegisterNatives(JNIEnv *env, jclass clazz,
       THROW_MSG_(vmSymbols::java_lang_NoSuchMethodError(), st.as_string(), -1);
     }
 
+    // 设置native_function,fnPtr属性就是对应本地方法的入口地址
     bool res = register_native(h_k, name, signature,
                                (address) methods[index].fnPtr, THREAD);
+    // 如果register_native执行失败
     if (!res) {
       ret = -1;
       break;
@@ -5010,6 +5058,7 @@ struct JNINativeInterface_* jni_functions() {
 #if INCLUDE_JNI_CHECK
   if (CheckJNICalls) return jni_functions_check();
 #endif // INCLUDE_JNI_CHECK
+   // 返回的是结构体变量jni_NativeInterface的地址
   return &jni_NativeInterface;
 }
 
@@ -5186,8 +5235,34 @@ DT_RETURN_MARK_DECL(CreateJavaVM, jint
                     , HOTSPOT_JNI_CREATEJAVAVM_RETURN(_ret_ref));
 #endif /* USDT2 */
 
+/**
+ * JNI_CreateJavaVM函数开始：
+ * OpenJDK总结了JNI_CreateJavaVM函数的工作：
+ * 1. 保证同一时间只有一个线程调用此方法，并且同一进程中只能创建一个虚拟机实例。请注意一旦到达了不可返回点（point of no return），
+ *  虚拟机就不能被再次创建，这是因为虚拟机创建的静态数据结构不能被重新初始化；
+ * 2. 检查JNI版本是否被支持，为GC日志初始化输出流，初始化OS模块如随机数生成器、高分辨率时间、内存页大小和保护页（guard page）等；
+ * 3. 解析并保存传入的参数和属性供后续使用，初始化标准的Java系统属性；
+ * 4. OS模块被进一步初始化，根据解析的参数和属性初始化同步机制、栈、内存和safepoint page。此时其他库如libzip、libhpi、libjava和libthread被加载，
+ *  初始化并设置信号处理函数和线程库；
+ * 5. 初始化输出流，初始化和启动需要的Agent库如hprof、jdi等。
+ * 6. 初始化线程状态和线程局部存储（TLS）；
+ * 7. 初始化全局数据，如事件日志、OS同步原语等；
+ * 8. 此时开始创建线程，Java里的main线程被创建并被附加（attach）到当前OS线程，然而这个线程还没有被加入线程链表。初始化并启用Java层的同步机制；
+ * 9. 初始化其他全局模块如BootClassLoader、CodeCache、Interpreter、Compiler、JNI、SystemDictionary和Universe，此时到达了不可返回点，
+ *  不可以再相同进程的地址空间创建另一个虚拟机了；
+ * 10. 将main线程加入线程链表。执行虚拟机关键功能的VMThread被创建；
+ * 11. 初始化并加载Java类，如java.lang.String、java.lang.System、java.lang.Thread、java.lang.ThreadGroup、java.lang.reflect.Method、
+ *  java.lang.ref.Finalizer、java.lang.Class和System。此时虚拟机已被初始化并可运行，但还不是完全可用；
+ * 12. 启动信号处理线程，编译器被初始化，启动CompileBroker线程。其他辅助线程如StatSampler和WatcherThread也被启动，此时虚拟机已经完全可用，
+ *   JNIEnv接口指针被填充并返回给调用者，虚拟机已经准备好服务新的JNI请求了。
+ *
+ */
 _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, void *args) {
+    slog_flag_t eFlag = Arguments::parse_slog_level_properties((JavaVMInitArgs*) args);
+    slog_init("hotspot", eFlag, 0);
+    slog_debug("进入hotspot/src/share/vm/prims/jni.cpp中的JNI_CreateJavaVM函数...");
 #ifndef USDT2
+    slog_debug("宏USDT2未定义...");
   HS_DTRACE_PROBE3(hotspot_jni, CreateJavaVM__entry, vm, penv, args);
 #else /* USDT2 */
   HOTSPOT_JNI_CREATEJAVAVM_ENTRY(
@@ -5224,9 +5299,12 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
   // on a multiprocessor, and at this stage of initialization the os::is_MP
   // function used to determine this will always return false. Atomic::xchg
   // does not have this problem.
+    // 通过CAS判断vm_created变量是否为1，来保证当前只有一个JVM被创建
+    // 通过Atomic::xchg方法修改全局volatile变量vm_created为1，该变量默认为0，如果返回1则说明JVM已经创建完成或者创建中，返回JNI_EEXIST错误码，如果返回0则说明JVM未创建
   if (Atomic::xchg(1, &vm_created) == 1) {
     return JNI_EEXIST;   // already created, or create attempt in progress
   }
+    // 通过Atomic::xchg方法修改全局volatile变量safe_to_recreate_vm为0，该变量默认为1，如果返回0则说明JVM已经在重新创建了，返回JNI_ERR错误码，如果返回1则说明JVM未创建
   if (Atomic::xchg(0, &safe_to_recreate_vm) == 0) {
     return JNI_ERR;  // someone tried and failed and retry not allowed.
   }
@@ -5245,17 +5323,29 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
    */
   bool can_try_again = true;
 
+  slog_debug("即将调用Threads::create_vm函数...");
+    // 完成JVM的初始化，如果初始化过程中出现不可恢复的异常则can_try_again会被置为false
+    // 位于\hotspot\src\share\vm\runtime\目录下的thread.cpp中
   result = Threads::create_vm((JavaVMInitArgs*) args, &can_try_again);
+    // 初始化正常
   if (result == JNI_OK) {
+      // 获取当前线程，即执行create_vm的线程，也是JNI_CreateJavaVM执行完毕后执行main方法的线程
     JavaThread *thread = JavaThread::current();
     /* thread is thread_in_vm here */
+      // JavaVM赋值，main_vm是jni.h中的全局变量，最终实现指向全局变量jni_InvokeInterface
+      // 该对象直接指向jni.cpp中的全局变量main_vm，该变量通过全局变量jni_InvokeInterface完成初始化
     *vm = (JavaVM *)(&main_vm);
+      // penv变量赋值，是一个指向JNIEnv对象的二级指针.
+      // 将jni环境信息存储到 penv 中，以备外部使用
+      // 所以，我们只需找出 _jni_environment 是如何赋值初始化，即可知道如何获取这个关键变量的逻辑了。结果是，在创建JavaThread, 在进行初始化时，便会设置该值。
     *(JNIEnv**)penv = thread->jni_environment();
 
     // Tracks the time application was running before GC
+      // 记录应用的启动时间
     RuntimeService::record_application_start();
 
     // Notify JVMTI
+      // 通知JVMTI应用启动
     if (JvmtiExport::should_post_thread_life()) {
        JvmtiExport::post_thread_start(thread);
     }
@@ -5268,24 +5358,30 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
   #endif
 
     // Check if we should compile all classes on bootclasspath
+      // 根据配置加载类路径中所有的类
     if (CompileTheWorld) ClassLoader::compile_the_world();
     if (ReplayCompiles) ciReplay::replay(thread);
 
     // Some platforms (like Win*) need a wrapper around these test
     // functions in order to properly handle error conditions.
+      // win* 系统添加异常处理的wrapper
     CALL_TEST_FUNC_WITH_WRAPPER_IF_NEEDED(test_error_handler);
     CALL_TEST_FUNC_WITH_WRAPPER_IF_NEEDED(execute_internal_vm_tests);
 #endif
 
     // Since this is not a JVM_ENTRY we have to set the thread state manually before leaving.
+      // 设置当前线程的线程状态
     ThreadStateTransition::transition_and_fence(thread, _thread_in_vm, _thread_in_native);
   } else {
+      // 如果create_vm初始化失败
     if (can_try_again) {
       // reset safe_to_recreate_vm to 1 so that retrial would be possible
+        // 如果可以重试则恢复默认值1
       safe_to_recreate_vm = 1;
     }
 
     // Creation failed. We must reset vm_created
+      // 将vm和penv置空，vm_created重置成0
     *vm = 0;
     *(JNIEnv**)penv = 0;
     // reset vm_created last to avoid race condition. Use OrderAccess to
@@ -5337,6 +5433,7 @@ DT_RETURN_MARK_DECL(DestroyJavaVM, jint
 #endif /* USDT2 */
 
 jint JNICALL jni_DestroyJavaVM(JavaVM *vm) {
+    slog_debug("进入hotspot/src/share/vm/prims/jni.cpp中的jni_DestroyJavaVM函数...");
 #ifndef USDT2
   DTRACE_PROBE1(hotspot_jni, DestroyJavaVM__entry, vm);
 #else /* USDT2 */

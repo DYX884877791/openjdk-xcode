@@ -178,7 +178,27 @@ static void logOption(const char* opt) {
   }
 }
 
+/**
+ * 解析命令行参数sloglevel得到slog_flag_t值
+ * 由命令行参数 -Dslog.level=ALL/TRACE/DEBUG/INFO/WARN/ERROR/FATAL/NONE来指定，默认为NONE...
+ */
+slog_flag_t Arguments::parse_slog_level_properties(JavaVMInitArgs* args) {
+    for (int index = 0; index < args->nOptions; index++) {
+        const JavaVMOption *option = args->options + index;
+        const char *tail;
+        if (match_option(option, "-Dslog.level=", &tail)) {
+            slog_flag_t eFlag = slog_parse_flag(tail);
+            return eFlag;
+        }
+    }
+    return SLOG_NONE;
+}
+
 // Process java launcher properties.
+/**
+ * 处理launcher属性
+ * 包括-Dsun.java.launcher和-Dsun.java.launcher.pid属性
+ */
 void Arguments::process_sun_java_launcher_properties(JavaVMInitArgs* args) {
   // See if sun.java.launcher or sun.java.launcher.pid is defined.
   // Must do this before setting up other system properties,
@@ -2028,12 +2048,82 @@ void Arguments::set_bytecode_flags() {
 void Arguments::set_aggressive_opts_flags() {
 #ifdef COMPILER2
   if (AggressiveUnboxing) {
+      /**
+       * Eliminate: 消除...
+       */
     if (FLAG_IS_DEFAULT(EliminateAutoBox)) {
       FLAG_SET_DEFAULT(EliminateAutoBox, true);
     } else if (!EliminateAutoBox) {
       // warning("AggressiveUnboxing is disabled because EliminateAutoBox is disabled");
       AggressiveUnboxing = false;
     }
+    /**
+     * DoEscapeAnalysis 逃逸分析：（通过-XX:+DoEscapeAnalysis启用，jvm在server编译模式下是默认打开的）
+     * JVM通过逃逸分析确定该对象不会被外部访问。
+     *   对象逃逸分析：就是分析对象动态作用域，当一个对象在方法中被定义后，它可能被外部方法所引用（通过return返回该变量），例如作为调用参数传递到其他地方中；但也可能不会返回。
+     * JVM可以通过开启逃逸分析参数(-XX:+DoEscapeAnalysis)来优化对象内存分配位置，使其通过标量替换优先分配在栈上(栈上分配)，JDK7之后默认开启逃逸分析，如果要关闭使用参数(-XX:-DoEscapeAnalysis)。
+     *
+     * 举例：
+     * 一个方法中，new关键字创建的对象如果是局部变量，且没有通过return返回出去，就可能会直接在栈上分配了。
+     * 栈上分配的好处：不用再堆上进行分配，减少gc
+     * 这一过程对于jvm来说就称之为"逃逸分析"
+     *
+     *
+     *
+     * EliminateAllocations 标量替换：（通过-XX:+EliminateAllocations启用，jvm在server编译模式下是默认打开的）
+     * 通过逃逸分析确定该对象不会被外部访问，并且对象可以被进一步分解时，JVM不会创建该对象，而是将该对象成员变量分解若干个被这个方法使用的成员变量所代替，
+     * 这些代替的成员变量在栈帧或寄存器上分配空间，这样就不会因为没有一大块连续空间导致对象内存不够分配。
+     *
+     * 标量即不可被进一步分解的量，而JAVA的基本数据类型就是标量（如：int，long等基本数据类型以及reference类型等），标量的对立就是可以被进一步分解的量，而这种量称之为聚合量。
+     * 而在JAVA中对象就是可以被进一步分解的聚合量。注意：JVM中必须将逃逸分析参数开启，标量替换才有效果。同理标量替换也必须打开，逃逸分析才有意义。
+     *
+     * 个人理解：举例：new Point(int x, int y) Point类上只有两个成员变量，int x，int y，在一个方法中创建该类实例，且没有返回出去，那么此时就不会创建Point实例
+     * 而是直接在栈帧中创建了两个成员变量
+     *
+     *
+     * https://www.jianshu.com/p/580f17760f6e
+     * 对栈上分配发生影响的参数就是三个，-server、-XX:+DoEscapeAnalysis和-XX:+EliminateAllocations，任何一个关闭都不会发生栈上分配，因为启用逃逸分析和标量替换默认是打开的，
+     * JVM的参数只用-server一样可以有栈上替换的效果
+     *
+     * 举例：此时设置内存为50M,并打印gc日志，-Xmx50m  -Xms50m  -XX:PrintGC，测试关闭标量替换(-XX:-EliminateAllocations)与打开时会不会打印GC日志呢？
+     *
+     * public static void main() {
+     *      // 记录开始时间
+     *      for(int i=0;i<100000;i++){
+     *          method1();
+     *      }
+     *      // 记录结束时间
+     *      // 打印耗时...
+     * }
+     *
+     * public static  void method1() {
+     *      byte[] bytes = new byte[2];
+     *      byte[0] = 1;
+     * }
+     *
+     *
+     * 还有一个锁消除：EliminateLocks，JVM在server模式下也是默认打开的：
+     * 个人理解：当变量是在栈上分配时，没有逃逸出来，jvm会自动将synchronize锁给自动消除掉，可以通过(-XX:-EliminateLocks)关闭锁消除，然后来对比耗时时间...
+     *
+     * method1方法中的局部变量x，只在方法中使用，故method1上的synchronized会自动被消除；
+     * 而method2方法中的局部变量x被返回出来了，可能会在其他地方使用，故method2上的synchronized不会自动被消除
+     *
+     *
+     * public static synchronized void method1() {
+     *      int x = 0;
+     *      for(int i = 0;i < 100;i++) {
+     *          x = x + 1;
+     *      }
+     * }
+     *
+     * public static synchronized int method2() {
+     *      int x = 0;
+     *      for(int i = 0;i < 100;i++) {
+     *          x = x + 1;
+     *      }
+     *      return x;
+     * }
+     */
     if (FLAG_IS_DEFAULT(DoEscapeAnalysis)) {
       FLAG_SET_DEFAULT(DoEscapeAnalysis, true);
     } else if (!DoEscapeAnalysis) {
@@ -4185,6 +4275,7 @@ jint Arguments::apply_ergo() {
 #endif // CC_INTERP
 
 #ifdef COMPILER2
+  // 锁消除：
   if (!EliminateLocks) {
     EliminateNestedLocks = false;
   }

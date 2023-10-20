@@ -30,6 +30,8 @@ include ProfileNames.gmk
 # string and the runtime name into the Version.java file.
 # To be printed by java -version
 
+# 这里用了 shell 脚本中的 sed 命令做占位符的替换，比如，将 @@java_version@@ 的值替换为 $(RELEASE),
+# $(RELEASE) 也是个 shell 脚本的变量,这些变量会在 spec.gmk.in 以及 version-numbers 中定义
 $(JDK_OUTPUTDIR)/gensrc/sun/misc/Version.java \
 $(PROFILE_VERSION_JAVA_TARGETS): \
     $(JDK_TOPDIR)/src/share/classes/sun/misc/Version.java.template

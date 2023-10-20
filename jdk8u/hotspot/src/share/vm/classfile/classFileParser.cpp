@@ -64,6 +64,7 @@
 #include "utilities/array.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
+#include "utilities/slog.hpp"
 
 // We generally try to create the oops directly when parsing, rather than
 // allocating temporary data structures and copying the bytes twice. A
@@ -117,11 +118,14 @@ void ClassFileParser::parse_constant_pool_entries(int length, TRAPS) {
   int names_count = 0;
 
   // parsing  Index 0 is unused
+    // 解析常量池，从下标#1开始
   for (int index = 1; index < length; index++) {
     // Each of the following case guarantees one more byte in the stream
     // for the following tag or the access_flags following constant pool,
     // so we don't need bounds-check for reading tag.
+      // 拿到下标对应的tag，比如拿到Utf8、Class、String、NameAndType等等....
     u1 tag = cfs->get_u1_fast();
+      // 根据一个字节的tag区分后续。
     switch (tag) {
       case JVM_CONSTANT_Class :
         {
@@ -255,6 +259,7 @@ void ClassFileParser::parse_constant_pool_entries(int length, TRAPS) {
       case JVM_CONSTANT_Utf8 :
         {
           cfs->guarantee_more(2, CHECK);  // utf8_length
+            // 根据长度解析
           u2  utf8_length = cfs->get_u2_fast();
           u1* utf8_buffer = cfs->get_u1_buffer();
           assert(utf8_buffer != NULL, "null utf8 buffer");
@@ -279,17 +284,22 @@ void ClassFileParser::parse_constant_pool_entries(int length, TRAPS) {
           }
 
           unsigned int hash;
+            // 从SymbolTable中尝试获取，如果存在就直接获取，如果不存在就创建。
           Symbol* result = SymbolTable::lookup_only((char*)utf8_buffer, utf8_length, hash);
           if (result == NULL) {
             names[names_count] = (char*)utf8_buffer;
             lengths[names_count] = utf8_length;
             indices[names_count] = index;
             hashValues[names_count++] = hash;
+              // 把Symbol添加到SymbolTable中
+              // 因为在常量池中最多的就是Utf8项，所以为了优化，这里采用批处理
+              // 如果当前常量池中Utf8项数量每8的倍数就一次性插入一轮。
             if (names_count == SymbolTable::symbol_alloc_batch_size) {
               SymbolTable::new_symbols(_loader_data, _cp, names_count, names, lengths, indices, hashValues, CHECK);
               names_count = 0;
             }
           } else {
+              // 添加到常量池中。
             _cp->symbol_at_put(index, result);
           }
         }
@@ -302,6 +312,8 @@ void ClassFileParser::parse_constant_pool_entries(int length, TRAPS) {
   }
 
   // Allocate the remaining symbols
+    // 把Symbol添加到SymbolTable中
+    // 如果没有批处理，那终究还是得插入。
   if (names_count > 0) {
     SymbolTable::new_symbols(_loader_data, _cp, names_count, names, lengths, indices, hashValues, CHECK);
   }
@@ -331,12 +343,14 @@ constantPoolHandle ClassFileParser::parse_constant_pool(TRAPS) {
   guarantee_property(
     length >= 1, "Illegal constant pool size %u in class file %s",
     length, CHECK_(nullHandle));
+    // 调用ConstantPool::allocate()创建ConstantPool对象
   ConstantPool* constant_pool = ConstantPool::allocate(_loader_data, length,
                                                         CHECK_(nullHandle));
   _cp = constant_pool; // save in case of errors
   constantPoolHandle cp (THREAD, constant_pool);
 
   // parsing constant pool entries
+    // 然后调用parse_constant_pool_entries()解析常量池中的项并将这些项保存到ConstantPool对象中。　
   parse_constant_pool_entries(length, CHECK_(nullHandle));
 
   int index = 1;  // declared outside of loops for portability
@@ -777,6 +791,9 @@ Array<Klass*>* ClassFileParser::parse_interfaces(int length,
     _local_interfaces = MetadataFactory::new_array<Klass*>(_loader_data, length, NULL, CHECK_NULL);
 
     int index;
+      // 循环对类实现的每个接口进行处理，通过interface_index找到接口在C++类中的表示InstanceKlass实例，然后封装为KlassHandle后，存储到_local_interfaces数组中。
+      // 需要注意的是，如何通过interface_index找到对应的InstanceKlass实例，如果接口索引在常量池中已经是对应的InstanceKlass实例，说明已经连接过了，
+      // 直接通过_cp_resolved_klass_at()方法获取即可；如果只是一个字符串表示，需要调用SystemDictionary::resolve_super_or_fail()方法进行连接
     for (index = 0; index < length; index++) {
       u2 interface_index = cfs->get_u2(CHECK_NULL);
       KlassHandle interf;
@@ -785,6 +802,7 @@ Array<Klass*>* ClassFileParser::parse_interfaces(int length,
         "Interface name has bad constant pool index %u in class file %s",
         interface_index, CHECK_NULL);
       if (_cp->tag_at(interface_index).is_klass()) {
+          // 将表示接口的InstanceKlass实例封装为KlassHandle实例
         interf = KlassHandle(THREAD, _cp->resolved_klass_at(interface_index));
       } else {
         Symbol*  unresolved_klass  = _cp->klass_name_at(interface_index);
@@ -3244,12 +3262,14 @@ AnnotationArray* ClassFileParser::assemble_annotations(u1* runtime_visible_annot
 instanceKlassHandle ClassFileParser::parse_super_class(int super_class_index,
                                                        TRAPS) {
   instanceKlassHandle super_klass;
+    // 当为java.lang.Object类时，没有父类
   if (super_class_index == 0) {
     check_property(_class_name == vmSymbols::java_lang_Object(),
                    "Invalid superclass index %u in class file %s",
                    super_class_index,
                    CHECK_NULL);
   } else {
+      // 如果类已经连接，那么可通过super_class_index直接找到表示父类的InstanceKlass实例，否则返回的值就是NULL
     check_property(valid_klass_reference_at(super_class_index),
                    "Invalid superclass index %u in class file %s",
                    super_class_index,
@@ -3822,6 +3842,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
                                                     TempNewSymbol& parsed_name,
                                                     bool verify,
                                                     TRAPS) {
+  slog_trace("进入hotspot/src/share/vm/classfile/classFileParser.cpp中的ClassFileParser::parseClassFile函数...");
 
   // When a retransformable agent is attached, JVMTI caches the
   // class bytes that existed before the first retransformation.
@@ -3910,6 +3931,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
 
   cfs->guarantee_more(8, CHECK_(nullHandle));  // magic, major, minor
   // Magic value
+    // 解析文件魔数，读取魔数主要是为了验证值是否为0xCAFEBABE。读取到Class文件的主、次版本号并保存到ClassFileParser实例的_major_version和_minor_version中
   u4 magic = cfs->get_u4_fast();
   guarantee_property(magic == JAVA_CLASSFILE_MAGIC,
                      "Incompatible magic value %u in class file %s",
@@ -3968,6 +3990,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   _relax_verify = relax_format_check_for(_loader_data);
 
   // Constant pool
+    // 解析当前class的常量池
   constantPoolHandle cp = parse_constant_pool(CHECK_(nullHandle));
 
   int cp_size = cp->length();
@@ -3975,7 +3998,9 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   cfs->guarantee_more(8, CHECK_(nullHandle));  // flags, this_class, super_class, infs_len
 
   // Access flags
+    // 解析当前class的access_flags
   AccessFlags access_flags;
+    // 读取并验证访问标识，这个访问标识在进行字段及方法解析过程中会使用，主要用来判断这些字段或方法是定义在接口中还是类中。JVM_RECOGNIZED_CLASS_MODIFIERS是一个宏
   jint flags = cfs->get_u2_fast() & JVM_RECOGNIZED_CLASS_MODIFIERS;
 
   if ((flags & JVM_ACC_INTERFACE) && _major_version < JAVA_6_VERSION) {
@@ -3986,6 +4011,8 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   access_flags.set_flags(flags);
 
   // This class and superclass
+    // 解析当前类索引
+    // 类索引（this_class）是一个u2类型的数据，类索引用于确定这个类的全限定名。类索引指向常量池中类型为CONSTANT_Class_info的类描述符，再通过类描述符中的索引值找到常量池中类型为CONSTANT_Utf8_info的字符串。
   _this_class_index = cfs->get_u2_fast();
   check_property(
     valid_cp_range(_this_class_index, cp_size) &&
@@ -4004,6 +4031,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
   parsed_name->increment_refcount();
 
   // Update _class_name which could be null previously to be class_name
+    // 将读取到的当前类的名称保存到ClassFileParser实例的_class_name属性中。
   _class_name = class_name;
 
   // Don't need to check whether this class name is legal or not.
@@ -4051,11 +4079,18 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     }
 #endif
 
+        // 解析父类索引
+        // 父类索引（super_class）是一个u2类型的数据，父类索引用于确定这个类的父类全限定名。由于java语言不允许多重继承，所以父类索引只有一个。
+        // 父类索指向常量池中类型为CONSTANT_Class_info的类描述符，再通过类描述符中的索引值找到常量池中类型为CONSTANT_Utf8_info的字符串。
     u2 super_class_index = cfs->get_u2_fast();
     instanceKlassHandle super_klass = parse_super_class(super_class_index,
                                                         CHECK_NULL);
 
     // Interfaces
+        // 解析实现接口
+        // 接口表，interfaces[]数组中的每个成员的值必须是一个对constant_pool表中项目的一个有效索引值， 它的长度为 interfaces_count。
+        // 每个成员interfaces[i] 必须为CONSTANT_Class_info类型常量，其中 0 ≤ i <interfaces_count。在interfaces[]数组中，
+        // 成员所表示的接口顺序和对应的源代码中给定的接口顺序（从左至右）一样，即interfaces[0]对应的是源代码中最左边的接口。
     u2 itfs_len = cfs->get_u2_fast();
     Array<Klass*>* local_interfaces =
       parse_interfaces(itfs_len, protection_domain, _class_name,
@@ -4082,6 +4117,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     }
 
     // Additional attributes
+        // 解析类属性
     ClassAnnotationCollector parsed_annotations;
     parse_classfile_attributes(&parsed_annotations, CHECK_(nullHandle));
 
@@ -4182,6 +4218,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     }
 
     // We can now create the basic Klass* for this klass
+        // 获取加载.class文件保存在方法区的元数据instanceKlass
     _klass = InstanceKlass::allocate_instance_klass(loader_data,
                                                     vtable_size,
                                                     itable_size,
@@ -4302,6 +4339,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
     }
 
     // Allocate mirror and initialize static fields
+        // 为klass和class实例互相设置引用，并为静态变量设置默认值以及完成对带final static的属性赋恒定值
     java_lang_Class::create_mirror(this_klass, class_loader, protection_domain,
                                    CHECK_(nullHandle));
 

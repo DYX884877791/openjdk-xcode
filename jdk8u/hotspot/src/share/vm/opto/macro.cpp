@@ -964,6 +964,7 @@ void PhaseMacroExpand::process_users_of_allocation(CallNode *alloc) {
 }
 
 bool PhaseMacroExpand::eliminate_allocate_node(AllocateNode *alloc) {
+  slog_trace("进入hotspot/src/share/vm/opto/macro.cpp中的PhaseMacroExpand::eliminate_allocate_node函数...");
   // Don't do scalar replacement if the frame can be popped by JVMTI:
   // if reallocation fails during deoptimization we'll pop all
   // interpreter frames for this compiled frame and that won't play

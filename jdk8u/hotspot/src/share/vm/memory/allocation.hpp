@@ -175,8 +175,11 @@ const bool NMT_track_callsite = false;
 class NativeCallStack;
 
 
+// CHeapObj是所有在堆内存分配对象的基类，其定义在hotspot/src/share/vm/memory/allocation.hpp中，主要定义了new和delete操作符的多个重载版本，支持在堆内存中分配指定大小的内存
+// MEMFLAGS实际是枚举MemoryType的别名，表示内存的类型
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
  public:
+    // 以其中的一个new实现为例说明，具体实现在hotspot/src/share/vm/memory/allocation.inline.hpp
   _NOINLINE_ void* operator new(size_t size, const NativeCallStack& stack) throw();
   _NOINLINE_ void* operator new(size_t size) throw();
   _NOINLINE_ void* operator new (size_t size, const std::nothrow_t&  nothrow_constant,
@@ -244,12 +247,14 @@ class _ValueObj {
 
 class ClassLoaderData;
 
+//  该类是作为存放在Metaspace元空间的中类的基类，不能执行delete，否则会出现致命错误，注意该类没有定义虚函数。该类重载了new操作符，主要用于给共享只读的或者共享读写的类分配内存
 class MetaspaceObj {
  public:
   bool is_metaspace_object() const;
   bool is_shared() const;
   void print_address_on(outputStream* st) const;  // nonvirtual address printing
 
+// 类函数宏
 #define METASPACE_OBJ_TYPES_DO(f) \
   f(Unknown) \
   f(Class) \
@@ -268,9 +273,11 @@ class MetaspaceObj {
   f(MethodCounters) \
   f(Deallocated)
 
+// 宏体里面两个#号表示字符串拼接
 #define METASPACE_OBJ_TYPE_DECLARE(name) name ## Type,
 #define METASPACE_OBJ_TYPE_NAME_CASE(name) case name ## Type: return #name;
 
+    // 该类定义了一个枚举Type用于表示对象类型，包含以下几种类型
   enum Type {
     // Types are MetaspaceObj::ClassType, MetaspaceObj::SymbolType, etc
     METASPACE_OBJ_TYPES_DO(METASPACE_OBJ_TYPE_DECLARE)

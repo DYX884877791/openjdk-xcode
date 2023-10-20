@@ -854,21 +854,28 @@ void ClassLoader::print_bootclasspath() {
   tty->print_cr("]");
 }
 
+/**
+ * 应用程序可以从动态链接库中根据方法名查找对应方法的实现，对C/C++而言就是获取对应方法的指针，然后通过指针调用方法，如ClassLoader类的load_zip_library方法的实现
+ */
 void ClassLoader::load_zip_library() {
   assert(ZipOpen == NULL, "should not load zip library twice");
   // First make sure native library is loaded
+    //首先确保java依赖的本地基础库文件已经加载
   os::native_java_library();
   // Load zip library
   char path[JVM_MAXPATHLEN];
   char ebuf[1024];
   void* handle = NULL;
+    //获取动态链接库的地址，并加载下面的zip库
   if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "zip")) {
     handle = os::dll_load(path, ebuf, sizeof ebuf);
   }
+    //如果加载失败抛出异常
   if (handle == NULL) {
     vm_exit_during_initialization("Unable to load ZIP library", path);
   }
   // Lookup zip entry points
+    //从动态链接库中查找对应方法的实现，ZipOpen等是方法指针的别名
   ZipOpen      = CAST_TO_FN_PTR(ZipOpen_t, os::dll_lookup(handle, "ZIP_Open"));
   ZipClose     = CAST_TO_FN_PTR(ZipClose_t, os::dll_lookup(handle, "ZIP_Close"));
   FindEntry    = CAST_TO_FN_PTR(FindEntry_t, os::dll_lookup(handle, "ZIP_FindEntry"));
@@ -877,12 +884,14 @@ void ClassLoader::load_zip_library() {
   Crc32        = CAST_TO_FN_PTR(Crc32_t, os::dll_lookup(handle, "ZIP_CRC32"));
 
   // ZIP_Close is not exported on Windows in JDK5.0 so don't abort if ZIP_Close is NULL
+    //如果查找方法实现失败
   if (ZipOpen == NULL || FindEntry == NULL || ReadEntry == NULL ||
       GetNextEntry == NULL || Crc32 == NULL) {
     vm_exit_during_initialization("Corrupted ZIP library", path);
   }
 
   // Lookup canonicalize entry in libjava.dll
+    //从libjava.dll查找CanonicalizeEntry，不过从1.3开始不再使用，所以未检查是否加载成功
   void *javalib_handle = os::native_java_library();
   CanonicalizeEntry = CAST_TO_FN_PTR(canonicalize_fn_t, os::dll_lookup(javalib_handle, "Canonicalize"));
   // This lookup only works on 1.3. Do not check for non-null here
@@ -1135,6 +1144,7 @@ objArrayOop ClassLoader::get_system_packages(TRAPS) {
 
 
 instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
+    //获取类名
   ResourceMark rm(THREAD);
   const char* class_name = h_name->as_C_string();
   EventMark m("loading class %s", class_name);
@@ -1145,10 +1155,13 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
   // st.print("%s.class", h_name->as_utf8());
   st.print_raw(h_name->as_utf8());
   st.print_raw(".class");
+    //获取文件名
+    // 通过st获取对应的文件名
   const char* file_name = st.as_string();
   ClassLoaderExt::Context context(class_name, file_name, THREAD);
 
   // Lookup stream for parsing .class file
+    //ClassFileStream表示Class文件的字节流
   ClassFileStream* stream = NULL;
   int classpath_index = 0;
   ClassPathEntry* e = NULL;
@@ -1157,12 +1170,19 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     PerfClassTraceTime vmtimer(perf_sys_class_lookup_time(),
                                ((JavaThread*) THREAD)->get_thread_stat()->perf_timers_addr(),
                                PerfClassTraceTime::CLASS_LOAD);
+      // 遍历class_path找到要加载的类文件，获取到文件的绝对路径后就创建ClassFileStream对象。ClassPathEntry 是一个链表结构（因为class path有多个），
+      // 同时在ClassPathEntry中还声明了一个虚函数open_stream()。
+      // 这样就可以通过循环遍历链表上的结构，直到查找到某个路径下名称为name的文件为止，这时候open_stream()函数会返回ClassFileStream实例。
+      //从第一个ClassPathEntry开始遍历所有的ClassPathEntry
     e = _first_entry;
     while (e != NULL) {
+        // 创建字节码文件流，每个被加载的Java类都对应着一个ClassLoaderData结构，ClassLoaderData内部通过链表维护着ClassLoader和ClassLoader加载的类
       stream = e->open_stream(file_name, CHECK_NULL);
+        //如果检查返回false则返回null，check方法默认返回true
       if (!context.check(stream, classpath_index)) {
         return h; // NULL
       }
+        //如果找到目标文件则跳出循环
       if (stream != NULL) {
         break;
       }
@@ -1171,9 +1191,13 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     }
   }
 
+    //如果找到了目标class文件
+    // 在load_classfile()方法中获取到ClassFileStream实例后会调用ClassFileParser类中的parseClassFile()方法
   if (stream != NULL) {
     // class file found, parse it
+      //构建一个ClassFileParser实例
     ClassFileParser parser(stream);
+      //构建一个ClassLoaderData实例
     ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
     Handle protection_domain;
     TempNewSymbol parsed_name = NULL;
@@ -1182,15 +1206,20 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     // this call to parseClassFile
     // We do not declare another ResourceMark here, reusing the one declared
     // at the start of the method
+      // 调用parseClassFile()方法后返回表示Java类的instanceKlass对象，最终方法返回的是操作instanceKlass对象的句柄instanceKlassHandle。
+      // 最终调用ClassFileParser解析Java字节码文件流
+      //解析并加载class文件，注意此时并未开始链接
     instanceKlassHandle result = parser.parseClassFile(h_name,
                                                        loader_data,
                                                        protection_domain,
                                                        parsed_name,
                                                        context.should_verify(classpath_index),
                                                        THREAD);
+      //如果解析异常
     if (HAS_PENDING_EXCEPTION) {
       ResourceMark rm;
       if (DumpSharedSpaces) {
+          //打印异常
         tty->print_cr("Preload Error: Failed to load %s", class_name);
       }
       return h;
@@ -1204,8 +1233,10 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
   }
 #endif
 
+      //调用ClassLoader的add_package方法，把当前类的包名加入到_package_hash_table中
     h = context.record_result(classpath_index, e, result, THREAD);
   } else {
+      //没有找到目标文件
     if (DumpSharedSpaces) {
       tty->print_cr("Preload Warning: Cannot find %s", class_name);
     }
@@ -1240,6 +1271,7 @@ void ClassLoader::initialize() {
   assert(_package_hash_table == NULL, "should have been initialized by now.");
   EXCEPTION_MARK;
 
+    //如果开始性能检测则初始化各计数器
   if (UsePerfData) {
     // jvmstat performance counters
     NEWPERFTICKCOUNTER(_perf_accumulated_time, SUN_CLS, "time");
@@ -1301,6 +1333,7 @@ void ClassLoader::initialize() {
   }
 
   // lookup zip library entry points
+    //加载读写zip文件的动态链接库
   load_zip_library();
 #if INCLUDE_CDS
   // initialize search path
@@ -1308,9 +1341,13 @@ void ClassLoader::initialize() {
     _shared_paths_misc_info = SharedClassUtil::allocate_shared_paths_misc_info();
   }
 #endif
+    //设置加载核心jar包的搜索路径，从系统参数Arguments中获取
+    //设置bootstrap加载器路径
   setup_bootstrap_search_path();
+    //如果是惰性启动加载，即启动时不加载rt.jar等文件
   if (LazyBootClassLoader) {
     // set up meta index which makes boot classpath initialization lazier
+      //设置meta_index_path，设置完成后会触发对meta_index_path下文件的解析
     setup_bootstrap_meta_index();
   }
 }

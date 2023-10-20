@@ -53,11 +53,14 @@ inline void inc_stat_counter(volatile julong* dest, julong add_value) {
 inline char* AllocateHeap(size_t size, MEMFLAGS flags,
     const NativeCallStack& stack,
     AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM) {
+    //调用os接口分配指定大小的内存
   char* p = (char*) os::malloc(size, flags, stack);
   #ifdef ASSERT
+    //打印日志
   if (PrintMallocFree) trace_heap_malloc(size, "AllocateHeap", p);
   #endif
   if (p == NULL && alloc_failmode == AllocFailStrategy::EXIT_OOM) {
+      //OOM导致分配失败，抛出异常退出
     vm_exit_out_of_memory(size, OOM_MALLOC_ERROR, "AllocateHeap");
   }
   return p;
@@ -96,8 +99,10 @@ inline void FreeHeap(void* p, MEMFLAGS memflags = mtInternal) {
 
 template <MEMFLAGS F> void* CHeapObj<F>::operator new(size_t size,
       const NativeCallStack& stack) throw() {
+    //分配指定大小的堆内存
   void* p = (void*)AllocateHeap(size, F, stack);
 #ifdef ASSERT
+    //打印日志，调试用
   if (PrintMallocFree) trace_heap_malloc(size, "CHeapObj-new", p);
 #endif
   return p;

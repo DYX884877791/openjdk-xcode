@@ -247,6 +247,7 @@ template <class T> void ObjArrayKlass::do_copy(arrayOop s, T* src,
     // since source and destination are equal we do not need conversion checks.
     assert(length > 0, "sanity check");
     bs->write_ref_array_pre(dst, length);
+      //复制的函数
     Copy::conjoint_oops_atomic(src, dst, length);
   } else {
     // We have to make sure all elements conform to the destination array
@@ -254,6 +255,7 @@ template <class T> void ObjArrayKlass::do_copy(arrayOop s, T* src,
     Klass* stype = ObjArrayKlass::cast(s->klass())->element_klass();
     if (stype == bound || stype->is_subtype_of(bound)) {
       // elements are guaranteed to be subtypes, so no check necessary
+        //stype对象是bound，或者stype是bound的子类抑或stype实现bound接口
       bs->write_ref_array_pre(dst, length);
       Copy::conjoint_oops_atomic(src, dst, length);
     } else {
@@ -288,19 +290,26 @@ template <class T> void ObjArrayKlass::do_copy(arrayOop s, T* src,
   bs->write_ref_array((HeapWord*)dst, length);
 }
 
+/**
+ *java.lang.System中的arraycopy方法具体实现
+ */
 void ObjArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d,
                                int dst_pos, int length, TRAPS) {
+    //检测s是数组
   assert(s->is_objArray(), "must be obj array");
 
+    //目的数组不是数组对象的话，则抛出ArrayStoreException异常
   if (!d->is_objArray()) {
     THROW(vmSymbols::java_lang_ArrayStoreException());
   }
 
   // Check is all offsets and lengths are non negative
+    //检测下标参数非负
   if (src_pos < 0 || dst_pos < 0 || length < 0) {
     THROW(vmSymbols::java_lang_ArrayIndexOutOfBoundsException());
   }
   // Check if the ranges are valid
+    //检测下标参数是否越界
   if  ( (((unsigned int) length + (unsigned int) src_pos) > (unsigned int) s->length())
      || (((unsigned int) length + (unsigned int) dst_pos) > (unsigned int) d->length()) ) {
     THROW(vmSymbols::java_lang_ArrayIndexOutOfBoundsException());
@@ -310,9 +319,12 @@ void ObjArrayKlass::copy_array(arrayOop s, int src_pos, arrayOop d,
   // This allows the following call: copy_array(s, s.length(), d.length(), 0).
   // This is correct, since the position is supposed to be an 'in between point', i.e., s.length(),
   // points to the right of the last element.
+    //length==0则不需要复制
   if (length==0) {
     return;
   }
+    //UseCompressedOops只是用来区分narrowOop和oop，具体2者有啥区别需要再研究
+    //调用do_copy函数来复制
   if (UseCompressedOops) {
     narrowOop* const src = objArrayOop(s)->obj_at_addr<narrowOop>(src_pos);
     narrowOop* const dst = objArrayOop(d)->obj_at_addr<narrowOop>(dst_pos);

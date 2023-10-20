@@ -359,11 +359,11 @@ public:
 
 class PlatformEvent : public CHeapObj<mtInternal> {
   private:
-    double CachePad [4] ;   // increase odds that _mutex is sole occupant of cache line
-    volatile int _Event ;
-    volatile int _nParked ;
-    pthread_mutex_t _mutex  [1] ;
-    pthread_cond_t  _cond   [1] ;
+    double CachePad [4] ;   // increase odds that _mutex is sole occupant of cache line 和下面的PostPad  一样，都是为了规避缓存行问题
+    volatile int _Event ;   // 只有两个值，0表示执行完park，1表示执行完unpark
+    volatile int _nParked ;  // 只有两个值，1或者0，用来记录park的线程数
+    pthread_mutex_t _mutex  [1] ;   // 等待的锁
+    pthread_cond_t  _cond   [1] ;   // 等待的条件
     double PostPad  [2] ;
     Thread * _Assoc ;
 
@@ -373,6 +373,7 @@ class PlatformEvent : public CHeapObj<mtInternal> {
   public:
     PlatformEvent() {
       int status;
+        //初始化_cond和_mutex
       status = pthread_cond_init (_cond, os::Linux::condAttr());
       assert_status(status == 0, status, "cond_init");
       status = pthread_mutex_init (_mutex, NULL);
@@ -392,15 +393,21 @@ class PlatformEvent : public CHeapObj<mtInternal> {
     void SetAssociation (Thread * a) { _Assoc = a ; }
 } ;
 
+/**
+ * PlatformParker主要看三个成员变量，_cur_index, _mutex, _cond。
+ * 其中mutex和cond就是很熟悉的glibc nptl包中符合posix标准的线程同步工具，一个互斥锁一个条件变量。
+ * 再看thread和Parker的关系，在hotspot的Thread类的NameThread内部类中有一个 Parker成员变量。
+ * 说明parker是每线程变量，在创建线程的时候就会生成一个parker实例。
+ */
 class PlatformParker : public CHeapObj<mtInternal> {
   protected:
     enum {
         REL_INDEX = 0,
         ABS_INDEX = 1
     };
-    int _cur_index;  // which cond is in use: -1, 0, 1
-    pthread_mutex_t _mutex [1] ;
-    pthread_cond_t  _cond  [2] ; // one for relative times and one for abs.
+    int _cur_index;  // which cond is in use: -1, 0, 1 正在使用哪个条件：-1, 0, 1，当前使用的_cond索引
+    pthread_mutex_t _mutex [1] ; // 锁 等待的锁
+    pthread_cond_t  _cond  [2] ; // one for relative times and one for abs. 条件变量，一个用于相对时间，一个用于绝对时间。等待的条件，等待一段时间时使用
 
   public:       // TODO-FIXME: make dtor private
     ~PlatformParker() { guarantee (0, "invariant") ; }
@@ -408,6 +415,7 @@ class PlatformParker : public CHeapObj<mtInternal> {
   public:
     PlatformParker() {
       int status;
+        //初始化_cond数组和_mutex
       status = pthread_cond_init (&_cond[REL_INDEX], os::Linux::condAttr());
       assert_status(status == 0, status, "cond_init rel");
       status = pthread_cond_init (&_cond[ABS_INDEX], NULL);

@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import sun.security.action.GetBooleanAction;
+import sun.security.action.GetPropertyAction;
 
 /**
  * ProxyGenerator contains the code to generate a dynamic proxy class
@@ -316,6 +317,11 @@ public class ProxyGenerator {
             new GetBooleanAction(
                 "sun.misc.ProxyGenerator.saveGeneratedFiles")).booleanValue();
 
+    /** saving generated class files path */
+    // 魔改-->添加了保存代理类的路径
+    private final static String saveGeneratedFilesPath =
+        GetPropertyAction.privilegedGetProperty("sun.misc.ProxyGenerator.saveGeneratedFilesPath", "");
+
     /**
      * Generate a public proxy class given a name and a list of proxy interfaces.
      */
@@ -346,11 +352,11 @@ public class ProxyGenerator {
                         int i = name.lastIndexOf('.');
                         Path path;
                         if (i > 0) {
-                            Path dir = Paths.get(name.substring(0, i).replace('.', File.separatorChar));
+                            Path dir = Paths.get(saveGeneratedFilesPath).resolve(Paths.get(name.substring(0, i).replace('.', File.separatorChar)));
                             Files.createDirectories(dir);
                             path = dir.resolve(name.substring(i+1, name.length()) + ".class");
                         } else {
-                            path = Paths.get(name + ".class");
+                            path = Paths.get(saveGeneratedFilesPath).resolve(Paths.get(name + ".class"));
                         }
                         Files.write(path, classFile);
                         return null;
@@ -371,6 +377,7 @@ public class ProxyGenerator {
     private static Method toStringMethod;
     static {
         try {
+            // 在静态构造函数中，可以看到的确就是Object的3个方法
             hashCodeMethod = Object.class.getMethod("hashCode");
             equalsMethod =
                 Object.class.getMethod("equals", new Class<?>[] { Object.class });
@@ -381,15 +388,19 @@ public class ProxyGenerator {
     }
 
     /** name of proxy class */
+    //代理类全限定名
     private String className;
 
     /** proxy interfaces */
+    //代理类要实现的接口
     private Class<?>[] interfaces;
 
     /** proxy class access flags */
+    //代理类访问标志
     private int accessFlags;
 
     /** constant pool of class being generated */
+    //常量池
     private ConstantPool cp = new ConstantPool();
 
     /** FieldInfo struct for each field of generated class */
@@ -399,6 +410,8 @@ public class ProxyGenerator {
     private List<MethodInfo> methods = new ArrayList<>();
 
     /**
+     * key:接口名，value:ProxyMethod列表，ProxyMethod由接口方法包装而成
+     *
      * maps method signature string to list of ProxyMethod objects for
      * proxy methods with that signature
      */
@@ -426,12 +439,19 @@ public class ProxyGenerator {
      */
     private byte[] generateClassFile() {
 
-        /* ============================================================
+        /**
+         * 第一步：将所有方法包装成ProxyMethod对象
+         *    将hashCode、equals、toString方法包装成ProxyMethod对象
+         *
+         * ============================================================
          * Step 1: Assemble ProxyMethod objects for all methods to
          * generate proxy dispatching code for.
          */
 
         /*
+         * 首先无论是什么类，都是继承自Object的，因此Object中的方法是一定需要的
+         * 注意，这里addProxyMethod并非直接写字节码了，而是做了一些预处理
+         *
          * Record that proxy methods are needed for the hashCode, equals,
          * and toString methods of java.lang.Object.  This is done before
          * the methods from the proxy interfaces so that the methods from
@@ -443,6 +463,9 @@ public class ProxyGenerator {
         addProxyMethod(toStringMethod, Object.class);
 
         /*
+         * 既然生成的类实现了传入的接口，因此循环接口，将接口的方法要素添加到proxyMethods中
+         * 遍历每个接口的每个方法，并包装成ProxyMethod对象
+         *
          * Now record all of the methods from the proxy interfaces, giving
          * earlier interfaces precedence over later ones with duplicate
          * methods.
@@ -461,26 +484,35 @@ public class ProxyGenerator {
             checkReturnTypes(sigmethods);
         }
 
-        /* ============================================================
+        /**
+         * 第二步：为代理类组装各种字段信息和方法信息
+         *
+         * ============================================================
          * Step 2: Assemble FieldInfo and MethodInfo structs for all of
          * fields and methods in the class we are generating.
          */
         try {
+            // 添加构造器方法，该构造器参数为InvocationHandler类型
             methods.add(generateConstructor());
 
+            // 遍历之前我们添加的Object和接口定义的方法，然后生成相应的字段字节码和方法字节码
+            // 添加静态字段及代理方法
             for (List<ProxyMethod> sigmethods : proxyMethods.values()) {
                 for (ProxyMethod pm : sigmethods) {
 
                     // add static field for method's Method object
+                    // 添加私有的静态字段，字段值为各方法的Method类，PRIVATE | STATIC按位与之后的值为10
                     fields.add(new FieldInfo(pm.methodFieldName,
                         "Ljava/lang/reflect/Method;",
                          ACC_PRIVATE | ACC_STATIC));
 
                     // generate code for proxy method and add it
+                    // 添加代理方法
                     methods.add(pm.generateMethod());
                 }
             }
 
+            // 添加静态字段的初始化方法
             methods.add(generateStaticInitializer());
 
         } catch (IOException e) {
@@ -494,7 +526,10 @@ public class ProxyGenerator {
             throw new IllegalArgumentException("field limit exceeded");
         }
 
-        /* ============================================================
+        /**
+         * 第三步：写入class文件
+         *
+         * ============================================================
          * Step 3: Write the final class file.
          */
 
@@ -502,13 +537,18 @@ public class ProxyGenerator {
          * Make sure that constant pool indexes are reserved for the
          * following items before starting to write the final class file.
          */
+        // 验证常量池中存在代理类的全限定名
         cp.getClass(dotToSlash(className));
+        // 验证常量池中存在代理类父类的全限定名，即Proxy类
         cp.getClass(superclassName);
+        // 验证常量池中存在代理类接口的全限定名
         for (Class<?> intf: interfaces) {
             cp.getClass(dotToSlash(intf.getName()));
         }
 
-        /*
+        /**
+         * 写入class文件前，将常量池设为只读，当前常量池中的变量不允许修改
+         *
          * Disallow new constant pool additions beyond this point, since
          * we are about to write the final constant pool table.
          */
@@ -522,55 +562,59 @@ public class ProxyGenerator {
              * Write all the items of the "ClassFile" structure.
              * See JVMS section 4.1.
              */
-                                        // u4 magic;
+            // 每个class文件的前四个字节为魔数，用来确定这个文件是否是一个能被虚拟机接受的class文件，后面再跟两个字节的次版本号和两个字节的主版本号
+                                        // u4 magic;    写入魔数
             dout.writeInt(0xCAFEBABE);
-                                        // u2 minor_version;
+                                        // u2 minor_version;    写入次版本号
             dout.writeShort(CLASSFILE_MINOR_VERSION);
-                                        // u2 major_version;
+                                        // u2 major_version;    写入主版本号
             dout.writeShort(CLASSFILE_MAJOR_VERSION);
 
-            cp.write(dout);             // (write constant pool)
+            cp.write(dout);             // (write constant pool)    写入常量池
 
-                                        // u2 access_flags;
+                                        // u2 access_flags;     写入访问标志
             dout.writeShort(accessFlags);
-                                        // u2 this_class;
+                                        // u2 this_class;       写入代理类类型
             dout.writeShort(cp.getClass(dotToSlash(className)));
-                                        // u2 super_class;
+                                        // u2 super_class;      写入父类类型
             dout.writeShort(cp.getClass(superclassName));
 
-                                        // u2 interfaces_count;
+                                        // u2 interfaces_count;     写入接口数量
             dout.writeShort(interfaces.length);
-                                        // u2 interfaces[interfaces_count];
+                                        // u2 interfaces[interfaces_count];     写入接口类型
             for (Class<?> intf : interfaces) {
                 dout.writeShort(cp.getClass(
                     dotToSlash(intf.getName())));
             }
 
-                                        // u2 fields_count;
+                                        // u2 fields_count;     写入字段数量
             dout.writeShort(fields.size());
-                                        // field_info fields[fields_count];
+                                        // field_info fields[fields_count];     写入字段信息
             for (FieldInfo f : fields) {
                 f.write(dout);
             }
 
-                                        // u2 methods_count;
+                                        // u2 methods_count;    写入方法数量
             dout.writeShort(methods.size());
-                                        // method_info methods[methods_count];
+                                        // method_info methods[methods_count];  写入方法信息
             for (MethodInfo m : methods) {
                 m.write(dout);
             }
 
-                                         // u2 attributes_count;
+                                         // u2 attributes_count;    写入属性数量，代理类class文件没有属性所以为0
             dout.writeShort(0); // (no ClassFile attributes for proxy classes)
 
         } catch (IOException e) {
             throw new InternalError("unexpected I/O Exception", e);
         }
 
+        // 转成二进制文件输出
         return bout.toByteArray();
     }
 
     /**
+     * 这里对变量名做了一个可读性处理，根据方法的各个要素生成一个ProxyMethod对象，然后将其加入一个缓存List中
+     *
      * Add another method to be proxied, either by creating a new
      * ProxyMethod object or augmenting an old one for a duplicate
      * method.
@@ -718,6 +762,14 @@ public class ProxyGenerator {
      * A FieldInfo object contains information about a particular field
      * in the class being generated.  The class mirrors the data items of
      * the "field_info" structure of the class file format (see JVMS 4.5).
+     *
+     * field_info {
+     *     u2             access_flags;//access_flag
+     *     u2             name_index;//值为一个整数(常量池表中的有效索引)，例如name_index为4，那么name_index表示常量池表中索引为4处的常量(必须为Utf8_info结构)，用来表示这个字段的名称(非全限定名)
+     *     u2             descriptor_index;//值为一个整数(常量池表中的有效索引)，例如descriptor_index为5，那么descriptor_index表示常量池表中索引为5处的常量(必须是Utf8_info结构)，用来表示这个字段的描述符
+     *     u2             attributes_count;//字段中有attributes_count个属性
+     *     attribute_info attributes[attributes_count];//一个attribute_info数组attributes，用来存储attributes_count个attribute_info结构
+     * }
      */
     private class FieldInfo {
         public int accessFlags;
@@ -729,7 +781,10 @@ public class ProxyGenerator {
             this.descriptor = descriptor;
             this.accessFlags = accessFlags;
 
-            /*
+            /**
+             * 同时，由于name_index和descriptor_index都是常量池中的一个索引，因此需要将其写入常量池
+             * 这里的cp就是指Constant pool，把methodFieldName和descriptor写入到静态池
+             *
              * Make sure that constant pool indexes are reserved for the
              * following items before starting to write the final class file.
              */
@@ -737,6 +792,15 @@ public class ProxyGenerator {
             cp.getUtf8(descriptor);
         }
 
+         /**
+          * 最后写入字节:
+          * 对照之前的field_info
+          * 第一个写入access_flags
+          * 接着写入name_index和descriptor_index，值都是索引
+          * 最后因为attribute数量是0，因此直接写0
+          *
+          * 此时一个完整的字段结构就写入完毕了
+          */
         public void write(DataOutputStream out) throws IOException {
             /*
              * Write all the items of the "field_info" structure.
@@ -778,6 +842,55 @@ public class ProxyGenerator {
      * A MethodInfo object contains information about a particular method
      * in the class being generated.  This class mirrors the data items of
      * the "method_info" structure of the class file format (see JVMS 4.6).
+     *
+     * method_info {
+     *     u2             access_flags;//access_flag
+     *     u2             name_index;//常量池中的一个有效索引，必须是Utf8类型（表示方法的名字），指向 CONSTANT_Utf8_info 结构，标识一个有效的字段的非全限定名
+     *     u2             descriptor_index;//常量池中的一个有效索引，必须是Utf8类型（表示方法的描述）
+     *     u2             attributes_count;//属性数量
+     *     attribute_info attributes[attributes_count];//属性的具体内容
+     * }
+     * attribute_info 附加属性
+     * 包含：
+     *      - Code
+     *      - Exceptions
+     *      - Synthetic
+     *      - Signature
+     *      - Dprecated
+     *      - RuntimeVisibleAnnotations
+     *      - RuntimeInvisibleAnnotations
+     *      - RuntimeVisibleParameterAnnotations
+     *      - RuntimeInvisibleParameterAnnotations
+     *      - AnnotationDefault
+     *
+     * Code的结构:
+     *
+     * Code_attribute {
+     *     u2 attribute_name_index;
+     *     u4 attribute_length;
+     *     u2 max_stack;
+     *     u2 max_locals;
+     *     u4 code_length;
+     *     u1 code[code_length];
+     *     u2 exception_table_length;
+     *     {   u2 start_pc;
+     *         u2 end_pc;
+     *         u2 handler_pc;
+     *         u2 catch_type;
+     *     } exception_table[exception_table_length];
+     *     u2 attributes_count;
+     *     attribute_info attributes[attributes_count];
+     * }
+     *
+     *
+     * Exception结构:
+     *
+     * Exceptions_attribute {
+     *     u2 attribute_name_index;
+     *     u4 attribute_length;
+     *     u2 number_of_exceptions;
+     *     u2 exception_index_table[number_of_exceptions];
+     * }
      */
     private class MethodInfo {
         public int accessFlags;
@@ -785,6 +898,8 @@ public class ProxyGenerator {
         public String descriptor;
         public short maxStack;
         public short maxLocals;
+        // MethodInfo的构造函数还写入了2个额外的常量池对象：Code和Exceptions，表示2种attributes
+        // Code表示执行代码，Exceptions表示方法会抛出的异常
         public ByteArrayOutputStream code = new ByteArrayOutputStream();
         public List<ExceptionTableEntry> exceptionTable =
             new ArrayList<ExceptionTableEntry>();
@@ -816,25 +931,26 @@ public class ProxyGenerator {
             out.writeShort(cp.getUtf8(name));
                                         // u2 descriptor_index;
             out.writeShort(cp.getUtf8(descriptor));
-                                        // u2 attributes_count;
+                                        // u2 attributes_count;     写入属性的数量
             out.writeShort(2);  // (two method_info attributes:)
 
             // Write "Code" attribute. See JVMS section 4.7.3.
 
-                                        // u2 attribute_name_index;
+                                        // u2 attribute_name_index;     写入attribute_name_index
             out.writeShort(cp.getUtf8("Code"));
-                                        // u4 attribute_length;
+                                        // u4 attribute_length;     写入数据长度attribute_length
             out.writeInt(12 + code.size() + 8 * exceptionTable.size());
-                                        // u2 max_stack;
+                                        // u2 max_stack;        写入栈深max_stack和max_locals本地变量数量
             out.writeShort(maxStack);
                                         // u2 max_locals;
             out.writeShort(maxLocals);
-                                        // u2 code_length;
+                                        // u2 code_length;      写入方法执行体字节的长度code_length和方法执行体具体字节code[code_length]
             out.writeInt(code.size());
                                         // u1 code[code_length];
             code.writeTo(out);
-                                        // u2 exception_table_length;
+                                        // u2 exception_table_length;   写入方法会抛出的异常数量exception_table_length，这个时候exception_table_length是一个short类型，加上之前的8个字节，一共是10个字节
             out.writeShort(exceptionTable.size());
+            // 每一个异常都有4个字段，start_pc、end_pc、handler_pc、catch_type，都是short类型，因此一个Exception就会有8个字节，这个8正对应了上面attribute_length中的8
             for (ExceptionTableEntry e : exceptionTable) {
                                         // u2 start_pc;
                 out.writeShort(e.startPc);
@@ -845,18 +961,18 @@ public class ProxyGenerator {
                                         // u2 catch_type;
                 out.writeShort(e.catchType);
             }
-                                        // u2 attributes_count;
+                                        // u2 attributes_count;     写入attributes自身的attributes_count，因为没有，所以直接写0 这个数量是一个short类型，加上之前累积的10个字节，一共12个字节，对应了attribute_length中的12
             out.writeShort(0);
 
             // write "Exceptions" attribute.  See JVMS section 4.7.4.
 
-                                        // u2 attribute_name_index;
+                                        // u2 attribute_name_index;     先写入常量池的索引attribute_name_index
             out.writeShort(cp.getUtf8("Exceptions"));
-                                        // u4 attributes_length;
+                                        // u4 attributes_length;    写入attribute长度attribute_length
             out.writeInt(2 + 2 * declaredExceptions.length);
-                                        // u2 number_of_exceptions;
+                                        // u2 number_of_exceptions;     写入异常数量number_of_exceptions，类型是short，对应了第一个2
             out.writeShort(declaredExceptions.length);
-                        // u2 exception_index_table[number_of_exceptions];
+                        // u2 exception_index_table[number_of_exceptions];      写入具体的异常在常量池中的索引，每一个数据都是一个short，对应了第二个2
             for (short value : declaredExceptions) {
                 out.writeShort(value);
             }
@@ -871,11 +987,13 @@ public class ProxyGenerator {
      */
     private class ProxyMethod {
 
+        // 方法名，字符串形式
         public String methodName;
         public Class<?>[] parameterTypes;
         public Class<?> returnType;
         public Class<?>[] exceptionTypes;
         public Class<?> fromClass;
+        // 以m+递增数字的methodFieldName，表示该方法在最终生成的类中的Method类型的字段的名称
         public String methodFieldName;
 
         private ProxyMethod(String methodName, Class<?>[] parameterTypes,
@@ -891,18 +1009,24 @@ public class ProxyGenerator {
         }
 
         /**
+         * 方法的结构体其实包含两个大部分，第一部分是和field_info一样的基础属性，第二部分是方法的执行体。
+         *
          * Return a MethodInfo object for this method, including generating
          * the code and exception table entry.
          */
         private MethodInfo generateMethod() throws IOException {
+            // 获取方法的描述，类似于 ()V 描述方法的参数和返回参数，这里()V表示获取0个参数，返回为void的方法
             String desc = getMethodDescriptor(parameterTypes, returnType);
+            // 生成一个MethodInfo对象
             MethodInfo minfo = new MethodInfo(methodName, desc,
                 ACC_PUBLIC | ACC_FINAL);
 
+            // 新建一个存放静态池编号的数组
             int[] parameterSlot = new int[parameterTypes.length];
             int nextSlot = 1;
             for (int i = 0; i < parameterSlot.length; i++) {
                 parameterSlot[i] = nextSlot;
+                // 如果是Long或者Double类型的参数，则+2，否则+1，因为Long和Double都是占用8个字节
                 nextSlot += getWordsPerType(parameterTypes[i]);
             }
             int localSlot0 = nextSlot;
@@ -910,51 +1034,79 @@ public class ProxyGenerator {
 
             DataOutputStream out = new DataOutputStream(minfo.code);
 
+            // aload_0，加载栈帧本地变量表的第一个参数，因为是实例方法，所以是就是指this
             code_aload(0, out);
 
+            // getfield，获取this的实例字段
             out.writeByte(opc_getfield);
+            // 从Proxy类中，获取类型是InvocationHandler，字段名为h的对象
             out.writeShort(cp.getFieldRef(
                 superclassName,
                 handlerFieldName, "Ljava/lang/reflect/InvocationHandler;"));
 
             code_aload(0, out);
 
+            // getstatic，获取静态字段
             out.writeByte(opc_getstatic);
+            // 获取当前代理类，名字是methodFieldName，类型是Method的对象（之前在写入静态池的时候，用的也是methodFieldName）
             out.writeShort(cp.getFieldRef(
                 dotToSlash(className),
                 methodFieldName, "Ljava/lang/reflect/Method;"));
 
+            // 准备写入参数
             if (parameterTypes.length > 0) {
 
+                /**
+                 * 写入参数的数量，如果再仔细看一下code_ipush
+                 * 当length小于等于5时，写入的命令是iconst_m1~iconst_5
+                 * 当length在-128~127闭区间时，写入的命令是bipush
+                 * 否则就写入sipush
+                 */
                 code_ipush(parameterTypes.length, out);
 
+                // anewarray，创建一个数组
                 out.writeByte(opc_anewarray);
+                // 数组的类型是object
                 out.writeShort(cp.getClass("java/lang/Object"));
 
+                // 循环参数
                 for (int i = 0; i < parameterTypes.length; i++) {
 
+                    // dup，复制栈顶的操作数
                     out.writeByte(opc_dup);
 
+                    // iconst、bipush、sipush
                     code_ipush(i, out);
 
+                    // 对参数类型等做一个编码
                     codeWrapArgument(parameterTypes[i], parameterSlot[i], out);
 
+                    // aastore，将对象存入数组
                     out.writeByte(opc_aastore);
                 }
             } else {
 
+                // 如果没参数的话，aconst_null，push一个null
                 out.writeByte(opc_aconst_null);
             }
 
+            // invokeinterface 调用接口方法
             out.writeByte(opc_invokeinterface);
+            // 找到InvocationHandler的invoke方法
             out.writeShort(cp.getInterfaceMethodRef(
                 "java/lang/reflect/InvocationHandler",
                 "invoke",
                 "(Ljava/lang/Object;Ljava/lang/reflect/Method;" +
                     "[Ljava/lang/Object;)Ljava/lang/Object;"));
+            // iconst_1，将1压入操作栈
             out.writeByte(4);
+            // nop，不做事情
             out.writeByte(0);
 
+            /**
+             * 如果是void方法
+             * pop，将栈顶的操作数弹出
+             */
             if (returnType == void.class) {
 
                 out.writeByte(opc_pop);
@@ -963,43 +1115,76 @@ public class ProxyGenerator {
 
             } else {
 
+                 /**
+                  * 对返回值进行编码
+                  */
                 codeUnwrapReturnValue(returnType, out);
             }
 
             tryEnd = pc = (short) minfo.code.size();
 
+            /**
+             * 获取方法可能抛出的异常
+             */
             List<Class<?>> catchList = computeUniqueCatchList(exceptionTypes);
             if (catchList.size() > 0) {
 
+                // 对异常进行预处理
                 for (Class<?> ex : catchList) {
+                    // 这里注意startPc, endPc, handlerPc参数，和pc register有关，用于抛出Exception时能确定接下去要执行的指令
                     minfo.exceptionTable.add(new ExceptionTableEntry(
                         tryBegin, tryEnd, pc,
                         cp.getClass(dotToSlash(ex.getName()))));
                 }
 
+                // athrow，抛出异常
                 out.writeByte(opc_athrow);
 
+                // 重新获取异常的处理点
                 pc = (short) minfo.code.size();
 
+                // 添加异常的基类
                 minfo.exceptionTable.add(new ExceptionTableEntry(
                     tryBegin, tryEnd, pc, cp.getClass("java/lang/Throwable")));
 
+                /**
+                 * 根据constantPoolNumber的值
+                 * astore_0 = 75 (0x4b)
+                 * astore_1 = 76 (0x4c)
+                 * astore_2 = 77 (0x4d)
+                 * astore_3 = 78 (0x4e)
+                 * astore
+                 */
                 code_astore(localSlot0, out);
 
+                // new 创建一个新对象
                 out.writeByte(opc_new);
+                // 对象是UndeclaredThrowableException
                 out.writeShort(cp.getClass(
                     "java/lang/reflect/UndeclaredThrowableException"));
 
+                // dup 复制栈顶操作数
                 out.writeByte(opc_dup);
 
+                /**
+                 * 根据constantPoolNumber的值
+                 * aload_0 = 42 (0x2a)
+                 * aload_1 = 43 (0x2b)
+                 * aload_2 = 44 (0x2c)
+                 * aload_3 = 45 (0x2d)
+                 * aload
+                 */
                 code_aload(localSlot0, out);
 
+                // invokespecial，调用父类的方法
                 out.writeByte(opc_invokespecial);
 
+                // 父类的构造函数
                 out.writeShort(cp.getMethodRef(
                     "java/lang/reflect/UndeclaredThrowableException",
                     "<init>", "(Ljava/lang/Throwable;)V"));
 
+                // athrow,抛出异常
                 out.writeByte(opc_athrow);
             }
 
@@ -1162,23 +1347,34 @@ public class ProxyGenerator {
      * Generate the constructor method for the proxy class.
      */
     private MethodInfo generateConstructor() throws IOException {
+        /**
+         * 因为是构造函数，所以方法名为<init>方法的描述表示，该方法获取一个java.lang.reflect.InvocationHandler类型的参数，
+         * 返回值为V（表示void），方法的access_flag为1，表示public
+         */
         MethodInfo minfo = new MethodInfo(
             "<init>", "(Ljava/lang/reflect/InvocationHandler;)V",
             ACC_PUBLIC);
 
         DataOutputStream out = new DataOutputStream(minfo.code);
 
+        // 在Code中写入aload_0和aload_1操作指令
         code_aload(0, out);
 
         code_aload(1, out);
 
+        // 在Code中写入183号操作指令invokespecial，调用实例方法，特别用来处理父类的构造函数
         out.writeByte(opc_invokespecial);
+        // 在Code中写入需要调用的方法名和方法的参数
+        // 注意，这里的方法是通过this.cp.getMethodRef方法得到的，也就是说，这里写入的最终数据，其实是一个符合该方法描述的常量池中的一个有效索引
         out.writeShort(cp.getMethodRef(
             superclassName,
             "<init>", "(Ljava/lang/reflect/InvocationHandler;)V"));
 
+        // 在Code中写入177号指令return  返回void
         out.writeByte(opc_return);
 
+        // 最后还需要写入栈深和本地变量数量，以及方法会抛出的异常数量，因为构造函数不主动抛出异常，所以异常数量直接为0
+        // 注意这里并非是直接writeByte，而是对MethodInfo的属性做了一个设置，这部分的字节码依然会在MethodInfo的write方法中写入
         minfo.maxStack = 10;
         minfo.maxLocals = 2;
         minfo.declaredExceptions = new short[0];
@@ -1848,6 +2044,8 @@ public class ProxyGenerator {
         }
 
         /**
+         * 将生成的entry添加入pool，并返回当前pool的大小，也就是该常量在池中的索引
+         *
          * Add a new constant pool entry and return its index.
          */
         private short addEntry(Entry entry) {
@@ -1861,10 +2059,13 @@ public class ProxyGenerator {
                 throw new IllegalArgumentException(
                     "constant pool size limit exceeded");
             }
+            // 回想一下cp的结构，其中cp数量是count+1，cp数组有效索引是从1开始的，因此这里直接返回pool的size，而不是size-1
             return (short) pool.size();
         }
 
         /**
+         * 这里用map做了一个缓存，key就是需要写入的字段，value就是索引值，如果命中了map，则直接返回value。如果没有命中缓存，则需要addEntry
+         *
          * Get or assign the index for an entry of a type that contains
          * a direct value.  The type of the given object determines the
          * type of the desired entry as follows:

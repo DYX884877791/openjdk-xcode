@@ -36,6 +36,7 @@
 #include "services/attachListener.hpp"
 #include "services/diagnosticCommand.hpp"
 #include "services/heapDumper.hpp"
+#include "utilities/slog.hpp"
 
 volatile jlong AttachListener::_state = AL_NOT_INITIALIZED;
 
@@ -131,6 +132,7 @@ static jint data_dump(AttachOperation* op, outputStream* out) {
 // See also: ThreadDumpDCmd class
 //
 static jint thread_dump(AttachOperation* op, outputStream* out) {
+  slog_debug("attachListener.cpp中的thread_dump函数被调用了,AttachOperation的name->%s...", op->name());
   bool print_concurrent_locks = false;
   if (op->arg(0) != NULL && strcmp(op->arg(0), "-l") == 0) {
     print_concurrent_locks = true;
@@ -424,6 +426,12 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
   AttachListener::set_initialized();
 
   for (;;) {
+      /**
+       * 在AttachListener::dequeue(); 在liunx里的实现就是监听刚才创建的socket的文件，如果有请求进来，找到请求对应的操作，
+       * 调用操作得到结果并把结果写到这个socket的文件，如果你把socket的文件删除，jstack/jmap会出现错误信息 unable to open socket file:........
+       *
+       * 我们经常使用 kill -3 pid的操作打印出线程栈信息，我们可以看到具体的实现是在Signal Dispatcher 线程中完成的，因为kill -3 pid 并不会创建.attach_pid#pid文件，所以一直初始化不成功，从而线程的栈信息被打印到控制台中。
+       */
     AttachOperation* op = AttachListener::dequeue();
     if (op == NULL) {
       AttachListener::set_state(AL_NOT_INITIALIZED);
@@ -485,6 +493,14 @@ bool AttachListener::has_init_error(TRAPS) {
 }
 
 // Starts the Attach Listener thread
+/**
+ * Attach Listener 线程是负责接收到外部的命令，而对该命令进行执行的并且吧结果返回给发送者。在jvm启动的时候，如果没有指定+StartAttachListener，
+ * 该线程是不会启动的，刚才我们讨论到了在接受到quit信号之后，会调用 AttachListener::is_init_trigger（）通过调用
+ * 用AttachListener::init（）启动了Attach Listener 线程，同时在不同的操作系统下初始化，在linux中 是在attachListener_Linux.cpp文件中实现的。
+ *
+ *   在linux中如果发现文件.attach_pid#pid存在，才会启动attach listener线程，同时初始化了socket 文件，也就是通常jmap,jstack tool干的事情，
+ *   先创立attach_pid#pid文件，然后发quit信号,通过这种方式暗式的启动了Attach Listener线程
+ */
 void AttachListener::init() {
   EXCEPTION_MARK;
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_Thread(), true, THREAD);

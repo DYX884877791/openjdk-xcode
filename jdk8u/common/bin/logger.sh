@@ -37,9 +37,14 @@
 
 # Create a temporary directory to store the result code from
 # the wrapped command.
+# mktemp [OPTION] [TEMPLATE]
+# mktemp命令用于安全地创建一个临时文件或目录，并输出其名称，TEMPLATE在最后一个组件中必须至少包含3个连续的X，如果未指定TEMPLATE，则使用tmp.XXXXXXXXXX作为名称在当前目录下创建相应的临时文件，X为生成的随机数，尾部的X将替换为当前进程号和随机字母的组合
+# mktemp命令的底层实现：使用了一个叫做mkstemp的C函数。mkstemp函数是一个系统调用，用于创建一个唯一的临时文件。
 RCDIR=`mktemp -dt jdk-build-logger.tmp.XXXXXX` || exit $?
+# trap：shell中的信号捕获，https://blog.csdn.net/MyySophia/article/details/122194021，https://www.cnblogs.com/cheyunhua/p/14637004.html
 trap "rm -rf \"$RCDIR\"" EXIT
 LOGFILE=$1
+# tee：从标准输入读入并写往标准输出和文件，后接-a/--append表示追加到给出的文件，而不是覆盖
 shift
 (exec 3>&1 ; ("$@" 2>&1 1>&3; echo $? > "$RCDIR/rc") | tee -a $LOGFILE 1>&2 ; exec 3>&-) | tee -a $LOGFILE
 exit `cat "$RCDIR/rc"`

@@ -413,7 +413,13 @@ inline void oopDesc::release_bool_field_put(int offset, jboolean contents)  { Or
 inline jchar oopDesc::char_field_acquire(int offset) const                  { return OrderAccess::load_acquire(char_field_addr(offset));     }
 inline void oopDesc::release_char_field_put(int offset, jchar contents)     { OrderAccess::release_store(char_field_addr(offset), contents); }
 
+// 读取的操作又被包装了一层，又调用的OrderAccess::load_acquire方法
+// int类型的读取最终调用的是 OrderAccess::load_acquire方法
 inline jint oopDesc::int_field_acquire(int offset) const                    { return OrderAccess::load_acquire(int_field_addr(offset));      }
+// 赋值的操作又被包装了一层，又调用的OrderAccess::release_store方法
+// int类型的赋值最终调用的是 OrderAccess::release_store方法
+// OrderAccess是定义在openjdk8根路径/hotspot/src/share/vm/runtime路径下的orderAccess.hpp头文件下的方法，具体的实现是根据不同的操作系统和不同的cpu架构，有不同的实现。
+// 强烈建议读一遍orderAccess.hpp文件中30-240行的注释！！！
 inline void oopDesc::release_int_field_put(int offset, jint contents)       { OrderAccess::release_store(int_field_addr(offset), contents);  }
 
 inline jshort oopDesc::short_field_acquire(int offset) const                { return (jshort)OrderAccess::load_acquire(short_field_addr(offset)); }
@@ -565,6 +571,11 @@ inline void oop_store_raw(HeapWord* addr, oop value) {
   }
 }
 
+/*
+ * 根据UseCompressedOops分两种情况处理，该函数表示JVM中对象的指针是否使用了压缩指针，压缩指针的目的是为了节约内存。
+ * 对于压缩指针的情况，将值都转换成narrowOop类型，该类型其实是无符号整型，然后再调用了Atomic::cmpxchg进行CPU级别的CAS操作，最后再转成未压缩指针。
+ * 而对于非压缩指针的情况，则调用Atomic::cmpxchg_ptr进行CPU级别的CAS操作，此时的指针大小为64位，可转成long型再执行CPU级别的64位的CAS操作。
+ */
 inline oop oopDesc::atomic_compare_exchange_oop(oop exchange_value,
                                                 volatile HeapWord *dest,
                                                 oop compare_value,

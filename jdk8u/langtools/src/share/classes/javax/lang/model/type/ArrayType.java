@@ -30,7 +30,7 @@ package javax.lang.model.type;
  * Represents an array type.
  * A multidimensional array type is represented as an array type
  * whose component type is also an array type.
- *
+ * 代表数组类型,多为数组类型是一个数组类型其组件类型还是数组类型.
  * @author Joseph D. Darcy
  * @author Scott Seligman
  * @author Peter von der Ah&eacute;
@@ -40,7 +40,7 @@ public interface ArrayType extends ReferenceType {
 
     /**
      * Returns the component type of this array type.
-     *
+     * 返回该数组类型对应的组件类型
      * @return the component type of this array type
      */
     TypeMirror getComponentType();

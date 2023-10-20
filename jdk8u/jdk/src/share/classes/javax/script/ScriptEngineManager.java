@@ -49,7 +49,9 @@ import java.util.ServiceConfigurationError;
  * @since 1.6
  */
 public class ScriptEngineManager  {
-    private static final boolean DEBUG = false;
+    // private static final boolean DEBUG = false;
+    // 修改为true试试...
+    private static final boolean DEBUG = true;
     /**
      * The effect of calling this constructor is the same as calling
      * <code>ScriptEngineManager(Thread.currentThread().getContextClassLoader())</code>.

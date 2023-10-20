@@ -1,0 +1,886 @@
+build start at 20230510 23:23:22
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-e322e9.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:114:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-e322e9.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+build success at 20230510 23:23:22
+
+build start at 20230510 23:25:26
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-4e76c2.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:114:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-4e76c2.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230510 23:25:26
+
+
+build start at 20230512 23:22:15
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-975712.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:114:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-975712.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230512 23:22:15
+
+
+build start at 20230512 23:32:33
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-81384d.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: 
+build success at 20230512 23:32:33
+
+unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-81384d.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build start at 20230512 23:55:43
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-89b30d.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-89b30d.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230512 23:55:43
+
+
+build start at 20230513 00:02:12
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-8a3e23.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-8a3e23.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230513 00:02:12
+
+
+build start at 20230513 00:08:48
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-7d24a8.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-7d24a8.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230513 00:08:48
+
+
+build start at 20230513 00:35:16
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-f21a09.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-f21a09.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230513 00:35:16
+
+
+build start at 20230513 01:12:57
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\"
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-e87461.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:116:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:18:13: warning: unused function 'dummyCallback' [-Wunused-function]
+static void dummyCallback(void * info) {};
+            ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-e87461.o -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230513 01:12:57
+
+
+build start at 20230722 12:21:01
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-b24a48.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:16:10: fatal error: 'syscall.h' file not found
+#include <syscall.h>
+         ^~~~~~~~~~~
+1 error generated.
+make: *** [jvm] Error 1
+
+build start at 20230722 12:23:25
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-869cc8.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:16:10: fatal error: 'syscall.h' file not found
+#include <syscall.h>
+         ^~~~~~~~~~~
+1 error generated.
+make: *** [jvm] Error 1
+
+build start at 20230722 12:24:07
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-bd1757.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:126:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:134:32: error: expression is not assignable
+    vm_args.ignoreUnrecognized = JNI_TRUE;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:198:46: error: use of undeclared identifier '__NR_gettid'
+    printf("gettid is %lu\n",(size_t)syscall(__NR_gettid));
+                                             ^
+1 warning and 2 errors generated.
+make: *** [jvm] Error 1
+
+build start at 20230722 12:26:58
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-69fbc7.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:126:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:134:32: error: expression is not assignable
+    vm_args.ignoreUnrecognized = JNI_TRUE;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:203:46: error: use of undeclared identifier '__NR_gettid'
+    printf("gettid is %lu\n",(size_t)syscall(__NR_gettid));
+                                             ^
+1 warning and 2 errors generated.
+make: *** [jvm] Error 1
+
+build start at 20230722 12:27:10
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-46a246.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:126:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:134:32: error: expression is not assignable
+    vm_args.ignoreUnrecognized = JNI_TRUE;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+1 warning and 1 error generated.
+make: *** [jvm] Error 1
+
+build start at 20230722 12:27:29
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-14d89c.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:126:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:23:17: warning: unused function 'dummyCallback' [-Wunused-function]
+    static void dummyCallback(void * info) {};
+                ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-14d89c.o -ldl -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230722 12:27:29
+
+
+build start at 20230722 12:28:37
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-973ca7.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:125:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:22:17: warning: unused function 'dummyCallback' [-Wunused-function]
+    static void dummyCallback(void * info) {};
+                ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-973ca7.o -ldl -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230722 12:28:37
+
+
+build start at 20230722 12:35:56
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-45f196.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:125:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:22:17: warning: unused function 'dummyCallback' [-Wunused-function]
+    static void dummyCallback(void * info) {};
+                ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-45f196.o -ldl -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230722 12:35:56
+
+
+build start at 20230727 17:02:35
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"\" \
+	-DJAVA_MAIN_CLASS=\"\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"\"" -D "JAVA_MAIN_CLASS=\"\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-61fb06.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:125:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:22:17: warning: unused function 'dummyCallback' [-Wunused-function]
+    static void dummyCallback(void * info) {};
+                ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-61fb06.o -ldl -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230727 17:02:35
+
+
+build start at 20230727 17:05:17
+
+cc -v -xc++ -g -Wall -O0 /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin \
+	-I/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux \
+	-DJDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\" \
+	-DCLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/../sample/java/target\" \
+	-DJAVA_MAIN_CLASS=\"Main\" \
+	-ldl
+Apple clang version 14.0.0 (clang-1400.0.29.202)
+Target: x86_64-apple-darwin21.6.0
+Thread model: posix
+InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" -cc1 -triple x86_64-apple-macosx12.0.0 -Wundef-prefix=TARGET_OS_ -Wdeprecated-objc-isa-usage -Werror=deprecated-objc-isa-usage -Werror=implicit-function-declaration -emit-obj -mrelax-all --mrelax-relocations -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name jvm.c -mrelocation-model pic -pic-level 2 -mframe-pointer=all -fno-strict-return -fno-rounding-math -funwind-tables=2 -target-sdk-version=13.1 -fvisibility-inlines-hidden-static-local-var -target-cpu penryn -tune-cpu generic -debug-info-kind=standalone -dwarf-version=4 -debugger-tuning=lldb -target-linker-version 820.1 -v -resource-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin -I /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux -D "JDK_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk\"" -D "CLASS_PATH=\"/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/../sample/java/target\"" -D "JAVA_MAIN_CLASS=\"Main\"" -I/usr/local/include -stdlib=libc++ -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1 -internal-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include -internal-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include -internal-externc-isystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include -O0 -Wall -Wno-reorder-init-list -Wno-implicit-int-float-conversion -Wno-c99-designator -Wno-final-dtor-non-final-class -Wno-extra-semi-stmt -Wno-misleading-indentation -Wno-quoted-include-in-framework-header -Wno-implicit-fallthrough -Wno-enum-enum-conversion -Wno-enum-float-conversion -Wno-elaborated-enum-base -Wno-reserved-identifier -Wno-gnu-folding-constant -Wno-cast-function-type -Wno-bitwise-instead-of-logical -fdeprecated-macro -fdebug-compilation-dir=/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native -ferror-limit 19 -stack-protector 1 -fstack-check -mdarwin-stkchk-strong-link -fblocks -fencode-extended-block-signature -fregister-global-dtors-with-atexit -fgnuc-version=4.2.1 -fno-cxx-modules -fcxx-exceptions -fexceptions -fmax-type-align=16 -fcommon -clang-vendor-feature=+messageToSelfInClassMethodIdReturnType -clang-vendor-feature=+disableInferNewAvailabilityFromInit -clang-vendor-feature=+disableNonDependentMemberExprInCurrentInstantiation -fno-odr-hash-protocols -clang-vendor-feature=+enableAggressiveVLAFolding -clang-vendor-feature=+revert09abecef7bbf -clang-vendor-feature=+thisNoAlignAttr -clang-vendor-feature=+thisNoNullAttr -mllvm -disable-aligned-alloc-awareness=1 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-116ebc.o -x c++ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c
+clang -cc1 version 14.0.0 (clang-1400.0.29.202) default target x86_64-apple-darwin21.6.0
+ignoring nonexistent directory "/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/linux"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/local/include"
+ignoring nonexistent directory "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/Library/Frameworks"
+#include "..." search starts here:
+#include <...> search starts here:
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include
+ /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/build/macosx-x86_64-normal-server-slowdebug/jdk/include/darwin
+ /usr/local/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+ /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+ /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks (framework directory)
+End of search list.
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:125:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+    sprintf(pJvmPath, "-Djava.class.path=%s", CLASS_PATH);
+    ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdio.h:188:1: note: 'sprintf' has been explicitly marked deprecated here
+__deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:215:48: note: expanded from macro '__deprecated_msg'
+        #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+                                                      ^
+/Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/jvm.c:22:17: warning: unused function 'dummyCallback' [-Wunused-function]
+    static void dummyCallback(void * info) {};
+                ^
+2 warnings generated.
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld" -demangle -lto_library /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/libLTO.dylib -no_deduplicate -dynamic -arch x86_64 -platform_version macos 12.0.0 13.1 -syslibroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm -L/usr/local/lib /var/folders/d4/8hxbnsd92vg2fv6p3s770t3c0000gn/T/jvm-116ebc.o -ldl -lSystem /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.0/lib/darwin/libclang_rt.osx.a
+ "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/dsymutil" -o /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm.dSYM /Users/dengyouxu/Developer/Software/openjdk8u/jdk8u-xcode10/jdk8u-dev/test/native/build/jvm
+
+build success at 20230727 17:05:17
+

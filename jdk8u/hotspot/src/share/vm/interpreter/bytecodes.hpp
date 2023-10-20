@@ -41,6 +41,7 @@ class Bytecodes: AllStatic {
     _nop                  =   0, // 0x00
     _aconst_null          =   1, // 0x01
     _iconst_m1            =   2, // 0x02
+      // 将常量0放到栈顶
     _iconst_0             =   3, // 0x03
     _iconst_1             =   4, // 0x04
     _iconst_2             =   5, // 0x05
@@ -55,6 +56,7 @@ class Bytecodes: AllStatic {
     _dconst_0             =  14, // 0x0e
     _dconst_1             =  15, // 0x0f
     _bipush               =  16, // 0x10
+      // 将short类型变量xxx放到栈顶，short类型变量会在执行时扩展成int变量
     _sipush               =  17, // 0x11
     _ldc                  =  18, // 0x12
     _ldc_w                =  19, // 0x13
@@ -65,6 +67,7 @@ class Bytecodes: AllStatic {
     _dload                =  24, // 0x18
     _aload                =  25, // 0x19
     _iload_0              =  26, // 0x1a
+      // 将本地变量表中索引为1的int变量放到栈顶
     _iload_1              =  27, // 0x1b
     _iload_2              =  28, // 0x1c
     _iload_3              =  29, // 0x1d
@@ -97,7 +100,9 @@ class Bytecodes: AllStatic {
     _fstore               =  56, // 0x38
     _dstore               =  57, // 0x39
     _astore               =  58, // 0x3a
+      // 将栈顶的int变量放到本地变量表中索引为0的位置
     _istore_0             =  59, // 0x3b
+      // 将栈顶的int变量放到本地变量表中索引为1的位置
     _istore_1             =  60, // 0x3c
     _istore_2             =  61, // 0x3d
     _istore_3             =  62, // 0x3e
@@ -170,6 +175,7 @@ class Bytecodes: AllStatic {
     _lor                  = 129, // 0x81
     _ixor                 = 130, // 0x82
     _lxor                 = 131, // 0x83
+      // 将本地变量中索引为x的变量自增1
     _iinc                 = 132, // 0x84
     _i2l                  = 133, // 0x85
     _i2f                  = 134, // 0x86
@@ -200,11 +206,13 @@ class Bytecodes: AllStatic {
     _if_icmpeq            = 159, // 0x9f
     _if_icmpne            = 160, // 0xa0
     _if_icmplt            = 161, // 0xa1
+      // if_icmpge指令会比较栈顶的两个值
     _if_icmpge            = 162, // 0xa2
     _if_icmpgt            = 163, // 0xa3
     _if_icmple            = 164, // 0xa4
     _if_acmpeq            = 165, // 0xa5
     _if_acmpne            = 166, // 0xa6
+      // 跳转到偏移量是x的指令处
     _goto                 = 167, // 0xa7
     _jsr                  = 168, // 0xa8
     _ret                  = 169, // 0xa9
@@ -315,8 +323,9 @@ class Bytecodes: AllStatic {
   // Flag bits derived from format strings, can_trap, can_rewrite, etc.:
   enum Flags {
     // semantic flags:
-    _bc_can_trap      = 1<<0,     // bytecode execution can trap or block
-    _bc_can_rewrite   = 1<<1,     // bytecode execution has an alternate form
+    _bc_can_trap      = 1<<0,     // bytecode execution can trap(卡住) or block
+      // 虚拟机内部定义的字节码指令都会含有这个标识
+    _bc_can_rewrite   = 1<<1,     // bytecode execution has an alternate(替代者) form
 
     // format bits (determined only by the format string):
     _fmt_has_c        = 1<<2,     // constant, such as sipush "bcc"
@@ -327,7 +336,9 @@ class Bytecodes: AllStatic {
     _fmt_has_nbo      = 1<<7,     // contains native-order field(s)
     _fmt_has_u2       = 1<<8,     // contains double-byte field(s)
     _fmt_has_u4       = 1<<9,     // contains quad-byte field
+      // 不可变长度的指令
     _fmt_not_variable = 1<<10,    // not of variable length (simple or wide)
+      // 或者是可加wild的字节码指令，或者是可变长度的指令
     _fmt_not_simple   = 1<<11,    // either wide or variable length
     _all_fmt_bits     = (_fmt_not_simple*2 - _fmt_has_c),
 
@@ -339,6 +350,7 @@ class Bytecodes: AllStatic {
     _fmt_bJJ    = _fmt_b | _fmt_has_j | _fmt_has_u2 | _fmt_has_nbo,
     _fmt_bo2    = _fmt_b | _fmt_has_o | _fmt_has_u2,
     _fmt_bo4    = _fmt_b | _fmt_has_o | _fmt_has_u4
+      // 例如字节码为bipush时，format就是"bc"，那么flags的值为_fmt_b | _fmt_has_c，ldc字节码的format为"bk"，则flags的值为_fmt_b | _fmt_has_k。
   };
 
  private:

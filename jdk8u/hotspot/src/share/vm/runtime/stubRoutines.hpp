@@ -93,6 +93,10 @@
 //    stubGenerator_<arch>.cpp file and call the function in generate_all() of that file
 
 
+/**
+ * StubRoutines是一个包含一系列编译程序或者JVM运行时系统使用的关键函数的地址的Holder类，其定义在hotspot src/share/vm/runtime/stubRoutines.hpp中。
+ * 可以通过StubRoutines获取这些函数的内存地址，然后通过指针的方式调用目标函数
+ */
 class StubRoutines: AllStatic {
 
  public:
@@ -244,6 +248,9 @@ class StubRoutines: AllStatic {
 
  public:
   // Initialization/Testing
+  // 重点关注StubRoutines的两个静态初始化方法initialize1和initialize2方法的实现，以此为入口了解该类的用法
+  // 最终都是在init_globals一个方法中调用的，不过initialize1在前，在universe初始化前执行，initialize2在universe初始化完成后执行
+  // 见hotspot/src/share/vm/runtime/init.cpp的init_globals函数
   static void    initialize1();                            // must happen before universe::genesis
   static void    initialize2();                            // must happen after  universe::genesis
 
@@ -267,17 +274,46 @@ class StubRoutines: AllStatic {
   static address catch_exception_entry()                   { return _catch_exception_entry; }
 
   // Calls to Java
+  // CallStub是一个函数指针，返回类型是void，并且有8个入参
+  // CallStub就是这个函数的别名，这个其实是解释器执行字节码的终极入口
   typedef void (*CallStub)(
-    address   link,
-    intptr_t* result,
-    BasicType result_type,
-    Method* method,
-    address   entry_point,
+    address   link,  // 连接器
+    intptr_t* result,  // 函数返回值地址
+    BasicType result_type, // 函数返回类型
+    Method* method, // JVM内部所表示的Java方法对象
+    address   entry_point,  // JVM调用Java方法的例程入口。
+                            // JVM内部的每一段例程都是在JVM启动过程中预先生成好的一段机器指令。
+                            // 要调用Java方法， 必须经过本例程，即需要先执行这段机器指令，然后才能跳转到Java方法字节码所对应的机器指令去执行
     intptr_t* parameters,
     int       size_of_parameters,
     TRAPS
   );
 
+  /**
+   *
+   * call_stub()函数返回一个函数指针，指向依赖于操作系统和CPU架构的特定的函数，原因很简单，要执行native代码，得看看是什么CPU架构以便确定寄存器，看看什么OS以便确定ABI。
+   * 其中CAST_TO_FN_PTR是宏，hotspot/src/share/vm/utilities/globalDefinitions.hpp
+   * #define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+   * 通过CAST_TO_FN_PTR将_call_stub_entry转换为指针函数CallStub，并传递8个参数给_call_stub_entry代表的调用点
+   *
+   * CallStub的源代码位置：openjdk/hotspot/src/share/vm/runtime/stubRoutines.hpp
+   *
+   * 将_call_stub_entry强制转换为unsigned int类型，然后以强制转换为CallStub类型。CallStub是一个函数指针，所以_call_stub_entry应该也是一个函数指针，而不应该是一个普通的无符号整数。
+   * 在call_stub()函数中，_call_stub_entry的定义如下：address StubRoutines::_call_stub_entry = NULL;
+   * _call_stub_entry的初始化在在openjdk/hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp文件下的generate_initial()函数
+   *
+   *
+   * call_stub()返回了_call_stub_entry例程的地址，例程是啥，我开始时也觉得很难理解，而且“例程”这个名字也取得很奇怪。
+   * 其实例程可以理解为用汇编写好的一个方法，和内联汇编差不多，被加载到内存中后，我们就可以直接通过它的首地址来调用执行它。
+   *
+   * 很多读者可能也觉得很奇怪，为什么要用汇编呢？是因为汇编快吗？那C语言写的方法最后不也会被编译成汇编吗，有什么区别呢？
+   *
+   * 首先，就是因为汇编快，“快”其实不太准确，C语言虽然也会被编译成汇编，最后编译成二进制指令，但是编译器生成的C语言指令会很长，有很多冗余的指令，
+   * 而为了实现同样一个功能，程序员自己写的汇编会比较精简，指令少，优化多，自然也就更“快”了。
+   * 那么_call_stub_entry这个例程是何时生成的呢？答案就在generate_call_stub（）方法中
+   * 见：hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp:generate_call_stub（这里以stubGenerator_x86_32.cpp为例来说明）
+   *
+   */
   static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
 
   // Exceptions

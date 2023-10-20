@@ -971,6 +971,8 @@ public final class Unsafe {
     public native void    putOrderedLong(Object o, long offset, long x);
 
     /**
+     * Parker是Unsafe类的park和unpark方法的核心，ParkEvent是Thread的sleep方法、synchronized关键字中让线程休眠的核心
+     *
      * Unblock the given thread blocked on <tt>park</tt>, or, if it is
      * not blocked, cause the subsequent call to <tt>park</tt> not to
      * block.  Note: this operation is "unsafe" solely because the
@@ -985,6 +987,9 @@ public final class Unsafe {
     public native void unpark(Object thread);
 
     /**
+     * 让某个线程处于阻塞（休眠）状态，操作系统不会再给该线程分配CPU时间片
+     * 第一个参数是是否是绝对时间，第二个参数是等待时间值。如果isAbsolute是true则会实现ms定时。如果isAbsolute是false则会实现ns定时。
+     *
      * Block current thread, returning when a balancing
      * <tt>unpark</tt> occurs, or a balancing <tt>unpark</tt> has
      * already occurred, or the thread is interrupted, or, if not

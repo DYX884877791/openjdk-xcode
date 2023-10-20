@@ -177,6 +177,15 @@ HS_DTRACE_PROBE_DECL5(hotspot, class__initialization__end,
 
 volatile int InstanceKlass::_total_instanceKlass_count = 0;
 
+/**
+ * HotSpot在解析一个类时会调用InstanceKlass::allocate_instance_klass()方法分配内存，而分配多大的内存则是通过调用InstanceKlass::size()计算出来的
+ * 创建InstanceKlass实例会调用InstanceKlass::allocate_instance_klass()方法。在创建时，会涉及到C++new运算符的重载，
+ * 通过重载new运算符来分配对象的内存空间，也就是调用InstanceKlass::size()方法得到的大小，然后再调用对应类的构造函数初始化相应的属性。
+ *
+ * 方法的实现比较简单，当rt等于REF_NONE时，也就是为非Reference类型时，会根据类名创建对应C++类的对象。
+ * Class类创建InstanceMirrorKlass、ClassLoader类或ClassLoader的子类创建InstanceClassLoaderKlass类、普通类通过InstanceKlass来表示。
+ * 当rt不为REF_NONE时，会创建InstanceRefKlass对象。
+ */
 InstanceKlass* InstanceKlass::allocate_instance_klass(
                                               ClassLoaderData* loader_data,
                                               int vtable_len,
@@ -228,6 +237,8 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(
 
   // Add all classes to our internal class loader list here,
   // including classes in the bootstrap (NULL) class loader.
+    // 添加所有类型到我们内部类加载器列表中，包括在根加载器中的类
+    // loader_data的类型为ClassLoaderData*,通过ClassLoaderData中的_klasses保持通过InstanceKlass._next_link属性保持的列表
   loader_data->add_class(ik);
 
   Atomic::inc(&_total_instanceKlass_count);
@@ -571,6 +582,7 @@ void InstanceKlass::initialize(TRAPS) {
   if (this->should_be_initialized()) {
     HandleMark hm(THREAD);
     instanceKlassHandle this_oop(THREAD, this);
+      // 进入initialize_impl方法,这里就是在加载了类后,对其进行的初始化,包括链接,准备,校验等
     initialize_impl(this_oop, CHECK);
     // Note: at this point the class may be initialized
     //       OR it may be in the state of being initialized
@@ -619,6 +631,11 @@ bool InstanceKlass::link_class_or_fail(TRAPS) {
   return is_linked();
 }
 
+/**
+ * 类链接的入口就是InstanceKlass::link_class_impl方法
+ *
+ * 链接包含验证，准备和解析，其中符号引用的解析有ConstantPool完成，验证则是由Verifier类完成，该类的定义在classfile/verifier.hpp中，该类比较简单，核心方法就一个静态方法verify
+ */
 bool InstanceKlass::link_class_impl(
     instanceKlassHandle this_oop, bool throw_verifyerror, TRAPS) {
   // check for error state.
@@ -626,12 +643,14 @@ bool InstanceKlass::link_class_impl(
   // then this class *was* linked.  The CDS code does a try_link_class and uses
   // initialization_error to mark classes to not include in the archive during
   // DumpSharedSpaces.  This should be removed when the CDS bug is fixed.
+    //如果类状态异常
   if (this_oop->is_in_error_state()) {
     ResourceMark rm(THREAD);
     THROW_MSG_(vmSymbols::java_lang_NoClassDefFoundError(),
                this_oop->external_name(), false);
   }
   // return if already verified
+    //如果类已链接则返回
   if (this_oop->is_linked()) {
     return true;
   }
@@ -644,6 +663,7 @@ bool InstanceKlass::link_class_impl(
   // link super class before linking this class
   instanceKlassHandle super(THREAD, this_oop->super());
   if (super.not_null()) {
+      //如果父类是一个接口则抛出异常
     if (super->is_interface()) {  // check if super class is an interface
       ResourceMark rm(THREAD);
       Exceptions::fthrow(
@@ -656,10 +676,12 @@ bool InstanceKlass::link_class_impl(
       return false;
     }
 
+      //完成父类的链接
     link_class_impl(super, throw_verifyerror, CHECK_false);
   }
 
   // link all interfaces implemented by this class before linking this class
+    //完成当前类实现的所有接口的链接
   Array<Klass*>* interfaces = this_oop->local_interfaces();
   int num_interfaces = interfaces->length();
   for (int index = 0; index < num_interfaces; index++) {
@@ -669,6 +691,7 @@ bool InstanceKlass::link_class_impl(
   }
 
   // in case the class is linked in the process of linking its superclasses
+    //某些情况下链接父类的时候会把子类链接了，此时做检查是否已链接
   if (this_oop->is_linked()) {
     return true;
   }
@@ -684,6 +707,7 @@ bool InstanceKlass::link_class_impl(
 
   // verification & rewriting
   {
+      //初始化对象锁
     oop init_lock = this_oop->init_lock();
     ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
     // rewritten will have been set if loader constraint error found
@@ -701,6 +725,7 @@ bool InstanceKlass::link_class_impl(
                                    jt->get_thread_stat()->perf_recursion_counts_addr(),
                                    jt->get_thread_stat()->perf_timers_addr(),
                                    PerfClassTraceTime::CLASS_VERIFY);
+            //完成字节码验证
           bool verify_ok = verify_code(this_oop, throw_verifyerror, THREAD);
           if (!verify_ok) {
             return false;
@@ -710,6 +735,7 @@ bool InstanceKlass::link_class_impl(
         // Just in case a side-effect of verify linked this class already
         // (which can sometimes happen since the verifier loads classes
         // using custom class loaders, which are free to initialize things)
+          //再校验是否验证完成
         if (this_oop->is_linked()) {
           return true;
         }
@@ -721,6 +747,7 @@ bool InstanceKlass::link_class_impl(
         char* message_buffer; // res-allocated by check_verification_dependencies
         Handle loader = this_oop()->class_loader();
         Handle pd     = this_oop()->protection_domain();
+          //依赖约束检查
         bool verified = SystemDictionaryShared::check_verification_dependencies(this_oop(),
                         loader, pd, &message_buffer, THREAD);
         if (!verified) {
@@ -729,6 +756,7 @@ bool InstanceKlass::link_class_impl(
       }
 
       // relocate jsrs and link methods after they are all rewritten
+        //完成方法链接，即方法的入参和返回值的类型的链接
       this_oop->link_methods(CHECK_false);
 
       // Initialize the vtable and interface table after
@@ -738,6 +766,7 @@ bool InstanceKlass::link_class_impl(
       //
       // Initialize_vtable and initialize_itable need to be rerun for
       // a shared class if the class is not loaded by the NULL classloader.
+        //初始化vtable和itable
       ClassLoaderData * loader_data = this_oop->class_loader_data();
       if (!(this_oop()->is_shared() &&
             loader_data->is_the_null_class_loader_data())) {
@@ -753,10 +782,12 @@ bool InstanceKlass::link_class_impl(
         // this_oop->itable()->verify(tty, true);
       }
 #endif
+        //设置类的状态为链接完成
       this_oop->set_init_state(linked);
       if (JvmtiExport::should_post_class_prepare()) {
         Thread *thread = THREAD;
         assert(thread->is_Java_thread(), "thread->is_Java_thread()");
+          //发布JVMTI事件
         JvmtiExport::post_class_prepare((JavaThread *) thread, this_oop());
       }
     }
@@ -830,9 +861,13 @@ void InstanceKlass::initialize_super_interfaces(instanceKlassHandle this_k, TRAP
   }
 }
 
+/*
+ * 类初始化的入口是InstanceKlass::initialize_impl方法
+ */
 void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   // Make sure klass is linked (verified) before initialization
   // A class could already be verified, since it has been reflected upon.
+    //完成此类的链接，如果已链接则会立即返回
   this_oop->link_class(CHECK);
 
   DTRACE_CLASSINIT_PROBE(required, InstanceKlass::cast(this_oop()), -1);
@@ -842,6 +877,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   // refer to the JVM book page 47 for description of steps
   // Step 1
   {
+      //获取对象锁
     oop init_lock = this_oop->init_lock();
     ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
 
@@ -851,24 +887,28 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     // If we were to use wait() instead of waitInterruptibly() then
     // we might end up throwing IE from link/symbol resolution sites
     // that aren't expected to throw.  This would wreak havoc.  See 6320309.
+      //如果正在初始化则等待初始化完成
     while(this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(self)) {
         wait = true;
       ol.waitUninterruptibly(CHECK);
     }
 
     // Step 3
+      //等待超时返回
     if (this_oop->is_being_initialized() && this_oop->is_reentrant_initialization(self)) {
       DTRACE_CLASSINIT_PROBE_WAIT(recursive, InstanceKlass::cast(this_oop()), -1,wait);
       return;
     }
 
     // Step 4
+      //初始化完成返回
     if (this_oop->is_initialized()) {
       DTRACE_CLASSINIT_PROBE_WAIT(concurrent, InstanceKlass::cast(this_oop()), -1,wait);
       return;
     }
 
     // Step 5
+      //状态异常，抛出异常
     if (this_oop->is_in_error_state()) {
       DTRACE_CLASSINIT_PROBE_WAIT(erroneous, InstanceKlass::cast(this_oop()), -1,wait);
       ResourceMark rm(THREAD);
@@ -886,6 +926,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     }
 
     // Step 6
+      // 设置状态，初始化进行中
     this_oop->set_init_state(being_initialized);
     this_oop->set_init_thread(self);
   }
@@ -893,8 +934,11 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   // Step 7
   // Next, if C is a class rather than an interface, initialize its super class and super
   // interfaces.
+    //如果不是一个接口而是一个类则需要初始化它的父类
   if (!this_oop->is_interface()) {
+      //获取父类
     Klass* super_klass = this_oop->super();
+      //初始化父类
     if (super_klass != NULL && super_klass->should_be_initialized()) {
       super_klass->initialize(THREAD);
     }
@@ -902,11 +946,13 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     // the initialization of C triggers initialization of its super interfaces.
     // Only need to recurse if has_default_methods which includes declaring and
     // inheriting default methods
+      //实现的接口存在默认方法则初始化接口
     if (!HAS_PENDING_EXCEPTION && this_oop->has_default_methods()) {
       this_oop->initialize_super_interfaces(this_oop, THREAD);
     }
 
     // If any exceptions, complete abruptly, throwing the same exception as above.
+      //初始化异常，抛出异常
     if (HAS_PENDING_EXCEPTION) {
       Handle e(THREAD, PENDING_EXCEPTION);
       CLEAR_PENDING_EXCEPTION;
@@ -934,11 +980,13 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
                              jt->get_thread_stat()->perf_recursion_counts_addr(),
                              jt->get_thread_stat()->perf_timers_addr(),
                              PerfClassTraceTime::CLASS_CLINIT);
+      //执行静态方法
     this_oop->call_class_initializer(THREAD);
   }
 
   // Step 9
   if (!HAS_PENDING_EXCEPTION) {
+      //设置状态初始化完成
     this_oop->set_initialization_state_and_notify(fully_initialized, CHECK);
     { ResourceMark rm(THREAD);
       debug_only(this_oop->vtable()->verify(tty, true);)
@@ -946,6 +994,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   }
   else {
     // Step 10 and 11
+      //初始化失败，抛出异常
     Handle e(THREAD, PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
     // JVMTI has already reported the pending exception
@@ -1133,29 +1182,43 @@ objArrayOop InstanceKlass::allocate_objArray(int n, int length, TRAPS) {
 
 instanceOop InstanceKlass::register_finalizer(instanceOop i, TRAPS) {
   if (TraceFinalizerRegistration) {
+      //打印跟踪日志
     tty->print("Registered ");
     i->print_value_on(tty);
     tty->print_cr(" (" INTPTR_FORMAT ") as finalizable", (address)i);
   }
+    //i是新创建的对象
   instanceHandle h_i(THREAD, i);
   // Pass the handle as argument, JavaCalls::call expects oop as jobjects
+    //result表示调用结果
   JavaValue result(T_VOID);
+    //args表示方法参数
   JavaCallArguments args(h_i);
+    //获取调用方法
   methodHandle mh (THREAD, Universe::finalizer_register_method());
+    //执行方法调用
   JavaCalls::call(&result, mh, &args, CHECK_NULL);
   return h_i();
 }
 
 instanceOop InstanceKlass::allocate_instance(TRAPS) {
+    //判断目标类是否覆写了Object类的finalize方法
   bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+    // 因为类是对象的模板，所以可以从类中得到一个对象的大小
+    //获取目标类的对象大小
   int size = size_helper();  // Query before forming handle.
 
   KlassHandle h_k(THREAD, this);
 
   instanceOop i;
 
+    // 尝试在Java堆中开辟对象
+    // 创建对象， InstanceKlass::allocate_instance方法中对象创建的核心逻辑在CollectedHeap::obj_allocate中，
+    // 该类定义在hotspot/src/share/vm/gc_interface/collectedHeap.hpp中，实现在同目录的collectedHeap.cpp中
   i = (instanceOop)CollectedHeap::obj_allocate(h_k, size, CHECK_NULL);
+    //如果覆写了finalize方法并且RegisterFinalizersAtInit为false，即不在JVM启动时完成finalize方法的注册
   if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+      //注册finalize方法
     i = register_finalizer(i, CHECK_NULL);
   }
   return i;
@@ -1489,6 +1552,9 @@ Method* InstanceKlass::find_method_impl(Symbol* name, Symbol* signature,
                                         OverpassLookupMode overpass_mode,
                                         StaticLookupMode static_mode,
                                         PrivateLookupMode private_mode) const {
+    // 从当前的InstanceKlass中的_methods数组中查找，这个数组中只存储了当前类中定义的方法
+    // 在方法解析完成后会返回存储所有方法的数组，这个数组会调用ClassFileParser::sort_methods()函数进行排序并最终保存在InstanceKlass类
+    // 的_methods属性中。调用find_method_index()函数使用二分查找算法在_methods属性中查找方法，如果找到方法，则返回数组的下标位置，否则返回-1。
   return InstanceKlass::find_method_impl(methods(), name, signature, overpass_mode, static_mode, private_mode);
 }
 
@@ -1633,6 +1699,8 @@ Method* InstanceKlass::uncached_lookup_method(Symbol* name, Symbol* signature, O
   OverpassLookupMode overpass_local_mode = overpass_mode;
   Klass* klass = const_cast<InstanceKlass*>(this);
   while (klass != NULL) {
+      // 调用find_method_impl()函数从当前InstanceKlass的_methods数组中查找名称和签名相同的方法
+      // 如果调用find_method_impl()函数无法从当前类中查找到对应的方法，那么通过while循环一直从继承链往上查找，如果找到就直接返回，否则返回NULL。
     Method* method = InstanceKlass::cast(klass)->find_method_impl(name, signature, overpass_local_mode, find_static, find_private);
     if (method != NULL) {
       return method;
@@ -2943,6 +3011,7 @@ void InstanceKlass::adjust_default_methods(InstanceKlass* holder, bool* trace_na
 #endif // INCLUDE_JVMTI
 
 // On-stack replacement stuff
+// add_osr_nmethod用于将需要执行栈上替换的nmethod实例插入到InstanceKlass的osr_nmethods链表上
 void InstanceKlass::add_osr_nmethod(nmethod* n) {
 #ifndef PRODUCT
   if (TieredCompilation) {
@@ -2954,20 +3023,28 @@ void InstanceKlass::add_osr_nmethod(nmethod* n) {
   // only one compilation can be active
   NEEDS_CLEANUP
   // This is a short non-blocking critical region, so the no safepoint check is ok.
+    //获取锁
   OsrList_lock->lock_without_safepoint_check();
+    //校验必须是栈上替换方法
   assert(n->is_osr_method(), "wrong kind of nmethod");
+    //将_osr_nmethods_head设置成n的下一个方法
   n->set_osr_link(osr_nmethods_head());
+    //将n设置为_osr_nmethods_head
   set_osr_nmethods_head(n);
   // Raise the highest osr level if necessary
+    // 如果使用分层编译
   if (TieredCompilation) {
     Method* m = n->method();
+      //更新最高编译级别
     m->set_highest_osr_comp_level(MAX2(m->highest_osr_comp_level(), n->comp_level()));
   }
   // Remember to unlock again
+    //解锁
   OsrList_lock->unlock();
 
   // Get rid of the osr methods for the same bci that have lower levels.
   if (TieredCompilation) {
+      //查找所有低于nmethod的编译级别的属于同一方法的nmethod实例，将其从osr_nmethods链表上移除
     for (int l = CompLevel_limited_profile; l < n->comp_level(); l++) {
       nmethod *inv = lookup_osr_nmethod(n->method(), n->osr_entry_bci(), l, true);
       if (inv != NULL && inv->is_in_use()) {
@@ -2978,15 +3055,21 @@ void InstanceKlass::add_osr_nmethod(nmethod* n) {
 }
 
 
+// 与add_osr_nmethod相对应的就是remove_osr_nmethod，用于从osr_nmethod链表上移除nmethod
+// 当nmethod被标记成not_entrant或者zombie时，或者执行CodeCache垃圾回收时会调用该方法
 void InstanceKlass::remove_osr_nmethod(nmethod* n) {
   // This is a short non-blocking critical region, so the no safepoint check is ok.
+    // 获取锁
   OsrList_lock->lock_without_safepoint_check();
+    // 校验是否栈上替换方法
   assert(n->is_osr_method(), "wrong kind of nmethod");
   nmethod* last = NULL;
+    // 获取osr_nmethods链表的头元素
   nmethod* cur  = osr_nmethods_head();
   int max_level = CompLevel_none;  // Find the max comp level excluding n
   Method* m = n->method();
   // Search for match
+    // 遍历osr_nmethods链表直到遇到n，找到n所属的方法的所有nmehtod的最高编译级别
   while(cur != NULL && cur != n) {
     if (TieredCompilation && m == cur->method()) {
       // Find max level before n
@@ -2996,7 +3079,9 @@ void InstanceKlass::remove_osr_nmethod(nmethod* n) {
     cur = cur->osr_link();
   }
   nmethod* next = NULL;
+    //如果从链表中找到了目标nmethod
   if (cur == n) {
+      //将目标nmethod从链表中移除
     next = cur->osr_link();
     if (last == NULL) {
       // Remove first element
@@ -3008,6 +3093,7 @@ void InstanceKlass::remove_osr_nmethod(nmethod* n) {
   n->set_osr_link(NULL);
   if (TieredCompilation) {
     cur = next;
+      //遍历链表，更新最大编译级别
     while (cur != NULL) {
       // Find max level after n
       if (m == cur->method()) {
@@ -3039,10 +3125,13 @@ int InstanceKlass::mark_osr_nmethods(const Method* m) {
 
 nmethod* InstanceKlass::lookup_osr_nmethod(const Method* m, int bci, int comp_level, bool match_level) const {
   // This is a short non-blocking critical region, so the no safepoint check is ok.
+    //获取操作OsrList的锁
   OsrList_lock->lock_without_safepoint_check();
+    //返回_osr_nmethods_head属性，即栈上替换的nmethod链表的头
   nmethod* osr = osr_nmethods_head();
   nmethod* best = NULL;
   while (osr != NULL) {
+      //校验这个方法是栈上替换方法
     assert(osr->is_osr_method(), "wrong kind of nmethod found in chain");
     // There can be a time when a c1 osr method exists but we are waiting
     // for a c2 version. When c2 completes its osr nmethod we will trash
@@ -3052,13 +3141,16 @@ nmethod* InstanceKlass::lookup_osr_nmethod(const Method* m, int bci, int comp_le
 
     if (osr->method() == m &&
         (bci == InvocationEntryBci || osr->osr_entry_bci() == bci)) {
+        //如果要求comp_level匹配
       if (match_level) {
+          //校验osr的comp_level与待查找方法的comp_level是否匹配
         if (osr->comp_level() == comp_level) {
           // Found a match - return it.
           OsrList_lock->unlock();
           return osr;
         }
       } else {
+          //查找该方法编译优化级别最高的osr，如果找到了则返回
         if (best == NULL || (osr->comp_level() > best->comp_level())) {
           if (osr->comp_level() == CompLevel_highest_tier) {
             // Found the best possible - return it.
@@ -3069,11 +3161,13 @@ nmethod* InstanceKlass::lookup_osr_nmethod(const Method* m, int bci, int comp_le
         }
       }
     }
+      //不是目标方法，继续查找下一个
     osr = osr->osr_link();
   }
   OsrList_lock->unlock();
 
   assert(match_level == false || best == NULL, "shouldn't pick up anything if match_level is set");
+    //如果没有最高优化级别的osr，则要求其优化级别大于或者等于要求的级别
   if (best != NULL && best->comp_level() >= comp_level) {
     return best;
   }

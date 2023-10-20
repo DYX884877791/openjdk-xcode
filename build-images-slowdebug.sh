@@ -6,6 +6,7 @@ BUILD_LOG="LOG=debug"
 BUILD_MODE=normal
 TEST_JDK=false
 BUILD_JAVAFX=false
+CUR_DIR=`cd $(dirname $0) && pwd`
 set_os() {
 	IS_LINUX=false
 	IS_DARWIN=false
@@ -77,7 +78,7 @@ fi
 
 ## build directory
 if [ "X$BUILD_DIR" == "X" ] ; then
-	BUILD_DIR=`pwd`
+	BUILD_DIR=$CUR_DIR
 fi
 
 ## add javafx to build at end
@@ -109,7 +110,7 @@ fi
 
 # define build environment
 pushd `dirname $0`
-SCRIPT_DIR=`pwd`
+SCRIPT_DIR="$CUR_DIR"
 PATCH_DIR="$SCRIPT_DIR/jdk8u-patch"
 TOOL_DIR="$BUILD_DIR/tools"
 TMP_DIR="$TOOL_DIR/tmp"

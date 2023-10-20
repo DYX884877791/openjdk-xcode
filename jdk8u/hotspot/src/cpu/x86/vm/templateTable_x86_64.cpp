@@ -36,6 +36,7 @@
 #include "runtime/stubRoutines.hpp"
 #include "runtime/synchronizer.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 
 #ifndef CC_INTERP
 
@@ -95,14 +96,18 @@ static inline Address at_rsp() {
 
 // At top of Java expression stack which may be different than esp().  It
 // isn't for category 1 objects.
+//返回栈顶元素的内存地址
 static inline Address at_tos   () {
+    //rsp寄存器保存栈顶地址，expr_offset_in_bytes方法返回偏移量
   return Address(rsp,  Interpreter::expr_offset_in_bytes(0));
 }
 
+//返回栈顶第二个元素的内存地址
 static inline Address at_tos_p1() {
   return Address(rsp,  Interpreter::expr_offset_in_bytes(1));
 }
 
+//返回栈顶第三个元素的内存地址
 static inline Address at_tos_p2() {
   return Address(rsp,  Interpreter::expr_offset_in_bytes(2));
 }
@@ -663,11 +668,19 @@ void TemplateTable::daload() {
 }
 
 void TemplateTable::aaload() {
+  slog_debug("进入hotspot/src/cpu/x86/vm/templateTable_x86_64.cpp中的TemplateTable::aaload函数...");
+    //校验当前Template的itos与atos与指令配置是否相符
+    //aaload指令的栈顶是int类型的，表示待加载的数组索引，对应这里的itos
+    //aaload指令执行完成后栈顶的值是一个对象引用，表示读取的数组元素，对应这里的atos
   transition(itos, atos);
+    //pop_ptr表示把当前栈帧栈顶的值pop出来放到rdx中，因为操作数栈的栈顶在栈顶缓存下就是rax中的值
+    //所以当前栈帧栈顶的值就是一个数组引用
   __ pop_ptr(rdx);
   // eax: index
   // rdx: array
+    //根据数组引用，读取对应的数组长度，判断index是否在小于数组长度，如果否则抛出异常
   index_check(rdx, rax); // kills rbx
+    //根据数组索引，数组引用计算目标元素的位置，然后加载特定内存位置的值到rax中
   __ load_heap_oop(rax, Address(rdx, rax,
                                 UseCompressedOops ? Address::times_4 : Address::times_8,
                                 arrayOopDesc::base_offset_in_bytes(T_OBJECT)));
@@ -954,48 +967,65 @@ void TemplateTable::dastore() {
 
 void TemplateTable::aastore() {
   Label is_null, ok_is_subtype, done;
+    //校验当前Template的itos与atos与指令配置是否相符
   transition(vtos, vtos);
   // stack: ..., array, index, value
+    //将栈顶的三个元素复制到寄存器中
   __ movptr(rax, at_tos());    // value
   __ movl(rcx, at_tos_p1()); // index
   __ movptr(rdx, at_tos_p2()); // array
 
+    //获取指定索引的数组元素的内存位置
   Address element_address(rdx, rcx,
                           UseCompressedOops? Address::times_4 : Address::times_8,
                           arrayOopDesc::base_offset_in_bytes(T_OBJECT));
 
+    //校验数组索引是否超过数组长度
   index_check(rdx, rcx);     // kills rbx
   // do array store check - check for NULL value first
+    //rax中的值非空校验，校验失败跳转到is_null标签
   __ testptr(rax, rax);
   __ jcc(Assembler::zero, is_null);
 
   // Move subklass into rbx
+    // 获取rax中的对象的Klass，将其引用放到rbx中
   __ load_klass(rbx, rax);
   // Move superklass into rax
+    // 将rdx中的数组对应的Klass的引用放到rax中
   __ load_klass(rax, rdx);
+    //将数组klass的数组元素的klass的引用放到rax中
   __ movptr(rax, Address(rax,
                          ObjArrayKlass::element_klass_offset()));
   // Compress array + index*oopSize + 12 into a single register.  Frees rcx.
+    //将element_address的内存地址放到rdx中
   __ lea(rdx, element_address);
 
   // Generate subtype check.  Blows rcx, rdi
   // Superklass in rax.  Subklass in rbx.
+    //检查value对应的klass，即rax中的klass引用，是否是数组元素klass即rax中的klass引用的子类型
+    //如果检查通过则跳转到ok_is_subtype
   __ gen_subtype_check(rbx, ok_is_subtype);
 
   // Come here on failure
   // object is at TOS
+    //检查失败，抛出异常
   __ jump(ExternalAddress(Interpreter::_throw_ArrayStoreException_entry));
 
   // Come here on success
+    // 检查成功
   __ bind(ok_is_subtype);
 
   // Get the value we will store
+    // 将栈顶的值即目标value再次拷贝到rax中
   __ movptr(rax, at_tos());
   // Now store using the appropriate barrier
+    //rdx中保存的是存入数组的内存位置，将rax中的值写入到对应的内存位置，会根据不同的BarrierSet类型执行不同操作
   do_oop_store(_masm, Address(rdx, 0), rax, _bs->kind(), true);
+    //完成
   __ jmp(done);
 
   // Have a NULL in rax, rdx=array, ecx=index.  Store NULL at ary[idx]
+    //保存NULL到数组中
   __ bind(is_null);
   __ profile_null_seen(rbx);
 
@@ -1003,7 +1033,9 @@ void TemplateTable::aastore() {
   do_oop_store(_masm, element_address, noreg, _bs->kind(), true);
 
   // Pop stack arguments
+    //操作结束
   __ bind(done);
+    //将rsp向高地址方向移动，即pop掉三个栈顶元素
   __ addptr(rsp, 3 * Interpreter::stackElementSize);
 }
 
@@ -1383,9 +1415,28 @@ void TemplateTable::dneg() {
   __ xorpd(xmm0, ExternalAddress((address) double_signflip));
 }
 
+// 由于iinc指令只涉及到对局部变量表的操作，并不会影响操作数栈，也不需要使用操作数栈顶的值，所以栈顶之前与之后的状态为vtos与vtos，调用transition()函数只是验证栈顶缓存的状态是否正确。
+// iinc指令的字节码格式如下： iinc index const
+// index // 局部变量表索引值
+//const // 将局部变量表索引值对应的slot值加const
+// 最终生成的汇编如下：
+// %r13存储的是指向字节码的指针，偏移
+// 2字节后取出const存储到%edx
+// movsbl 0x2(%r13),%edx
+// 取出index存储到%ebx
+// movzbl 0x1(%r13),%ebx
+//       neg    %rbx
+// %r14指向本地变量表的首地址，将%edx加到
+// %r14+%rbx*8指向的内存所存储的值上
+// 之所以要对%rbx执行neg进行符号反转，
+// 是因为在Linux内核的操作系统上，
+// 栈是向低地址方向生长的
+// add    %edx,(%r14,%rbx,8)
 void TemplateTable::iinc() {
   transition(vtos, vtos);
+    // 操作码iinc占用一个字节，而index与const分别占用一个字节。使用at_bcp()函数获取iinc指令的操作数，2表示偏移2字节，所以会将const取出来存储到rdx中
   __ load_signed_byte(rdx, at_bcp(2)); // get constant
+    // 调用locals_index()函数取出index，locals_index()就是JVM函数
   locals_index(rbx);
   __ addl(iaddress(rbx), rdx);
 }
@@ -1572,7 +1623,9 @@ void TemplateTable::float_cmp(bool is_float, int unordered_result) {
 }
 
 void TemplateTable::branch(bool is_jsr, bool is_wide) {
+    //将当前栈帧中保存的Method* 拷贝到rcx中
   __ get_method(rcx); // rcx holds method
+    //如果开启了profile则执行分支跳转相关的性能统计
   __ profile_taken_branch(rax, rbx); // rax holds updated MDP, rbx
                                      // holds bumped taken count
 
@@ -1582,21 +1635,27 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
                               InvocationCounter::counter_offset();
 
   // Load up edx with the branch displacement
+    //如果是宽指令
   if (is_wide) {
     __ movl(rdx, at_bcp(1));
   } else {
+      //将当前字节码位置往后偏移1字节处开始的2字节数据读取到rdx中
     __ load_signed_short(rdx, at_bcp(1));
   }
+    //将rdx中的值字节次序变反
   __ bswapl(rdx);
 
   if (!is_wide) {
+      //将rdx中的值右移16位，上述两步就是为了计算跳转分支的偏移量
     __ sarl(rdx, 16);
   }
+    //将rdx中的数据从2字节扩展成4字节
   __ movl2ptr(rdx, rdx);
 
   // Handle all the JSR stuff here, then exit.
   // It's much shorter and cleaner than intermingling with the non-JSR
   // normal-branch stuff occurring below.
+    //如果是jsr指令
   if (is_jsr) {
     // Pre-load the next target bytecode into rbx
     __ load_unsigned_byte(rbx, Address(r13, rdx, Address::times_1, 0));
@@ -1614,10 +1673,13 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
   }
 
   // Normal (non-jsr) branch handling
+    // 正常的分支跳转处理
 
   // Adjust the bcp in r13 by the displacement in rdx
+    //将当前字节码地址加上rdx保存的偏移量，计算跳转的目标地址
   __ addptr(r13, rdx);
 
+    //校验这两个属性必须都为true，即栈上替换必须要求使用UseLoopCounter，这两个默认值都是true
   assert(UseLoopCounter || !UseOnStackReplacement,
          "on-stack-replacement requires loop counters");
   Label backedge_counter_overflow;
@@ -1631,14 +1693,21 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
     // rdx: target offset
     // r13: target bcp
     // r14: locals pointer
+      //校验rdx是否大于0，如果大于0说明是往前跳转，如果小于0说明是往后跳转，如果大于0则跳转到dispatch，即通常的if分支判断
     __ testl(rdx, rdx);             // check if forward or backward branch
     __ jcc(Assembler::positive, dispatch); // count only if backward branch
 
     // check if MethodCounters exists
+      //如果是往回跳转，即通常的循环
+      // 当某个方法往回跳转的次数即循环的次数超过阈值会触发方法的即时编译，并且用编译后的本地代码替换掉原来的字节码指令，
+      // 所谓的栈上替换就是替换调用入口地址，将原来解释器上的变量，monitor等迁移到编译后的本地代码对应的栈帧中。
     Label has_counters;
+      //获取_method_counters属性的地址到rax中，并校验其是否非空
     __ movptr(rax, Address(rcx, Method::method_counters_offset()));
     __ testptr(rax, rax);
+      //如果非空则跳转到has_counters
     __ jcc(Assembler::notZero, has_counters);
+      //如果为空，则通过InterpreterRuntime::build_method_counters方法创建一个新的MethodCounters
     __ push(rdx);
     __ push(rcx);
     __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::build_method_counters),
@@ -1646,19 +1715,24 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
     __ pop(rcx);
     __ pop(rdx);
     __ movptr(rax, Address(rcx, Method::method_counters_offset()));
+      //如果创建失败，则跳转到到dispatch分支
     __ jcc(Assembler::zero, dispatch);
     __ bind(has_counters);
 
+      //如果启用分层编译，server模式下为true
     if (TieredCompilation) {
       Label no_mdo;
       int increment = InvocationCounter::count_increment;
       int mask = ((1 << Tier0BackedgeNotifyFreqLog) - 1) << InvocationCounter::count_shift;
+        //如果开启profile性能收集，server模式下默认为true
       if (ProfileInterpreter) {
         // Are we profiling?
+          // 获取_method_data属性到rbx中，并校验其是否为空，如果为空则跳转到no_mdo
         __ movptr(rbx, Address(rcx, in_bytes(Method::method_data_offset())));
         __ testptr(rbx, rbx);
         __ jccb(Assembler::zero, no_mdo);
         // Increment the MDO backedge counter
+          //_method_data属性不为空，则增加其中的backedge counter计数器，如果超过阈值则跳转到backedge_counter_overflow
         const Address mdo_backedge_counter(rbx, in_bytes(MethodData::backedge_counter_offset()) +
                                            in_bytes(InvocationCounter::counter_offset()));
         __ increment_mask_and_jump(mdo_backedge_counter, increment, mask, rax, false, Assembler::zero,
@@ -1668,32 +1742,42 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       __ bind(no_mdo);
       // Increment backedge counter in MethodCounters*
       __ movptr(rcx, Address(rcx, Method::method_counters_offset()));
+        //增加_method_counters属性中的backedge_counter的调用计数，如果超过阈值则跳转到backedge_counter_overflow
       __ increment_mask_and_jump(Address(rcx, be_offset), increment, mask,
                                  rax, false, Assembler::zero,
                                  UseOnStackReplacement ? &backedge_counter_overflow : NULL);
     } else {
       // increment counter
+        //如果不启用分层编译，client模式下即C1编译下TieredCompilation为false
+        //增加_method_counters属性中backedge counter计数
       __ movptr(rcx, Address(rcx, Method::method_counters_offset()));
       __ movl(rax, Address(rcx, be_offset));        // load backedge counter
       __ incrementl(rax, InvocationCounter::count_increment); // increment counter
       __ movl(Address(rcx, be_offset), rax);        // store counter
 
+        //增加_method_counters属性中invocation counter计数
       __ movl(rax, Address(rcx, inv_offset));    // load invocation counter
 
       __ andl(rax, InvocationCounter::count_mask_value); // and the status bits
       __ addl(rax, Address(rcx, be_offset));        // add both counters
 
+        //C1编译下，CompLevel为3时会开启有限的性能数据收集
       if (ProfileInterpreter) {
         // Test to see if we should create a method data oop
+          //判断rax中的值是否大于InterpreterProfileLimit，如果小于则跳转到dispatch
         __ cmp32(rax,
                  ExternalAddress((address) &InvocationCounter::InterpreterProfileLimit));
         __ jcc(Assembler::less, dispatch);
 
         // if no method data exists, go to profile method
+          //从栈帧中获取methodData的指针，判断其是否为空，如果为空则跳转到profile_method
         __ test_method_data_pointer(rax, profile_method);
 
+          //c1,c2下都为true
         if (UseOnStackReplacement) {
           // check for overflow against ebx which is the MDO taken count
+            //rbx中值在执行profile_taken_branch时，赋值成MDO backward count，判断其是否小于InterpreterBackwardBranchLimit
+            //如果小于则跳转到dispatch
           __ cmp32(rbx,
                    ExternalAddress((address) &InvocationCounter::InterpreterBackwardBranchLimit));
           __ jcc(Assembler::below, dispatch);
@@ -1704,6 +1788,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
           // excessive calls to the overflow routine while the method is
           // being compiled, add a second test to make sure the overflow
           // function is called only once every overflow_frequency.
+            //如果大于InterpreterBackwardBranchLimit，则跳转到backedge_counter_overflow
           const int overflow_frequency = 1024;
           __ andl(rbx, overflow_frequency - 1);
           __ jcc(Assembler::zero, backedge_counter_overflow);
@@ -1713,6 +1798,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
         if (UseOnStackReplacement) {
           // check for overflow against eax, which is the sum of the
           // counters
+            //rax中的值保存的是_method_counters属性两个计数器的累加值，判断其是否大于InterpreterBackwardBranchLimit，如果大于则跳转到backedge_counter_overflow
           __ cmp32(rax,
                    ExternalAddress((address) &InvocationCounter::InterpreterBackwardBranchLimit));
           __ jcc(Assembler::aboveEqual, backedge_counter_overflow);
@@ -1724,17 +1810,20 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
   }
 
   // Pre-load the next target bytecode into rbx
+    //r13已经变成目标跳转地址，这里是加载跳转地址的第一个字节码到rbx中
   __ load_unsigned_byte(rbx, Address(r13, 0));
 
   // continue with the bytecode @ target
   // eax: return bci for jsr's, unused otherwise
   // ebx: target bytecode
   // r13: target bcp
+    //开始执行跳转地址处的字节码,后面的部分除非跳转到对应的标签处，否则不会执行
   __ dispatch_only(vtos);
 
   if (UseLoopCounter) {
     if (ProfileInterpreter) {
       // Out-of-line code to allocate method data oop.
+        // 执行profile_method，执行完成跳转至dispatch
       __ bind(profile_method);
       __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::profile_method));
       __ load_unsigned_byte(rbx, Address(r13, 0));  // restore target bytecode
@@ -1744,14 +1833,19 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
 
     if (UseOnStackReplacement) {
       // invocation counter overflow
+        // 当超过阈值后会跳转到此分支
       __ bind(backedge_counter_overflow);
+        //对rdx中的数取补码
       __ negptr(rdx);
+        //将r13的地址加到rdx上，这两步是计算跳转地址
       __ addptr(rdx, r13); // branch bcp
       // IcoResult frequency_counter_overflow([JavaThread*], address branch_bcp)
+        // 调用方法frequency_counter_overflow([JavaThread*], address branch_bcp)，其中第一个参数JavaThread通过call_vm传递
       __ call_VM(noreg,
                  CAST_FROM_FN_PTR(address,
                                   InterpreterRuntime::frequency_counter_overflow),
                  rdx);
+        //恢复待执行的字节码
       __ load_unsigned_byte(rbx, Address(r13, 0));  // restore target bytecode
 
       // rax: osr nmethod (osr ok) or NULL (osr not possible)
@@ -1759,22 +1853,29 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       // rdx: scratch
       // r14: locals pointer
       // r13: bcp
+        // 校验frequency_counter_overflow方法返回的编译结果是否为空，如果为空则跳转到dispatch，即继续执行字节码
       __ testptr(rax, rax);                        // test result
       __ jcc(Assembler::zero, dispatch);         // no osr if null
       // nmethod may have been invalidated (VM may block upon call_VM return)
+        //如果不为空，即表示方法编译完成，将_entry_bci属性的偏移复制到rcx中
       __ movl(rcx, Address(rax, nmethod::entry_bci_offset()));
+        //如果rcx等于InvalidOSREntryBci，则跳转到dispatch
       __ cmpl(rcx, InvalidOSREntryBci);
       __ jcc(Assembler::equal, dispatch);
 
+        //开始执行栈上替换了
       // We have the address of an on stack replacement routine in eax
       // We need to prepare to execute the OSR method. First we must
       // migrate the locals and monitors off of the stack.
 
+        //将rax中的osr的地址拷贝到r13中
       __ mov(r13, rax);                             // save the nmethod
 
+        //调用OSR_migration_begin方法，完成栈帧上变量和monitor的迁移
       call_VM(noreg, CAST_FROM_FN_PTR(address, SharedRuntime::OSR_migration_begin));
 
       // eax is OSR buffer, move it to expected parameter location
+        //将rax中的值拷贝到j_rarg0
       __ mov(j_rarg0, rax);
 
       // We use j_rarg definitions here so that registers don't conflict as parameter
@@ -1785,6 +1886,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       const Register sender_sp = j_rarg1;
 
       // pop the interpreter frame
+        // 从当前调用栈pop出原来解释器的栈帧
       __ movptr(sender_sp, Address(rbp, frame::interpreter_frame_sender_sp_offset * wordSize)); // get sender sp
       __ leave();                                // remove frame anchor
       __ pop(retaddr);                           // get return address
@@ -1799,6 +1901,7 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
       __ push(retaddr);
 
       // and begin the OSR nmethod
+        // 跳转到OSR nmethod，开始执行
       __ jmp(Address(r13, nmethod::osr_entry_point_offset()));
     }
   }
@@ -2065,15 +2168,20 @@ void TemplateTable::_return(TosState state) {
   assert(_desc->calls_vm(),
          "inconsistent calls_vm information"); // call in remove_activation
 
+    //如果当前字节码是_return_register_finalizer，这个是OpenJDK特有的
   if (_desc->bytecode() == Bytecodes::_return_register_finalizer) {
     assert(state == vtos, "only valid state");
     __ movptr(c_rarg1, aaddress(0));
+      //c_rarg1保存了方法调用的oop，获取其klass
     __ load_klass(rdi, c_rarg1);
+      //获取类的access_flags，判断其是否实现了finalizer方法
     __ movl(rdi, Address(rdi, Klass::access_flags_offset()));
     __ testl(rdi, JVM_ACC_HAS_FINALIZER);
     Label skip_register_finalizer;
+      //如果未实现，则跳转到skip_register_finalizer
     __ jcc(Assembler::zero, skip_register_finalizer);
 
+      //如果实现了，则执行register_finalizer方法
     __ call_VM(noreg, CAST_FROM_FN_PTR(address, InterpreterRuntime::register_finalizer), c_rarg1);
 
     __ bind(skip_register_finalizer);
@@ -2082,11 +2190,16 @@ void TemplateTable::_return(TosState state) {
   // Narrow result if state is itos but result type is smaller.
   // Need to narrow in the return bytecode rather than in generate_return_entry
   // since compiled code callers expect the result to already be narrowed.
+    //如果返回值是int，则执行narrow方法，会根据方法的返回值类型做特殊处理，因为在JVM中char，byte，boolean三种
+    //都是作为int处理的，如果返回值类型是上述的三种之一则将返回值由4个字节调整成对应类型的字节数，返回值就是int类型
+    //的则不做任何处理
   if (state == itos) {
     __ narrow(rax);
   }
+    //86_64位下remove_activation实际定义时还有三个bool参数，此处没有传，就使用默认值true
   __ remove_activation(state, r13);
 
+    //跳转到方法调用栈帧恢复方法的调用方的正常执行
   __ jmp(r13);
 }
 
@@ -2121,7 +2234,9 @@ void TemplateTable::_return(TosState state) {
 void TemplateTable::volatile_barrier(Assembler::Membar_mask_bits
                                      order_constraint) {
   // Helper function to insert a is-volatile test and memory barrier
+    // 如果os是多核处理器，会调用membar方法
   if (os::is_MP()) { // Not needed on single CPU
+      // membar方法在assembler_x86.hpp文件中：
     __ membar(order_constraint);
   }
 }
@@ -2293,12 +2408,16 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   const Register flags = rax;
   const Register bc = c_rarg3; // uses same reg as obj, so don't mix them
 
+    //给该字段创建一个ConstantPoolCacheEntry，该类表示常量池中某个方法或者字段的解析结果
   resolve_cache_and_index(byte_no, cache, index, sizeof(u2));
+    //发布jvmti事件
   jvmti_post_field_access(cache, index, is_static, false);
+    //加载该字段的偏移量，flags，如果是静态字段还需要解析该类class实例对应的oop
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   if (!is_static) {
     // obj is on the stack
+      //将被读取属性的oop放入obj中
     pop_and_check_object(obj);
   }
 
@@ -2312,17 +2431,22 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   assert(btos == 0, "change code, btos != 0");
 
   __ andl(flags, ConstantPoolCacheEntry::tos_state_mask);
+    //判断是否是byte类型
   __ jcc(Assembler::notZero, notByte);
   // btos
+    //读取该属性，并放入rax中
   __ load_signed_byte(rax, field);
   __ push(btos);
   // Rewrite bytecode to be faster
   if (!is_static) {
+      //将该指令改写成_fast_bgetfield，下一次执行时就是_fast_bgetfield
     patch_bytecode(Bytecodes::_fast_bgetfield, bc, rbx);
   }
+    //跳转到Done
   __ jmp(Done);
 
   __ bind(notByte);
+    //判断是否boolean类型
   __ cmpl(flags, ztos);
   __ jcc(Assembler::notEqual, notBool);
 
@@ -2337,6 +2461,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notBool);
+    //判断是否引用类型
   __ cmpl(flags, atos);
   __ jcc(Assembler::notEqual, notObj);
   // atos
@@ -2348,6 +2473,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notObj);
+    //判断是否int类型
   __ cmpl(flags, itos);
   __ jcc(Assembler::notEqual, notInt);
   // itos
@@ -2360,6 +2486,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notInt);
+    //判断是否char类型
   __ cmpl(flags, ctos);
   __ jcc(Assembler::notEqual, notChar);
   // ctos
@@ -2372,6 +2499,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notChar);
+    //判断是否short类型
   __ cmpl(flags, stos);
   __ jcc(Assembler::notEqual, notShort);
   // stos
@@ -2384,6 +2512,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notShort);
+    //判断是否long类型
   __ cmpl(flags, ltos);
   __ jcc(Assembler::notEqual, notLong);
   // ltos
@@ -2396,6 +2525,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jmp(Done);
 
   __ bind(notLong);
+    //判断是否float类型
   __ cmpl(flags, ftos);
   __ jcc(Assembler::notEqual, notFloat);
   // ftos
@@ -2413,6 +2543,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   __ jcc(Assembler::notEqual, notDouble);
 #endif
   // dtos
+    // 只剩一种double类型
   __ movdbl(xmm0, field);
   __ push(dtos);
   // Rewrite bytecode to be faster
@@ -2433,6 +2564,13 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
 }
 
 
+/**
+ * _getstatic / _getfield用于读取静态或者实例属性，会将读取的结果放入栈顶中
+ *
+ *  _getstatic / _getfield适用于所有类型的字段属性读取，因此在具体实现时需要根据flags中保存的属性类型适配对应的处理逻辑，为了避免每次都要判断属性类型，
+ *  OpenJDK增加了几个自定义的带目标类型的属性读取的字节码指令，如_fast_igetfield，就专门用于读取int类型的实例属性
+ *
+ */
 void TemplateTable::getfield(int byte_no) {
   getfield_or_static(byte_no, false);
 }
@@ -2500,6 +2638,7 @@ void TemplateTable::jvmti_post_field_mod(Register cache, Register index, bool is
   }
 }
 
+// 负责执行putfield或putstatic指令
 void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   transition(vtos, vtos);
 
@@ -2510,8 +2649,11 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   const Register flags = rax;
   const Register bc    = c_rarg3;
 
+    //找到该属性对应的ConstantPoolCacheEntry
   resolve_cache_and_index(byte_no, cache, index, sizeof(u2));
+    //发布事件
   jvmti_post_field_mod(cache, index, is_static);
+    //获取字段偏移量，flags，如果是静态属性获取对应类的class实例
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   // [jk] not needed currently
@@ -2532,21 +2674,28 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   __ shrl(flags, ConstantPoolCacheEntry::tos_state_shift);
 
   assert(btos == 0, "change code, btos != 0");
+    //判断是否byte类型
   __ andl(flags, ConstantPoolCacheEntry::tos_state_mask);
   __ jcc(Assembler::notZero, notByte);
 
   // btos
   {
+      //将栈顶的待写入值放入rax中
     __ pop(btos);
+      //待写入的值pop出去后，如果是实例属性则栈顶元素为准备写入的实例
+      //校验该实例是否为空，将其拷贝到obj寄存器中
     if (!is_static) pop_and_check_object(obj);
+      //将rax中的待写入值写入到filed地址处
     __ movb(field, rax);
     if (!is_static) {
+        //将该字节码改写成_fast_bputfield，下一次执行时直接执行_fast_bputfield，无需再次判断属性类型
       patch_bytecode(Bytecodes::_fast_bputfield, bc, rbx, true, byte_no);
     }
     __ jmp(Done);
   }
 
   __ bind(notByte);
+    //判断是否boolean类型
   __ cmpl(flags, ztos);
   __ jcc(Assembler::notEqual, notBool);
 
@@ -2563,6 +2712,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notBool);
+    //判断是否引用类型
   __ cmpl(flags, atos);
   __ jcc(Assembler::notEqual, notObj);
 
@@ -2579,6 +2729,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notObj);
+    //判断是否int类型
   __ cmpl(flags, itos);
   __ jcc(Assembler::notEqual, notInt);
 
@@ -2594,6 +2745,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notInt);
+    //判断是否char类型
   __ cmpl(flags, ctos);
   __ jcc(Assembler::notEqual, notChar);
 
@@ -2609,6 +2761,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notChar);
+    //判断是否short类型
   __ cmpl(flags, stos);
   __ jcc(Assembler::notEqual, notShort);
 
@@ -2624,6 +2777,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notShort);
+    //判断是否long类型
   __ cmpl(flags, ltos);
   __ jcc(Assembler::notEqual, notLong);
 
@@ -2639,6 +2793,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notLong);
+    //判断是否float类型
   __ cmpl(flags, ftos);
   __ jcc(Assembler::notEqual, notFloat);
 
@@ -2654,6 +2809,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   }
 
   __ bind(notFloat);
+    //只剩一个,double类型
 #ifdef ASSERT
   __ cmpl(flags, dtos);
   __ jcc(Assembler::notEqual, notDouble);
@@ -2679,13 +2835,18 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   __ bind(Done);
 
   // Check for volatile store
+    //判断是否volatile变量，如果不是则跳转到notVolatile
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
+    //如果是
   volatile_barrier(Assembler::Membar_mask_bits(Assembler::StoreLoad |
                                                Assembler::StoreStore));
   __ bind(notVolatile);
 }
 
+/**
+ * 这两个字节码指令用于写入静态属性或者实例属性
+ */
 void TemplateTable::putfield(int byte_no) {
   putfield_or_static(byte_no, false);
 }
@@ -2754,17 +2915,21 @@ void TemplateTable::fast_storefield(TosState state) {
 
   ByteSize base = ConstantPoolCache::base_offset();
 
+    //发布jvmti事件
   jvmti_post_fast_field_mod();
 
   // access constant pool cache
+    //获取该字段对应的ConstantPoolCacheEntry
   __ get_cache_and_index_at_bcp(rcx, rbx, 1);
 
   // test for volatile with rdx
+    //获取该字段的flags
   __ movl(rdx, Address(rcx, rbx, Address::times_8,
                        in_bytes(base +
                                 ConstantPoolCacheEntry::flags_offset())));
 
   // replace index with field offset from cache entry
+    //获取该字段的偏移量
   __ movptr(rbx, Address(rcx, rbx, Address::times_8,
                          in_bytes(base + ConstantPoolCacheEntry::f2_offset())));
 
@@ -2777,6 +2942,9 @@ void TemplateTable::fast_storefield(TosState state) {
   __ andl(rdx, 0x1);
 
   // Get object from stack
+    //将待写入的实例对象pop到rcx中，注意此处并没有像putfield一样把待写入的值先pop到rax中，
+    //这是因为fast_storefield类的栈顶缓存类型不是vtos而是具体的写入值类型对应的类型，即上一个
+    //字节码指令执行完成后会自动将待写入的值放入rax中
   pop_and_check_object(rcx);
 
   // field address
@@ -2785,6 +2953,7 @@ void TemplateTable::fast_storefield(TosState state) {
   // access field
   switch (bytecode()) {
   case Bytecodes::_fast_aputfield:
+      //将rax中的属性值写入到field地址
     do_oop_store(_masm, field, rax, _bs->kind(), false);
     break;
   case Bytecodes::_fast_lputfield:
@@ -2815,6 +2984,7 @@ void TemplateTable::fast_storefield(TosState state) {
   }
 
   // Check for volatile store
+    //判断是否volatile变量
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
   volatile_barrier(Assembler::Membar_mask_bits(Assembler::StoreLoad |
@@ -2827,6 +2997,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   transition(atos, state);
 
   // Do the JVMTI work here to avoid disturbing the register state below
+    //发布JVMTI事件
   if (JvmtiExport::can_post_field_access()) {
     // Check to see if a field access watch has been set before we
     // take the time to call into the VM.
@@ -2850,6 +3021,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   }
 
   // access constant pool cache
+    //获取该字段对应的ConstantPoolCacheEntry
   __ get_cache_and_index_at_bcp(rcx, rbx, 1);
   // replace index with field offset from cache entry
   // [jk] not needed currently
@@ -2860,11 +3032,14 @@ void TemplateTable::fast_accessfield(TosState state) {
   //   __ shrl(rdx, ConstantPoolCacheEntry::is_volatile_shift);
   //   __ andl(rdx, 0x1);
   // }
+    //获取字段偏移量
   __ movptr(rbx, Address(rcx, rbx, Address::times_8,
                          in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
 
   // rax: object
+    //校验rax中实例对象oop，这里没有像getfield一样先把实例对象从栈顶pop到rax中，而是直接校验
+    //这是因为fast_accessfield类指令的栈顶缓存类型是atos而不是vtos，即上一个指令执行完后会自动将待读取的实例放入rax中
   __ verify_oop(rax);
   __ null_check(rax);
   Address field(rax, rbx, Address::times_1);
@@ -2872,6 +3047,7 @@ void TemplateTable::fast_accessfield(TosState state) {
   // access field
   switch (bytecode()) {
   case Bytecodes::_fast_agetfield:
+      //将属性值拷贝到rax中
     __ load_heap_oop(rax, field);
     __ verify_oop(rax);
     break;
@@ -3662,9 +3838,12 @@ void TemplateTable::athrow() {
 // ...
 // [saved rbp    ] <--- rbp
 void TemplateTable::monitorenter() {
+    //校验当前指令的栈顶缓存类型是否正确
   transition(atos, vtos);
 
   // check for NULL object
+    //校验rax中值是否为空，栈顶缓存就保存在rax寄存器中，如果为NULL会触发底层操作系统的NULL异常
+    //此时rax中保存的是用于获取锁的实例oop
   __ null_check(rax);
 
   const Address monitor_block_top(
@@ -3676,57 +3855,84 @@ void TemplateTable::monitorenter() {
   Label allocated;
 
   // initialize entry pointer
+    //xorl用于按位异或，相同的位置为0，不同的位置为1，此处是将c_rarg1置为NULL
   __ xorl(c_rarg1, c_rarg1); // points to free slot or NULL
 
   // find a free slot in the monitor block (result in c_rarg1)
+    //找到一个空闲的monitor_block，结果保存在c_rarg1中
   {
     Label entry, loop, exit;
+      //将monitor_block_top拷贝到c_rarg3中
     __ movptr(c_rarg3, monitor_block_top); // points to current entry,
                                      // starting with top-most entry
+      //将monitor_block_bot拷贝到c_rarg2
     __ lea(c_rarg2, monitor_block_bot); // points to word before bottom
                                      // of monitor block
+      //跳转到entry标签处执行
     __ jmpb(entry);
 
     __ bind(loop);
     // check if current entry is used
+      //判断c_rarg3指向的BasicObjectLock的obj属性是否为空，如果为空表示未使用
     __ cmpptr(Address(c_rarg3, BasicObjectLock::obj_offset_in_bytes()), (int32_t) NULL_WORD);
     // if not used then remember entry in c_rarg1
+      //如果相等，即BasicObjectLock的obj属性为空，则将c_rarg3的值拷贝到c_rarg1
     __ cmov(Assembler::equal, c_rarg1, c_rarg3);
     // check if current entry is for same object
+      // 判断c_rarg3指向的BasicObjectLock的obj属性与rax中实例是否一致
     __ cmpptr(rax, Address(c_rarg3, BasicObjectLock::obj_offset_in_bytes()));
     // if same object then stop searching
+      // 如果一致则退出，一致说明BasicObjectLock的obj属性不为空，此时c_rarg1为空，就是重新分配一个新的
     __ jccb(Assembler::equal, exit);
     // otherwise advance to next entry
+      // 如果不一致则把c_rarg3地址加上entry_size，即开始遍历前面一个monitor_block，即存在空闲的，但是没有obj属性相同的时候会把所有的
+      //BasicObjectLock都遍历一遍，找到最上面的地址最大一个空闲的BasicObjectLock
     __ addptr(c_rarg3, entry_size);
     __ bind(entry);
     // check if bottom reached
+      //判断两个寄存器的值是否相等
     __ cmpptr(c_rarg3, c_rarg2);
     // if not at bottom then check this entry
+      //如果不等于则跳转到loop标签，否则跳转到exit
     __ jcc(Assembler::notEqual, loop);
     __ bind(exit);
   }
 
+    //判断c_rarg1是否为空，如果不为空则跳转到allocated处
   __ testptr(c_rarg1, c_rarg1); // check if a slot has been found
   __ jcc(Assembler::notZero, allocated); // if found, continue with that one
 
   // allocate one if there's no free slot
+    //如果没有找到空闲的monitor_block则分配一个
   {
     Label entry, loop;
     // 1. compute new pointers             // rsp: old expression stack top
+      // 将monitor_block_bot拷贝到c_rarg1
     __ movptr(c_rarg1, monitor_block_bot); // c_rarg1: old expression stack bottom
+      //向下（低地址端）移动rsp指针entry_size字节
     __ subptr(rsp, entry_size);            // move expression stack top
+      //将c_rarg1减去entry_size
     __ subptr(c_rarg1, entry_size);        // move expression stack bottom
+      //将rsp拷贝到c_rarg3
     __ mov(c_rarg3, rsp);                  // set start value for copy loop
+      //将c_rarg1中的值写入到monitor_block_bot
     __ movptr(monitor_block_bot, c_rarg1); // set new monitor block bottom
+      //跳转到entry处开始循环
     __ jmp(entry);
     // 2. move expression stack contents
+      // 2.移动monitor_block_bot到栈顶的数据，将从栈顶分配的一个monitor_block插入到原来的monitor_block_bot下面
     __ bind(loop);
+      //将c_rarg3之后的entry_size处的地址拷贝到c_rarg2，即原来的rsp地址
     __ movptr(c_rarg2, Address(c_rarg3, entry_size)); // load expression stack
                                                       // word from old location
+      //将c_rarg2中的数据拷贝到c_rarg3处，即新的rsp地址
     __ movptr(Address(c_rarg3, 0), c_rarg2);          // and store it at new location
+      //c_rarg3加上一个字宽，即准备复制下一个字宽的数据
     __ addptr(c_rarg3, wordSize);                     // advance to next word
     __ bind(entry);
+      //比较两个寄存器的值
     __ cmpptr(c_rarg3, c_rarg1);            // check if bottom reached
+      //如果不等于则跳转到loop
     __ jcc(Assembler::notEqual, loop);      // if not at bottom then
                                             // copy next word
   }
@@ -3739,26 +3945,35 @@ void TemplateTable::monitorenter() {
   // handling for async. exceptions work correctly.
   // The object has already been poped from the stack, so the
   // expression stack looks correct.
+    //增加r13，使其指向下一个字节码指令
   __ increment(r13);
 
   // store object
+    //将rax中保存的获取锁的oop保存到c_rarg1指向的BasicObjectLock的obj属性中
   __ movptr(Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()), rax);
+    //获取锁，这里的代码见 hotspot/src/cpu/x86/vm/interp_masm_x86_64.cpp的lock_object方法
   __ lock_object(c_rarg1);
 
   // check to make sure this monitor doesn't cause stack overflow after locking
+    //保存bcp，为了出现异常时能够返回到原来的执行位置
   __ save_bcp();  // in case of exception
   __ generate_stack_overflow_check(0);
 
   // The bcp has already been incremented. Just need to dispatch to
   // next instruction.
+    //恢复字节码指令的正常执行
+    //因为上面已经增加r13了，所以此处dispatch_next的第二个参数使用默认值0，即执行r13指向的字节码指令即可，不用跳转到下一个指令
   __ dispatch_next(vtos);
 }
 
 
+// monitorexit指令用于释放锁
 void TemplateTable::monitorexit() {
+    //检查栈顶缓存的类型是否正确
   transition(atos, vtos);
 
   // check for NULL object
+    //检查rax包含的跟锁关联的对象oop是否为空
   __ null_check(rax);
 
   const Address monitor_block_top(
@@ -3772,27 +3987,35 @@ void TemplateTable::monitorexit() {
   // find matching slot
   {
     Label entry, loop;
+      //把monitor_block_top拷贝到c_rarg1
     __ movptr(c_rarg1, monitor_block_top); // points to current entry,
                                      // starting with top-most entry
+      //把monitor_block_bot拷贝到c_rarg2
     __ lea(c_rarg2, monitor_block_bot); // points to word before bottom
                                      // of monitor block
     __ jmpb(entry);
 
     __ bind(loop);
     // check if current entry is for same object
+      //比较rax中对象oop与obj属性是否一致
     __ cmpptr(rax, Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()));
     // if same object then stop searching
+      //如果一致则表示找到了跳转到found
     __ jcc(Assembler::equal, found);
     // otherwise advance to next entry
+      //如果没有找到则增加entry_size，即开始遍历前面一个BasicObjectLock
     __ addptr(c_rarg1, entry_size);
     __ bind(entry);
     // check if bottom reached
+      //比较这两个是否相等，如果相等表示遍历完成
     __ cmpptr(c_rarg1, c_rarg2);
     // if not at bottom then check this entry
+      //如果不等则跳转到loop标签
     __ jcc(Assembler::notEqual, loop);
   }
 
   // error handling. Unlocking was not block-structured
+    //没有在当前线程的栈帧中找到关联的BasicObjectLock，抛出异常
   __ call_VM(noreg, CAST_FROM_FN_PTR(address,
                    InterpreterRuntime::throw_illegal_monitor_state_exception));
   __ should_not_reach_here();
@@ -3800,8 +4023,11 @@ void TemplateTable::monitorexit() {
   // call run-time routine
   // rsi: points to monitor entry
   __ bind(found);
+    //将这个锁对象放入栈帧中
   __ push_ptr(rax); // make sure object is on stack (contract with oopMaps)
+    //执行解锁逻辑，这里的代码见 hotspot/src/cpu/x86/vm/interp_masm_x86_64.cpp的unlock_object方法
   __ unlock_object(c_rarg1);
+    //从栈帧中弹出锁对象
   __ pop_ptr(rax); // discard object
 }
 

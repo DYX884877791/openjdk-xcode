@@ -639,6 +639,7 @@ class AdapterHandlerEntry : public BasicHashtableEntry<mtCode> {
   int            _saved_code_length;
 #endif
 
+    // 相关属性就是通过init方法完成初始化的
   void init(AdapterFingerPrint* fingerprint, address i2c_entry, address c2i_entry, address c2i_unverified_entry) {
     _fingerprint = fingerprint;
     _i2c_entry = i2c_entry;
@@ -678,10 +679,15 @@ class AdapterHandlerEntry : public BasicHashtableEntry<mtCode> {
   void print_adapter_on(outputStream* st) const;
 };
 
+// AdapterHandlerLibrary跟AdapterHandlerEntry都定义在同一个文件hotspot/src/share/vm/runtime/sharedRuntime.hpp中，
+// 是一个用来生成AdapterHandlerEntry的一个工具类，其定义的属性也很简单
 class AdapterHandlerLibrary: public AllStatic {
  private:
+    // 保存转换的代码
   static BufferBlob* _buffer; // the temporary code buffer in CodeCache
+    // 保存 AdapterHandlerEntry和AdapterFingerPrints之间对应关系的map
   static AdapterHandlerTable* _adapters;
+    // 抽象方法对应的AdapterHandlerEntry
   static AdapterHandlerEntry* _abstract_method_handler;
   static BufferBlob* buffer_blob();
   static void initialize();

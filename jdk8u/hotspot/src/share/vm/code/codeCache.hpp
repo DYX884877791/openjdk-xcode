@@ -43,6 +43,19 @@
 class OopClosure;
 class DepChange;
 
+/**
+ * CodeCache就是用于缓存不同类型的生成的汇编代码，如热点方法编译后的代码，各种运行时的调用入口Stub等，所有的汇编代码在CodeCache中都是以CodeBlob及其子类的形式存在的。
+ * 通常CodeBlob会对应一个CodeBuffer，负责生成汇编代码的生成器会通过CodeBuffer将汇编代码写入到CodeBlob中，参考MacroAssembler类的说明。
+ * CodeCache的定义位于hotspot src/share/vm/code/codeCache.hpp中，包含的属性和方法都是静态的。
+ *
+ * CodeCache定义的关键方法主要有以下几种：
+ *
+ * 内存分配和释放的，如allocate，commit，free等
+ * 查找或者遍历已经存在的Blob和nmethod，如find_blob，find_nmethod，blobs_do，nmethods_do，first，next等
+ * GC支持的，如gc_epilogue，gc_prologue，do_unloading，scavenge_root_nmethods_do等
+ * 获取CodeCache对应内存块属性的，如low_bound，high_bound，capacity等
+ * 逆优化相关的，如mark_for_deoptimization，mark_all_nmethods_for_deoptimization，make_marked_nmethods_not_entrant等
+ */
 class CodeCache : AllStatic {
   friend class VMStructs;
  private:
@@ -50,12 +63,15 @@ class CodeCache : AllStatic {
   // so that the generated assembly code is always there when it's needed.
   // This may cause memory leak, but is necessary, for now. See 4423824,
   // 4422213 or 4436291 for details.
+  // 实际负责内存管理的
   static CodeHeap * _heap;
+    // _number_of开头的几个属性是统计计数的
   static int _number_of_blobs;
   static int _number_of_adapters;
   static int _number_of_nmethods;
   static int _number_of_nmethods_with_dependencies;
   static bool _needs_cache_clean;
+    // _scavenge_root_nmethods是为了GC时遍历nmethod使用
   static nmethod* _scavenge_root_nmethods;  // linked via nm->scavenge_root_link()
 
   static void verify_if_often() PRODUCT_RETURN;

@@ -27,6 +27,18 @@ package java.lang.ref;
 
 
 /**
+ * SoftReference / WeakReference / PhantomReference
+ *        这三个对象的表示引用是越来越弱的，SoftReference通常用来实现内存敏感的缓存，当内存不足的时候，
+ * 为了获取可用内存空间会回收SoftReference所引用的对象，SoftReference本身会被放到创建时传入的ReferenceQueue中，JVM保证在抛出OutOfMemoryError异常前，清除所有的SoftReference。
+ *
+ * 将它们的区别概括为 3 个维度：
+ * 维度 1 - 对象可达性状态的区别： 强引用指向的对象是强可达的，只有强可达的对象才会认为是存活的对象，才能保证在垃圾收集的过程中不会被回收；
+ * 维度 2 - 垃圾回收策略的区别： 不同的引用类型的回收激进程度不同：
+ *       强引用指向的对象不会被回收；
+ *       软引用指向的对象在内存充足时不会被回收，在内存不足时会被回收；
+ *       弱引用和虚引用指向的对象无论在内存是否充足的时候都会被回收；
+ * 维度 3 - 感知垃圾回收时机： 当引用对象关联的实际对象被垃圾回收时，引用对象会进入关联的引用队列，程序可以通过观察引用队列的方式，感知对象被垃圾回收的时机。
+ *
  * Soft reference objects, which are cleared at the discretion of the garbage
  * collector in response to memory demand.  Soft references are most often used
  * to implement memory-sensitive caches.
@@ -63,17 +75,25 @@ package java.lang.ref;
 
 public class SoftReference<T> extends Reference<T> {
 
+    // SoftReference增加了两个属性
+
     /**
+     * 由垃圾回收器维护的表示时间的字段
+     *
      * Timestamp clock, updated by the garbage collector
      */
     static private long clock;
 
     /**
+     * 用来保存当前的clock
+     *
      * Timestamp updated by each invocation of the get method.  The VM may use
      * this field when selecting soft references to be cleared, but it is not
      * required to do so.
      */
     private long timestamp;
+
+    // SoftReference改写了原来的构造方法和get方法的实现，增加了timestamp属性的更新逻辑
 
     /**
      * Creates a new soft reference that refers to the given object.  The new

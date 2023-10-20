@@ -66,6 +66,7 @@
 #include "services/threadService.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/ticks.hpp"
+#include "utilities/slog.hpp"
 
 Dictionary*            SystemDictionary::_dictionary          = NULL;
 PlaceholderTable*      SystemDictionary::_placeholders        = NULL;
@@ -151,6 +152,7 @@ bool SystemDictionary::is_internal_format(Symbol* class_name) {
 // Parallel class loading check
 
 bool SystemDictionary::is_parallelCapable(Handle class_loader) {
+    // UnsyncloadClass 跟 AlwaysLockClassLoader 这些 Flag 在 globals.hpp 中定义，看下 java_lang_ClassLoader::parallelCapable 方法
   if (UnsyncloadClass || class_loader.is_null()) return true;
   if (AlwaysLockClassLoader) return false;
   return java_lang_ClassLoader::parallelCapable(class_loader());
@@ -181,6 +183,7 @@ bool SystemDictionary::is_ext_class_loader(Handle class_loader) {
 // Forwards to resolve_or_null
 
 Klass* SystemDictionary::resolve_or_fail(Symbol* class_name, Handle class_loader, Handle protection_domain, bool throw_error, TRAPS) {
+  slog_trace("进入hotspot/src/share/vm/classfile/systemDictionary.cpp中的SystemDictionary::resolve_or_fail函数...");
   Klass* klass = resolve_or_null(class_name, class_loader, protection_domain, THREAD);
   if (HAS_PENDING_EXCEPTION || klass == NULL) {
     KlassHandle k_h(THREAD, klass);
@@ -1104,9 +1107,16 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
                                              ClassFileStream* st,
                                              bool verify,
                                              TRAPS) {
+  slog_trace("进入hotspot/src/share/vm/classfile/systemDictionary.cpp中的SystemDictionary::resolve_from_stream函数...");
 
   // Classloaders that support parallelism, e.g. bootstrap classloader,
   // or all classloaders with UnsyncloadClass do not acquire lock here
+    //1. 判断是否需要对classloader加锁
+    // 判断是否允许并行加载类，并根据判断结果进行加锁。
+    // 如果允许并行加载，则不会对ClassLoader进行加锁，只对SystemDictionary加锁。
+    // 否则，便会利用 ObjectLocker 对ClassLoader 加锁，保证同一个ClassLoader在同一时刻只能加载一个类。
+    // ObjectLocker 会在其构造函数中获取锁，并在析构函数中释放锁。
+    // 允许并行加载的好处便是精细化了锁粒度，这样可以在同一时刻加载多个Class文件。
   bool DoObjectLock = true;
   if (is_parallelCapable(class_loader)) {
     DoObjectLock = false;
@@ -1115,8 +1125,10 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   ClassLoaderData* loader_data = register_loader(class_loader, CHECK_NULL);
 
   // Make sure we are synchronized on the class loader before we proceed
+    // 根据上面的判断结果，如果需要的话则对classloader加锁
   Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
   check_loader_lock_contention(lockObject, THREAD);
+    // 根据是否支持并发来加锁的逻辑在ObjectLocker的构造函数中
   ObjectLocker ol(lockObject, THREAD, DoObjectLock);
 
   TempNewSymbol parsed_name = NULL;
@@ -1130,8 +1142,10 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   // Callers are expected to declare a ResourceMark to determine
   // the lifetime of any updated (resource) allocated under
   // this call to parseClassFile
+    // 2. 解析文件流，生成 InstanceKlass。
   ResourceMark rm(THREAD);
   ClassFileParser parser(st);
+  slog_trace("即将调用parser.parseClassFile函数...");
   instanceKlassHandle k = parser.parseClassFile(class_name,
                                                 loader_data,
                                                 protection_domain,
@@ -1139,6 +1153,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
                                                 verify,
                                                 THREAD);
 
+    // 安全检查
   const char* pkg = "java/";
   size_t pkglen = strlen(pkg);
   if (!HAS_PENDING_EXCEPTION &&
@@ -1192,6 +1207,10 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
     // Add class just loaded
     // If a class loader supports parallel classloading handle parallel define requests
     // find_or_define_instance_class may return a different InstanceKlass
+      // 写入SystemDictionary
+      //
+      // SystemDictionary 是用来帮助保存 ClassLoader 加载过的类信息的。准确点说，SystemDictionary并不是一个容器，真正用来保存类信息的容器是 Dictionary，
+      // 每个ClassLoaderData 中都保存着一个私有的 Dictionary，而 SystemDictionary 只是一个拥有很多静态方法的工具类而已。
     if (is_parallelCapable(class_loader)) {
       k = find_or_define_instance_class(class_name, class_loader, k, THREAD);
     } else {
@@ -1200,6 +1219,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   }
 
   // Make sure we have an entry in the SystemDictionary on success
+    // 加载成功后查询SystemDictionary再确认一下，debug_only
   debug_only( {
     if (!HAS_PENDING_EXCEPTION) {
       assert(parsed_name != NULL, "parsed_name is still null?");
@@ -1347,8 +1367,10 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
 }
 #endif // INCLUDE_CDS
 
+// 实际调用加载的地方，由ClassLoader去加载类
 instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Handle class_loader, TRAPS) {
   instanceKlassHandle nh = instanceKlassHandle(); // null Handle
+    //如果class_loader为空，即Java类加载器无法加载该类了
   if (class_loader.is_null()) {
 
     // Search the shared system dictionary for classes preloaded into the
@@ -1361,13 +1383,16 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
 #endif
     }
 
+      //目标类未加载
     if (k.is_null()) {
       // Use VM class loader
+        //执行目标类的加载
       PerfTraceTime vmtimer(ClassLoader::perf_sys_classload_time());
       k = ClassLoader::load_classfile(class_name, CHECK_(nh));
     }
 
     // find_or_define_instance_class may return a different InstanceKlass
+      //如果已经加载则查找加载的类
     if (!k.is_null()) {
       k = find_or_define_instance_class(class_name, class_loader, k, CHECK_(nh));
     }
@@ -1404,12 +1429,15 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
                                jt->get_thread_stat()->perf_timers_addr(),
                                PerfClassTraceTime::CLASS_LOAD);
 
+      //构建JNI调用的参数，即类名
     Handle s = java_lang_String::create_from_symbol(class_name, CHECK_(nh));
     // Translate to external class name format, i.e., convert '/' chars to '.'
     Handle string = java_lang_String::externalize_classname(s, CHECK_(nh));
 
+      //调用的结果
     JavaValue result(T_OBJECT);
 
+      //结果的处理器
     KlassHandle spec_klass (THREAD, SystemDictionary::ClassLoader_klass());
 
     // Call public unsynchronized loadClass(String) directly for all class loaders
@@ -1429,6 +1457,7 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
     //
     // Added MustCallLoadClassInternal in case we discover in the field
     // a customer that counts on this call
+      // 调用Java的类加载器加载特定类
     if (MustCallLoadClassInternal && has_loadClassInternal()) {
       JavaCalls::call_special(&result,
                               class_loader,
@@ -1447,22 +1476,26 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
                               CHECK_(nh));
     }
 
+      //从加载结果中获取目标类oop
     assert(result.get_type() == T_OBJECT, "just checking");
     oop obj = (oop) result.get_jobject();
 
     // Primitive classes return null since forName() can not be
     // used to obtain any of the Class objects representing primitives or void
+      //检查访问权限
     if ((obj != NULL) && !(java_lang_Class::is_primitive(obj))) {
       instanceKlassHandle k =
                 instanceKlassHandle(THREAD, java_lang_Class::as_Klass(obj));
       // For user defined Java class loaders, check that the name returned is
       // the same as that requested.  This check is done for the bootstrap
       // loader when parsing the class file.
+        //检查类名是否一致
       if (class_name == k->name()) {
         return k;
       }
     }
     // Class is not found or has the wrong name, return NULL
+      //类加载失败，返回空对象
     return nh;
   }
 }
@@ -1566,7 +1599,9 @@ void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
 // potentially waste time reading and parsing the bytestream.
 // Note: VM callers should ensure consistency of k/class_name,class_loader
 instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* class_name, Handle class_loader, instanceKlassHandle k, TRAPS) {
+  slog_trace("进入hotspot/src/share/vm/classfile/systemDictionary.cpp中的SystemDictionary::find_or_define_instance_class函数...");
 
+    //1. 计算class/class_loader在dictionary与placeholders中的index
   instanceKlassHandle nh = instanceKlassHandle(); // null Handle
   Symbol*  name_h = k->name(); // passed in class_name may be null
   ClassLoaderData* loader_data = class_loader_data(class_loader);
@@ -1580,6 +1615,8 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
   PlaceholderEntry* probe;
 
   {
+      //2. 查找dictionary，确定是否已加载完成，如果已加载完成则直接返回
+      // 需要对SystemDictionary_lock加锁
     MutexLocker mu(SystemDictionary_lock, THREAD);
     // First check if class already defined
     if (UnsyncloadClass || (is_parallelDefine(class_loader))) {
@@ -1590,6 +1627,9 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
     }
 
     // Acquire define token for this class/classloader
+      //3. 查找placeholders
+      //   如果没有该class/class_loader，则写入
+      //   如果已有该class/class_loader，则阻塞
     probe = placeholders()->find_and_add(p_index, p_hash, name_h, loader_data, PlaceholderTable::DEFINE_CLASS, NULL, THREAD);
     // Wait if another thread defining in parallel
     // All threads wait - even those that will throw duplicate class: otherwise
@@ -1601,6 +1641,9 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
     // Only special cases allow parallel defines and can use other thread's results
     // Other cases fall through, and may run into duplicate defines
     // caught by finding an entry in the SystemDictionary
+      //4. 根据上一步的判断有以下两种结果
+      //   写入后，继续进行后续的操作
+      //   阻塞并被唤醒后，表明该类的加载已由其他线程完成，可以返回结果了
     if ((UnsyncloadClass || is_parallelDefine(class_loader)) && (probe->instance_klass() != NULL)) {
         placeholders()->find_and_remove(p_index, p_hash, name_h, loader_data, PlaceholderTable::DEFINE_CLASS, THREAD);
         SystemDictionary_lock->notify_all();
@@ -1615,11 +1658,13 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
     }
   }
 
+    //5. 真正写入SystemDictionary
   define_instance_class(k, THREAD);
 
   Handle linkage_exception = Handle(); // null handle
 
   // definer must notify any waiting threads
+    //6. 加载完成，清理placeholders并唤醒等待的线程
   {
     MutexLocker mu(SystemDictionary_lock, THREAD);
     PlaceholderEntry* probe = placeholders()->get_entry(p_index, p_hash, name_h, loader_data);
@@ -1941,6 +1986,7 @@ void SystemDictionary::initialize(TRAPS) {
   // Allocate private object used as system class loader lock
   _system_loader_lock_obj = oopFactory::new_intArray(0, CHECK);
   // Initialize basic classes
+    // 执行预加载
   initialize_preloaded_classes(CHECK);
 #if INCLUDE_JFR
   jfr_event_handler_proxy = SymbolTable::new_permanent_symbol("jdk/jfr/proxy/internal/EventHandlerProxy", CHECK);
@@ -1993,6 +2039,7 @@ void SystemDictionary::initialize_wk_klasses_until(WKID limit_id, WKID &start_id
 void SystemDictionary::initialize_preloaded_classes(TRAPS) {
   assert(WK_KLASS(Object_klass) == NULL, "preloaded classes should only be initialized once");
   // Preload commonly used klasses
+    // 预加载类
   WKID scan = FIRST_WKID;
   // first do Object, then String, Class
   if (UseSharedSpaces) {

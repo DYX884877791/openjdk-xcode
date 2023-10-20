@@ -29,6 +29,11 @@
 
 // Efficient swapping of data bytes from Java byte
 // ordering to native byte ordering and vice versa.
+// 针对基于Linux内核的ubuntu的x86架构下64位版本代码的实现。其中调用的bswap_<x>系列函数是gcc提供的几个内建函数。
+//  由于HotSpot需要跨平台兼容，所以会增加一些针对各平台的特定实现
+// 其中的AMD64表示x86架构下的64位指令集，所以x86-64位机器会选择AMD64位下的实现。
+// 如果是非AMD64位的系统，使用gcc内联汇编来实现相关的功能，其将x 的值读入某个寄存器,然后在指令中使用相应寄存器，并将该值移动到%ax中，
+// 然后通过xchg 交换%eax中的高低位。然后将最终的结果送入某个寄存器，最后将该结果送到ret中。　
 inline u2   Bytes::swap_u2(u2 x) {
 #ifdef AMD64
   return bswap_16(x);

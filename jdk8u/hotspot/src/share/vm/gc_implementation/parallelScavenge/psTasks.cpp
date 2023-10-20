@@ -46,6 +46,7 @@
 // ScavengeRootsTask
 //
 
+// 扫描root的任务
 void ScavengeRootsTask::do_it(GCTaskManager* manager, uint which) {
   assert(Universe::heap()->is_gc_active(), "called outside gc");
 

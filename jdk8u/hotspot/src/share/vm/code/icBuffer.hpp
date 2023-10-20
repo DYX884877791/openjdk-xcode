@@ -41,6 +41,7 @@
 //                            23 jump_to Gtemp, yyyy
 //                            4  nop
 
+// ICStub用来表示一段编译中间体代码
 class ICStub: public Stub {
  private:
   int                 _size;       // total size of the stub incl. code

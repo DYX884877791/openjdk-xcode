@@ -23,6 +23,7 @@
 # questions.
 #
 
+# 不管是build目录的Makefile还是源代码根目录的Makefile, 两者最终都是加载了Main.gmk文件进行运行编译的.
 ### This is the main part of the Makefile, for the normal case with SPEC specifying a single existing spec.gmk file.
 
 # Now load the spec

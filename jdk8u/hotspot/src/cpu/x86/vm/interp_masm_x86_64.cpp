@@ -37,6 +37,7 @@
 #include "runtime/biasedLocking.hpp"
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/thread.inline.hpp"
+#include "utilities/slog.hpp"
 
 
 // Implementation of InterpreterMacroAssembler
@@ -275,11 +276,15 @@ void InterpreterMacroAssembler::get_cache_entry_pointer_at_bcp(Register cache,
 void InterpreterMacroAssembler::get_method_counters(Register method,
                                                     Register mcs, Label& skip) {
   Label has_counters;
+    // 获取当前Method的_method_counters属性
   movptr(mcs, Address(method, Method::method_counters_offset()));
+    // 校验_method_counters属性是否非空，如果不为空则跳转到has_counters
   testptr(mcs, mcs);
   jcc(Assembler::notZero, has_counters);
+    // 如果为空，则调用build_method_counters方法创建一个新的MethodCounters
   call_VM(noreg, CAST_FROM_FN_PTR(address,
           InterpreterRuntime::build_method_counters), method);
+    // 将新的MethodCounters的地址放入mcs中，校验其是否为空，如果为空则跳转到skip
   movptr(mcs, Address(method,Method::method_counters_offset()));
   testptr(mcs, mcs);
   jcc(Assembler::zero, skip); // No MethodCounters allocated, OutOfMemory
@@ -385,6 +390,7 @@ void InterpreterMacroAssembler::push_d(XMMRegister r) {
 }
 
 void InterpreterMacroAssembler::pop(TosState state) {
+    // 根据不同的栈顶值类型从栈帧中pop一个对应类型的变量放到rax中
   switch (state) {
   case atos: pop_ptr();                 break;
   case btos:
@@ -470,10 +476,33 @@ void InterpreterMacroAssembler::dispatch_epilog(TosState state, int step) {
   dispatch_next(state, step);
 }
 
-void InterpreterMacroAssembler::dispatch_base(TosState state,
+/**
+ * 比如取一个字节大小的指令（如iconst_0、aload_0等都是一个字节大小的指令），那么InterpreterMacroAssembler::dispatch_next()函数生成的汇编代码如下 ：
+ * // 在generate_fixed_frame()函数中
+ * // 已经让%r13存储了bcp
+ * // %ebx中存储的是字节码的Opcode，也就是操作码
+ * movzbl 0x0(%r13),%ebx
+ *
+ * // $0x7ffff73ba4a0这个地址指向的
+ * // 是对应state状态下的一维数组，长度为256
+ * movabs $0x7ffff73ba4a0,%r10
+ *
+ * // 注意%r10中存储的是常量，根据计算公式
+ * // %r10+%rbx*8来获取指向存储入口地址的地址，
+ * // 通过*(%r10+%rbx*8)获取到入口地址，
+ * // 然后跳转到入口地址执行
+ * jmpq *(%r10,%rbx,8)
+ *
+ * %r10指向的是对应栈顶缓存状态state下的一维数组，长度为256，其中存储的值为opcode
+ *
+ */
+void InterpreterMacroAssembler::dispatch_base(TosState state, // 表示栈顶缓存状态
                                               address* table,
                                               bool verifyoop) {
+  slog_trace("进入hotspot/src/cpu/x86/vm/interp_masm_x86_64.cpp中的InterpreterMacroAssembler::dispatch_base函数...");
+    // 64位下是空实现
   verify_FPU(1, state);
+    // 校验栈帧size
   if (VerifyActivationFrameSize) {
     Label L;
     mov(rcx, rbp);
@@ -486,11 +515,19 @@ void InterpreterMacroAssembler::dispatch_base(TosState state,
     stop("broken stack frame");
     bind(L);
   }
+    // 如果栈顶缓存是对象，则校验对象
   if (verifyoop) {
     verify_oop(rax, state);
   }
+    // 获取当前栈顶状态字节码转发表的地址，保存到rscratch1
+    // 将table的地址拷贝到rscratch1寄存器中，这时的table地址实际上是DispatchTable的二维数组_table属性的第一维数组的地址
   lea(rscratch1, ExternalAddress((address)table));
-  jmp(Address(rscratch1, rbx, Address::times_8));
+  Address addr = Address(rscratch1, rbx, Address::times_8);
+    // 跳转到字节码对应的入口执行机器码指令
+    // address = rscratch1 + rbx * 8
+    // 因为DispatchTable中索引直接为字节码指令，从0开始，而rbx现在存的就是下一条指令，所以可以通过（DispatchTable首地址 + rbx * 每个地址所占字节）来索引。然后直接利用jmp指令跳往字节码对应机器指令的地址。
+    // 此时rbx是待执行的字节码，即跳转到对应字节码的汇编指令上，DispatchTable的二维数组_table属性的第二维就是字节码，即在rscratch1地址上偏移rbx*8个字节就可以找到对应的字节码指令实现了
+  jmp(addr);
 }
 
 void InterpreterMacroAssembler::dispatch_only(TosState state) {
@@ -505,12 +542,51 @@ void InterpreterMacroAssembler::dispatch_only_noverify(TosState state) {
   dispatch_base(state, Interpreter::normal_table(state), false);
 }
 
+// 执行字节码流的核心方法
+// 调用dispatch_next()函数执行Java方法的字节码，其实就是根据字节码找到对应的机器指令片段的入口地址来执行，这段机器码就是根据对应的字节码语义翻译过来的，
 
+// 从generate_fixed_frame()函数生成Java方法调用栈帧的时候，
+// 如果当前是第一次调用，那么r13指向的是字节码的首地址，
+// 即第一个字节码，此时的step参数为0
+
+// 比如取一个字节大小的指令（如iconst_0、aload_0等都是一个字节大小的指令），那么InterpreterMacroAssembler::dispatch_next()函数生成的汇编代码如下 ：
+// 在generate_fixed_frame()函数中
+// 已经让%r13存储了bcp
+// %ebx中存储的是字节码的Opcode，也就是操作码
+// movzbl 0x0(%r13),%ebx
+
+// $0x7ffff73ba4a0这个地址指向的
+// 是对应state状态下的一维数组，长度为256
+// movabs $0x7ffff73ba4a0,%r10
+
+// 注意%r10中存储的是常量，根据计算公式
+// %r10+%rbx*8来获取指向存储入口地址的地址，
+// 通过*(%r10+%rbx*8)获取到入口地址，
+// 然后跳转到入口地址执行
+// jmpq *(%r10,%rbx,8)
+
+// InterpreterMacroAssembler::dispatch_next开始执行第一个字节码的汇编指令，那么是如何跳转到下一个字节码指令了？
+// 答案在set_entry_points_for_all_bytes()方法调用的TemplateInterpreterGenerator::set_short_entry_points方法实现里，
+// 该方法用来实际生成_normal_table中各个字节码的调用入口地址
 void InterpreterMacroAssembler::dispatch_next(TosState state, int step) {
+    slog_trace("进入hotspot/src/cpu/x86/vm/interp_masm_x86_64.cpp中的InterpreterMacroAssembler::dispatch_next函数...");
   // load next bytecode (load before advancing r13 to prevent AGI)
+    // 会根据当前指令地址偏移，获取下条指令地址，并通过地址获得指令,放入rbx寄存器。
+    // 加载下一条字节码
+    // r13保存的就是方法的字节码的内存位置，step表示跳过的字节数，第一次调用时没有传step，step默认为0
   load_unsigned_byte(rbx, Address(r13, step));
   // advance r13
+    // r13指向字节码的首地址，当第1次调用时，参数step的值为0，那么load_unsigned_byte()函数从r13指向的内存中取一个字节的值，取出来的是字节码指令的操作码。
+    // 增加r13的步长，这样下次执行时就会取出来下一个字节码指令的操作码。
+
+    // 在当前字节码的位置，指针向前移动step宽度，
+    // 获取地址上的值，这个值是Opcode（范围1~202），存储到rbx
+    // step的值由字节码指令和它的操作数共同决定
+    // 自增r13供下一次字节码分派使用
+    // 将r13中的地址自增step
   increment(r13, step);
+    // 根据栈顶缓存状态查询派发表，跳转执行
+    // 返回当前栈顶状态的所有字节码入口点
   dispatch_base(state, Interpreter::dispatch_table(state));
 }
 
@@ -546,39 +622,54 @@ void InterpreterMacroAssembler::remove_activation(
   // get the value of _do_not_unlock_if_synchronized into rdx
   const Address do_not_unlock_if_synchronized(r15_thread,
     in_bytes(JavaThread::do_not_unlock_if_synchronized_offset()));
+    // 将当前线程的do_not_unlock_if_synchronized属性拷贝到rdx中
   movbool(rdx, do_not_unlock_if_synchronized);
+    // 将当前线程的do_not_unlock_if_synchronized属性置为false
   movbool(do_not_unlock_if_synchronized, false); // reset the flag
 
  // get method access flags
+    // 获取方法的access_flags，判断是否同步synchronized方法
   movptr(rbx, Address(rbp, frame::interpreter_frame_method_offset * wordSize));
   movl(rcx, Address(rbx, Method::access_flags_offset()));
   testl(rcx, JVM_ACC_SYNCHRONIZED);
+    // 如果不是跳转到unlocked
   jcc(Assembler::zero, unlocked);
 
   // Don't unlock anything if the _do_not_unlock_if_synchronized flag
   // is set.
   testbool(rdx);
+    // 如果是synchronized方法
+    // 如果_do_not_unlock_if_synchronized属性为true，则跳转到no_unlock
   jcc(Assembler::notZero, no_unlock);
 
   // unlock monitor
+    //如果_do_not_unlock_if_synchronized属性为false
+    //将保存在rax即栈顶缓存中的方法调用结果放入栈帧中
   push(state); // save result
 
   // BasicObjectLock will be first in list, since this is a
   // synchronized method. However, need to check that the object has
   // not been unlocked by an explicit monitorexit bytecode.
+    //获取BasicObjectLock的地址
   const Address monitor(rbp, frame::interpreter_frame_initial_sp_offset *
                         wordSize - (int) sizeof(BasicObjectLock));
   // We use c_rarg1 so that if we go slow path it will be the correct
   // register for unlock_object to pass to VM directly
+    //将关联的BasicObjectLock地址放入c_rarg1
   lea(c_rarg1, monitor); // address of first monitor
 
+    //将obj属性放入rax中
   movptr(rax, Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()));
   testptr(rax, rax);
+    //如果rax非空，即未解锁，则跳转到unlock
   jcc(Assembler::notZero, unlock);
 
+    //如果rax为空，即没有经过加锁
+    //将方法返回值重新放回rax中
   pop(state);
   if (throw_monitor_exception) {
     // Entry already unlocked, need to throw exception
+      //抛出异常，终止处理
     call_VM(noreg, CAST_FROM_FN_PTR(address,
                    InterpreterRuntime::throw_illegal_monitor_state_exception));
     should_not_reach_here();
@@ -594,7 +685,9 @@ void InterpreterMacroAssembler::remove_activation(
   }
 
   bind(unlock);
+    //执行解锁
   unlock_object(c_rarg1);
+    //将方法返回值重新放回rax中
   pop(state);
 
   // Check that for block-structured locking (i.e., that all locked
@@ -615,8 +708,10 @@ void InterpreterMacroAssembler::remove_activation(
     bind(restart);
     // We use c_rarg1 so that if we go slow path it will be the correct
     // register for unlock_object to pass to VM directly
+      //将monitor_block_top地址放入c_rarg1
     movptr(c_rarg1, monitor_block_top); // points to current entry, starting
                                   // with top-most entry
+      //monitor_block_bot的地址放入rbx
     lea(rbx, monitor_block_bot);  // points to word before bottom of
                                   // monitor block
     jmp(entry);
@@ -626,6 +721,7 @@ void InterpreterMacroAssembler::remove_activation(
 
     if (throw_monitor_exception) {
       // Throw exception
+        //抛出异常
       MacroAssembler::call_VM(noreg,
                               CAST_FROM_FN_PTR(address, InterpreterRuntime::
                                    throw_illegal_monitor_state_exception));
@@ -635,26 +731,34 @@ void InterpreterMacroAssembler::remove_activation(
       // Unlock does not block, so don't have to worry about the frame.
       // We don't have to preserve c_rarg1 since we are going to throw an exception.
 
+        //将rax中的方法调用结果入栈
       push(state);
+        //解锁
       unlock_object(c_rarg1);
+        //将rax中的方法调用结果出栈
       pop(state);
 
       if (install_monitor_exception) {
+          //install_monitor_exception为true，抛出异常
         call_VM(noreg, CAST_FROM_FN_PTR(address,
                                         InterpreterRuntime::
                                         new_illegal_monitor_state_exception));
       }
 
+        //install_monitor_exception为false，跳转到restart开始下一次循环
       jmp(restart);
     }
 
     bind(loop);
     // check if current entry is used
+      //判断BasicObjectLock的obj属性是否为NULL
     cmpptr(Address(c_rarg1, BasicObjectLock::obj_offset_in_bytes()), (int32_t) NULL);
+      //如果不是，说明还有未解锁的BasicObjectLock，即synchronized方法中用synchronized关键字修饰的代码块，跳转到exception
     jcc(Assembler::notEqual, exception);
 
     addptr(c_rarg1, entry_size); // otherwise advance to next entry
     bind(entry);
+      //比较两个地址是否一致，如果一致则表示到达了底部
     cmpptr(c_rarg1, rbx); // check if bottom reached
     jcc(Assembler::notEqual, loop); // if not at bottom then check this entry
   }
@@ -670,6 +774,7 @@ void InterpreterMacroAssembler::remove_activation(
 
   // remove activation
   // get sender sp
+    //移除当前栈帧，准备跳转到调用此方法的栈帧
   movptr(rbx,
          Address(rbp, frame::interpreter_frame_sender_sp_offset * wordSize));
   leave();                           // remove frame anchor
@@ -691,6 +796,7 @@ void InterpreterMacroAssembler::remove_activation(
 void InterpreterMacroAssembler::lock_object(Register lock_reg) {
   assert(lock_reg == c_rarg1, "The argument is only for looks. It must be c_rarg1");
 
+    //UseHeavyMonitors表示是否只使用重量级锁，默认为false，如果为true则调用InterpreterRuntime::monitorenter方法获取重量级锁
   if (UseHeavyMonitors) {
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
@@ -701,6 +807,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
     const Register swap_reg = rax; // Must use rax for cmpxchg instruction
     const Register obj_reg = c_rarg3; // Will contain the oop
 
+      // 其中BasicObjectLock是一个简单的数据结构
     const int obj_offset = BasicObjectLock::obj_offset_in_bytes();
     const int lock_offset = BasicObjectLock::lock_offset_in_bytes ();
     const int mark_offset = lock_offset +
@@ -709,30 +816,42 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
     Label slow_case;
 
     // Load object pointer into obj_reg %c_rarg3
+      //进入此方法目标obj要么是无锁状态，要么是对同一个对象的synchronized嵌套情形下的有锁状态
+      //将用于获取锁的实例oop拷贝到obj_reg中
     movptr(obj_reg, Address(lock_reg, obj_offset));
 
+      //UseBiasedLocking默认为true
     if (UseBiasedLocking) {
+        //首先尝试获取偏向锁，获取成功会跳转到done，否则走到slow_case
       biased_locking_enter(lock_reg, obj_reg, swap_reg, rscratch1, false, done, &slow_case);
     }
 
     // Load immediate 1 into swap_reg %rax
+      //如果UseBiasedLocking为false或者目标对象的锁不是偏向锁了会走此逻辑
     movl(swap_reg, 1);
 
     // Load (object->mark() | 1) into swap_reg %rax
+      //计算 object->mark() | 1，结果保存到swap_reg，跟1做或运算将其标记为无锁状态
     orptr(swap_reg, Address(obj_reg, 0));
 
     // Save (object->mark() | 1) into BasicLock's displaced header
+      //将(object->mark() | 1)的结果保存到BasicLock的displaced_header中，保存原来的对象头
     movptr(Address(lock_reg, mark_offset), swap_reg);
 
     assert(lock_offset == 0,
            "displached header must be first word in BasicObjectLock");
 
     if (os::is_MP()) lock();
+      //lock_reg即是里面的lock属性的地址
+      //如果是多核系统，通过lock指令保证cmpxchgp的操作是原子的，即只可能有一个线程操作obj对象头
+      //将obj的对象头同rax即swap_reg比较，如果相等将lock_reg写入obj对象头，即lock属性写入obj对象头，如果不等于则将obj对象头放入rax中
     cmpxchgptr(lock_reg, Address(obj_reg, 0));
     if (PrintBiasedLockingStatistics) {
+        //增加计数器
       cond_inc32(Assembler::zero,
                  ExternalAddress((address) BiasedLocking::fast_path_entry_count_addr()));
     }
+      //如果等于，说明obj的对象头是无锁状态的，此时跟1做或运算，结果不变
     jcc(Assembler::zero, done);
 
     // Test if the oopMark is an obvious stack pointer, i.e.,
@@ -744,18 +863,25 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
     // assuming both stack pointer and pagesize have their
     // least significant 3 bits clear.
     // NOTE: the oopMark is in swap_reg %rax as the result of cmpxchg
+      //如果不等于，说明obj的对象头要么是偏向锁，要么是重量级锁，多线程下可能其他线程已经获取了该对象的轻量级锁
+      //下面的汇编指令相当于执行如下判断，判断目标对应的对象头是否属于当前调用栈帧，如果是说明还是当前线程占有该轻量级锁，如果不是则说明其他线程占用了轻量级锁或者已经膨胀成重量级锁
     subptr(swap_reg, rsp);
     andptr(swap_reg, 7 - os::vm_page_size());
 
     // Save the test result, for recursive case, the result is zero
+      //在递归即synchronized嵌套使用的情形下，上述指令计算的结果就是0
+      //当BasicLock的displaced_header置为NULL
     movptr(Address(lock_reg, mark_offset), swap_reg);
 
     if (PrintBiasedLockingStatistics) {
+        //增加计数器
       cond_inc32(Assembler::zero,
                  ExternalAddress((address) BiasedLocking::fast_path_entry_count_addr()));
     }
+      //如果andptr的结果为0，说明当前线程已经获取了轻量级锁则跳转到done
     jcc(Assembler::zero, done);
 
+      //否则执行InterpreterRuntime::monitorenter将轻量级锁膨胀成重量级锁或者获取重量级锁
     bind(slow_case);
 
     // Call the runtime routine for slow case
@@ -783,6 +909,7 @@ void InterpreterMacroAssembler::unlock_object(Register lock_reg) {
   assert(lock_reg == c_rarg1, "The argument is only for looks. It must be rarg1");
 
   if (UseHeavyMonitors) {
+      //如果只使用重量级锁，UseHeavyMonitors默认为false
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorexit),
             lock_reg);
@@ -793,48 +920,63 @@ void InterpreterMacroAssembler::unlock_object(Register lock_reg) {
     const Register header_reg = c_rarg2;  // Will contain the old oopMark
     const Register obj_reg    = c_rarg3;  // Will contain the oop
 
+      //保存bcp，方便解锁异常时回滚
     save_bcp(); // Save in case of exception
 
     // Convert from BasicObjectLock structure to object and BasicLock
     // structure Store the BasicLock address into %rax
+      //将lock属性的地址复制到swap_reg
     lea(swap_reg, Address(lock_reg, BasicObjectLock::lock_offset_in_bytes()));
 
     // Load oop into obj_reg(%c_rarg3)
+      //将obj属性复制到obj_reg
     movptr(obj_reg, Address(lock_reg, BasicObjectLock::obj_offset_in_bytes()));
 
     // Free entry
+      //将obj属性置为NULL
     movptr(Address(lock_reg, BasicObjectLock::obj_offset_in_bytes()), (int32_t)NULL_WORD);
 
     if (UseBiasedLocking) {
+        //如果持有偏向锁，则解锁完成后跳转到done
+        // 这里的代码见 hotspot/src/cpu/x86/vm/macroAssembler_x86.cpp的biased_locking_exit方法
       biased_locking_exit(obj_reg, header_reg, done);
     }
 
     // Load the old header from BasicLock structure
+      //将BasicLock的displaced_header属性复制到header_reg中，即该对象原来的对象头
     movptr(header_reg, Address(swap_reg,
                                BasicLock::displaced_header_offset_in_bytes()));
 
     // Test for recursion
+      //判断这个是否为空
     testptr(header_reg, header_reg);
 
     // zero for recursive case
+      //如果为空说明这是对同一目标对象的synchronized嵌套情形，则跳转到done，等到外层的synchronized解锁恢复目标对象的对象头
     jcc(Assembler::zero, done);
 
     // Atomic swap back the old header
     if (os::is_MP()) lock();
+      //如果是多核系统则通过lock指令前缀将cmpxchg变成一个原子操作，即只能有一个线程同时操作obj的对象头
+      //将obj的对象头同rax即swap_reg，即lock属性地址比较，如果相等把header_reg写入到obj的对象头中即恢复对象头，如果不等把obj对象头写入rax中
     cmpxchgptr(header_reg, Address(obj_reg, 0));
 
     // zero for recursive case
+      //如果相等，说明还是轻量级锁，解锁完成
     jcc(Assembler::zero, done);
 
     // Call the runtime routine for slow case.
+      //如果不等于，说明轻量级锁被膨胀成重量级锁，恢复obj属性，因为上面将该属性置为NULL
     movptr(Address(lock_reg, BasicObjectLock::obj_offset_in_bytes()),
          obj_reg); // restore obj
+      //调用InterpreterRuntime::monitorexit，完成重量级锁退出
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorexit),
             lock_reg);
 
     bind(done);
 
+      //恢复bcp
     restore_bcp();
   }
 }
@@ -1499,13 +1641,19 @@ void InterpreterMacroAssembler::increment_mask_and_jump(Address counter_addr,
                                                         int increment, int mask,
                                                         Register scratch, bool preloaded,
                                                         Condition cond, Label* where) {
+    //preloaded一般传false
   if (!preloaded) {
+      //将_counter属性的值复制到scratch，即rcx中
     movl(scratch, counter_addr);
   }
+    //将_counter属性增加increment
   incrementl(scratch, increment);
+    //将scratch寄存器中的值写入到_counter属性
   movl(counter_addr, scratch);
+    //将mask与scratch中的值做且运算
   andl(scratch, mask);
   if (where != NULL) {
+      //如果且运算的结果是0，即达到阈值的时候，则跳转到where，即overflow处
     jcc(cond, *where);
   }
 }

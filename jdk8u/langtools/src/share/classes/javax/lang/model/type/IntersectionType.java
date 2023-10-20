@@ -36,6 +36,7 @@ import java.util.List;
  * type.  As of {@link javax.lang.model.SourceVersion#RELEASE_8
  * RELEASE_8}, this is represented by an {@code IntersectionType} with
  * {@code Number} and {@code Runnable} as its bounds.
+ * 交集类型可以隐式或显式地声明在程序中
  *
  * @implNote Also as of {@link
  * javax.lang.model.SourceVersion#RELEASE_8 RELEASE_8}, in the
@@ -48,6 +49,7 @@ public interface IntersectionType extends TypeMirror {
 
     /**
      * Return the bounds comprising this intersection type.
+     * 获得对应的交集类型
      *
      * @return the bounds of this intersection types.
      */

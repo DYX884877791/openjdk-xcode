@@ -30,13 +30,19 @@
 ###############################################################################
 
 
+# 里面是一个标准的Autoconf 输出文件的开局: configure.ac ,然后引入了一大堆的自定义宏:
+# 标准 auto_conf输入文件的开始方式.
+# 定义了需要的最低版本的AutoConf
+# 必须引用宏: AC_INIT ,定义软件版本信息
 AC_PREREQ([2.69])
 AC_INIT(OpenJDK, jdk8, build-dev@openjdk.java.net,,http://openjdk.java.net)
 
+# 定义autoconf工作时的辅助脚本的位置
 AC_CONFIG_AUX_DIR([$TOPDIR/common/autoconf/build-aux])
 m4_include([build-aux/pkg.m4])
 
 # Include these first...
+# 引入一堆的自定义宏.(引入宏的定义.)
 m4_include([basics.m4])
 m4_include([basics_windows.m4])
 m4_include([builddeps.m4])
@@ -44,6 +50,7 @@ m4_include([builddeps.m4])
 m4_include([boot-jdk.m4])
 m4_include([build-performance.m4])
 m4_include([flags.m4])
+# 比如，在引用help.m4这个宏时，就是把这个宏的内容展开作为输出.最终写到了generated-configure.sh
 m4_include([help.m4])
 m4_include([jdk-options.m4])
 m4_include([libraries.m4])
@@ -52,6 +59,7 @@ m4_include([source-dirs.m4])
 m4_include([toolchain.m4])
 m4_include([toolchain_windows.m4])
 
+# 调用一堆只展开一次的宏
 AC_DEFUN_ONCE([CUSTOM_EARLY_HOOK])
 AC_DEFUN_ONCE([CUSTOM_LATE_HOOK])
 AC_DEFUN_ONCE([CUSTOM_CONFIG_OUTPUT_GENERATED_HOOK])
@@ -62,6 +70,7 @@ AC_DEFUN_ONCE([CUSTOM_CONFIG_OUTPUT_GENERATED_HOOK])
 #CUSTOM_AUTOCONF_INCLUDE
 
 # Do not change or remove the following line, it is needed for consistency checks:
+# 文件生成的时间变量.
 DATE_WHEN_GENERATED=@DATE_WHEN_GENERATED@
 
 ###############################################################################
@@ -139,6 +148,9 @@ JDKOPT_SETUP_JDK_VERSION_NUMBERS
 ###############################################################################
 #
 # Setup BootJDK, used to bootstrap the build.
+# 看一下我们平时运行configure时会指定一个配置项就是指定BOOTJDK的路径. 参数名为:--with-boot-jdk, 我们看一下这个配置项是怎么引入进来并且生效的
+# 这里是对两个宏定义的调用(展开),我们关心的应该是第一个,第二个宏看名称应该是处理JDK启动参数的宏. 所以我们先只看下第一个宏:
+# BOOTJDK_SETUP_BOOT_JDK，位于common/autoconf/boot-jdk.m4
 #
 ###############################################################################
 

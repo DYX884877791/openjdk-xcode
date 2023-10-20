@@ -106,11 +106,20 @@ void HandleArea::oops_do(OopClosure* f) {
   if (_prev != NULL) _prev->oops_do(f);
 }
 
+/**
+ * 参考HandleArea等的描述可知，创建一个新的HandleMark以后，新的HandleMark保存当前线程的area的当前chunk，_hwm ，_max等属性，
+ * 执行方法期间新创建的Handle实例是在当前线程的area中分配内存，这会导致当前线程的area的当前chunk，_hwm ，_max等属性发生变更，
+ * 因此方法执行完成需要将这些属性恢复成方法调用前的状态，并把方法调用过程中新创建的Handle实例的内存给释放掉。
+ *
+ */
 void HandleMark::initialize(Thread* thread) {
+    //将当前线程的_area的属性保存到新的HandleMark实例中
   _thread = thread;
   // Save area
+    // 保存当前线程的area
   _area  = thread->handle_area();
   // Save current top
+    // 保存当前线程的area的相关属性
   _chunk = _area->_chunk;
   _hwm   = _area->_hwm;
   _max   = _area->_max;
@@ -120,6 +129,7 @@ void HandleMark::initialize(Thread* thread) {
   debug_only(Atomic::inc(&_nof_handlemarks);)
 
   // Link this in the thread
+    //将当前HandleMark实例同线程关联起来
   set_previous_handle_mark(thread->last_handle_mark());
   thread->set_last_handle_mark(this);
 }
@@ -127,6 +137,7 @@ void HandleMark::initialize(Thread* thread) {
 
 HandleMark::~HandleMark() {
   HandleArea* area = _area;   // help compilers with poor alias analysis
+    //检查当前线程的HandleArea是否改变
   assert(area == _thread->handle_area(), "sanity check");
   assert(area->_handle_mark_nesting > 0, "must stack allocate HandleMarks" );
   debug_only(area->_handle_mark_nesting--);
@@ -157,16 +168,22 @@ HandleMark::~HandleMark() {
 #endif
 
   // Delete later chunks
+    //如果存在下一个Chunk
   if( _chunk->next() ) {
     // reset arena size before delete chunks. Otherwise, the total
     // arena size could exceed total chunk size
+      //校验area当前的大小大于HandleMark在构造函数中保存的大小
     assert(area->size_in_bytes() > size_in_bytes(), "Sanity check");
+      //恢复area的大小到HandleMark构造时的状态
     area->set_size_in_bytes(size_in_bytes());
+      //删除当前Chunk以后的所有Chunk，即在方法调用期间新创建的Chunk
     _chunk->next_chop();
   } else {
+      //如果没有下一个Chunk，说明未分配新的Chunk，则area的大小应该保持不变
     assert(area->size_in_bytes() == size_in_bytes(), "Sanity check");
   }
   // Roll back arena to saved top markers
+    //恢复area的属性到HandleMark构造时的状态
   area->_chunk = _chunk;
   area->_hwm = _hwm;
   area->_max = _max;
@@ -179,6 +196,7 @@ HandleMark::~HandleMark() {
 #endif
 
   // Unlink this from the thread
+    //解除当前HandleMark跟线程的关联
   _thread->set_last_handle_mark(previous_handle_mark());
 }
 

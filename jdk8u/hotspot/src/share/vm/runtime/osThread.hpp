@@ -58,6 +58,7 @@ enum ThreadState {
 // the main thread into its own Thread at will.
 
 
+// C++层面对操作系统线程的抽象...
 class OSThread: public CHeapObj<mtThread> {
   friend class VMStructs;
  private:

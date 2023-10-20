@@ -36,14 +36,48 @@
 #ifndef _JAVASOFT_JNI_H_
 #define _JAVASOFT_JNI_H_
 
+/*
+ * JNI 机制
+ * JNI 是 Java Native Interface 的缩写，它提供了若干的 API 实现了Java和其他语言的通信（主要是C和C++）。
+ *
+ * JNI的适用场景：
+ *  当我们有一些旧的库，已经使用C语言编写好了，如果要移植到Java上来，非常浪费时间，而JNI可以支持Java程序与C语言编写的库进行交互，这样就不必要进行移植了。
+ *  或者是与硬件、操作系统进行交互、提高程序的性能等，都可以使用JNI。需要注意的一点是需要保证本地代码能工作在任何Java虚拟机环境。
+ *
+ * JNI的副作用：一旦使用JNI，Java程序将丢失了Java平台的两个优点：
+ *
+ *  1、 程序不再跨平台，要想跨平台，必须在不同的系统环境下程序编译配置本地语言部分。
+ *  2、程序不再是绝对安全的，本地代码的使用不当可能会导致整个程序崩溃。一个通用规则是，调用本地方法应该集中在少数的几个类当中，这样就降低了Java和其他语言之间的耦合。
+ *
+ *
+ *
+ * 该头文件定义了如下内容：
+ *
+ * 1.  JNI的类型：如jboolean、jshort和jobject等；
+ * 2.  一些枚举和常量：如JNI_FALSE、JNI_TRUE和JNI函数返回值等；
+ * 3. JNI接口指针：对C语言，JNIEnv即是JNI接口指针，它指向JNINativeInterface_结构体，该结构体定义了所有JNI函数的指针
+ *
+ */
 #include <stdio.h>
 #include <stdarg.h>
 
 /* jni_md.h contains the machine-dependent typedefs for jbyte, jint
    and jlong */
 
+/*
+ * 上文jni.h除了包含两个系统头文件外，紧接着便包含了jni_md.h文件，md表示machine-dependent。jni_md.h定义了平台相关的类型
+ * 如jbyte、jint和jlong，还有JNIEXPORT、JNIIMPORT和JNICALL宏，因此该文件在不同平台对应的目录均有出现。不同平台该文件路径如下表所示：
+ *
+ * 平台类型	        相对路径
+ * Linux/Solaris	jdk/src/solaris/javavm/export/jni_md.h
+ * Windows	        jdk/src/windows/javavm/export/jni_md.h
+ * Mac OS X	    jdk/src/macosx/javavm/export/jni_md.h
+ */
 #include "jni_md.h"
 
+/*
+ * __cplusplus宏表示当前系统支持C++，通常服务器操作系统如CentOS都支持C++，只有嵌入式这类微型操作系统不支持C++，纯C开发，我们只关注C++下的JavaVM实现即可，进一步查看两者的具体定义可知，JavaVM_只是对JNIInvokeInterface_下的方法指针做了一个包装，将其转换成类方法而已
+ */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -768,6 +802,19 @@ struct JNINativeInterface_ {
 };
 
 /*
+ * 深入去看JNIEnv结构体的话，不难发现，这个结构体当中包含了几乎有所的JNI函数，大致可以分为如下几类：
+ *
+ * 函数名	备注
+ * NewObject	创建Java类中的对象
+ * NewString	创建Java类中的String对象
+ * New<Type>Array	创建类型为Type的数组对象
+ * Get<Type>Field	获取类型为Type的字段
+ * Set<Type>Field	设置类型为Type的字段的值
+ * GetStatic<Type>Field	获取类型为Type的static的字段
+ * SetStatic<Type>Field	设置类型为Type的static的字段的值
+ * Call<Type>Method	调用返回类型为Type的方法
+ * CallStatic<Type>Method	调用返回值类型为Type的static方法
+ *
  * We use inlined functions for C++ so that programmers can write:
  *
  *    env->FindClass("java/lang/String")

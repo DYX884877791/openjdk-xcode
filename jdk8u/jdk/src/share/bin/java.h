@@ -76,8 +76,10 @@
 
 /*
  * Pointers to the needed JNI invocation API, initialized by LoadJavaVM.
+ * CreateJavaVM_t是一个函数指针，接收三个参数，返回值类型为jint，下同
  */
 typedef jint (JNICALL *CreateJavaVM_t)(JavaVM **pvm, void **env, void *args);
+// 对应定义在share\vm\prims\jni.cpp文件中的JNI_GetDefaultJavaVMInitArgs函数
 typedef jint (JNICALL *GetDefaultJavaVMInitArgs_t)(void *args);
 typedef jint (JNICALL *GetCreatedJavaVMs_t)(JavaVM **vmBuf, jsize bufLen, jsize *nVMs);
 

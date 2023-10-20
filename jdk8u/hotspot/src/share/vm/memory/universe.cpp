@@ -167,6 +167,7 @@ void Universe::basic_type_classes_do(void f(Klass*)) {
   f(doubleArrayKlassObj());
 }
 
+// oops_do用于以Universe定义的各种oop作为根节点遍历引用该oop的对象，垃圾回收时调用
 void Universe::oops_do(OopClosure* f, bool do_all) {
 
   f->do_oop((oop*) &_int_mirror);
@@ -250,24 +251,34 @@ void initialize_basic_type_klass(Klass* k, TRAPS) {
   Klass* ok = SystemDictionary::Object_klass();
   if (UseSharedSpaces) {
     ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
+      //检查k的超类是否是Object
     assert(k->super() == ok, "u3");
+      //设置Klass的_class_loader_data，_java_mirror等属性
     k->restore_unshareable_info(loader_data, Handle(), CHECK);
   } else {
+      //将k的超类设置为Object
     k->initialize_supers(ok, CHECK);
   }
+    //将k加入到其父类Object的子类链表上
   k->append_to_sibling_list();
 }
 
 void Universe::genesis(TRAPS) {
   ResourceMark rm;
 
+    //FlagSetting通过构造函数临时将某个bool属性设置为指定值，在析构函数中将其恢复成原来的值
   { FlagSetting fs(_bootstrapping, true);
 
+      //获取锁Compile_lock
+      // 首先是基本型的初始化
     { MutexLocker mc(Compile_lock);
 
       // determine base vtable size; without that we cannot create the array klasses
+        // compute_base_vtable_size方法计算了虚表的基础大小
+        //设置_base_vtable_size属性，实际就是取Object类的虚函数表的大小
       compute_base_vtable_size();
 
+        //UseSharedSpaces表示为元数据使用共享空间，默认为true
       if (!UseSharedSpaces) {
         _boolArrayKlassObj      = TypeArrayKlass::create_klass(T_BOOLEAN, sizeof(jboolean), CHECK);
         _charArrayKlassObj      = TypeArrayKlass::create_klass(T_CHAR,    sizeof(jchar),    CHECK);
@@ -289,6 +300,7 @@ void Universe::genesis(TRAPS) {
 
         ClassLoaderData* null_cld = ClassLoaderData::the_null_class_loader_data();
 
+          // MetadataFactory::new_array方法初始化了一些比如Klass和InstanceKlass的数组,初始大小都为0
         _the_array_interfaces_array = MetadataFactory::new_array<Klass*>(null_cld, 2, NULL, CHECK);
         _the_empty_int_array        = MetadataFactory::new_array<int>(null_cld, 0, CHECK);
         _the_empty_short_array      = MetadataFactory::new_array<u2>(null_cld, 0, CHECK);
@@ -297,8 +309,14 @@ void Universe::genesis(TRAPS) {
       }
     }
 
+      // vmSymbols::initialize方法初始化了vm符号系统
+      //初始化符号表
     vmSymbols::initialize(CHECK);
 
+      /**
+       * SystemDictionary::initialize方法初始化了系统的字典,主要内容就是设置类型和其偏移量,比如invoke_method_table代表的调用表,
+       * 同时也解析和设置了常用类型,包括基本类型,软引用类型,弱饮用类型等,之后为各个组成设置偏移量,比如class字节码中类和引用的偏移量.
+       */
     SystemDictionary::initialize(CHECK);
 
     Klass* ok = SystemDictionary::Object_klass();
@@ -308,6 +326,7 @@ void Universe::genesis(TRAPS) {
 
     if (UseSharedSpaces) {
       // Verify shared interfaces array.
+        //_the_array_interfaces_array表示数组对应的类默认实现的接口类，即Cloneable和Serializable接口
       assert(_the_array_interfaces_array->at(0) ==
              SystemDictionary::Cloneable_klass(), "u3");
       assert(_the_array_interfaces_array->at(1) ==
@@ -318,6 +337,8 @@ void Universe::genesis(TRAPS) {
       _the_array_interfaces_array->at_put(1, SystemDictionary::Serializable_klass());
     }
 
+      // initialize_basic_type_klass初始化基本类型.
+      //boolArrayKlassObj方法返回_boolArrayKlassObj属性，initialize_basic_type_klass用来初始化Klass部分属性
     initialize_basic_type_klass(boolArrayKlassObj(), CHECK);
     initialize_basic_type_klass(charArrayKlassObj(), CHECK);
     initialize_basic_type_klass(singleArrayKlassObj(), CHECK);
@@ -328,6 +349,11 @@ void Universe::genesis(TRAPS) {
     initialize_basic_type_klass(longArrayKlassObj(), CHECK);
   } // end of core bootstrapping
 
+    /**
+     * 初始化_objectArrayKlassObj
+     * _objectArrayKlassObj的赋值
+     *     同时使用了新的和老的赋值方式
+     */
   // Maybe this could be lifted up now that object array can be initialized
   // during the bootstrapping.
 
@@ -340,6 +366,8 @@ void Universe::genesis(TRAPS) {
   // ordinary object arrays, _objectArrayKlass will be loaded when
   // SystemDictionary::initialize(CHECK); is run. See the extra check
   // for Object_klass_loaded in objArrayKlassKlass::allocate_objArray_klass_impl.
+    // 调用表示Object类的InstanceKlass类的array_klass()方法
+    // 调用array_klass()方法时传递的参数1表示创建一维数组。调用表示Object类的InstanceKlass对象的方法创建的，所以Object数组的创建要依赖于InstanceKlass对象（表示Object类）进行创建。
   _objectArrayKlassObj = InstanceKlass::
     cast(SystemDictionary::Object_klass())->array_klass(1, CHECK);
   // OLD
@@ -354,6 +382,7 @@ void Universe::genesis(TRAPS) {
   // Only 1.3 or later has the java.lang.Shutdown class.
   // Only 1.4 or later has the java.lang.CharSequence interface.
   // Only 1.5 or later has the java.lang.management.MemoryUsage class.
+    // 根据某些类是否存在来初步判断JDK的版本
   if (JDK_Version::is_partially_initialized()) {
     uint8_t jdk_version;
     Klass* k = SystemDictionary::resolve_or_null(
@@ -378,6 +407,7 @@ void Universe::genesis(TRAPS) {
     } else {
       jdk_version = 5;
     }
+      //初始化JDK_Version
     JDK_Version::fully_initialize(jdk_version);
   }
 
@@ -422,6 +452,7 @@ void Universe::genesis(TRAPS) {
   #endif
 
   // Initialize dependency array for null class loader
+    //初始化ClassLoaderData的_dependencies属性
   ClassLoaderData::the_null_class_loader_data()->init_dependencies(CHECK);
 
 }
@@ -450,6 +481,7 @@ void Universe::init_self_patching_vtbl_list(void** list, int count) {
   { ConstantPool o;           add_vtable(list, &n, &o, count); }
 }
 
+// 初始化基本类型对应的mirror_klass属性，如_int_mirror，_float_mirror等
 void Universe::initialize_basic_type_mirrors(TRAPS) {
     assert(_int_mirror==NULL, "basic type mirrors already initialized");
     _int_mirror     =
@@ -614,43 +646,60 @@ void* Universe::non_oop_word() {
   return (void*)_non_oop_bits;
 }
 
+/**
+ *  universe_init方法的执行依赖于codeCache_init 和stubRoutines_init 方法的成功执行，是最新被调用的universe初始化方法，主要用来初始化collectedHeap，Metaspace和TLAB等组件
+ */
 jint universe_init() {
   assert(!Universe::_fully_initialized, "called after initialize_vtables");
+    //校验参数的合法
   guarantee(1 << LogHeapWordSize == sizeof(HeapWord),
          "LogHeapWordSize is incorrect.");
+    //sizeof(oop)和sizeof(HeapWord)实际都是一个指针的大小
   guarantee(sizeof(oop) >= sizeof(HeapWord), "HeapWord larger than oop?");
   guarantee(sizeof(oop) % sizeof(HeapWord) == 0,
             "oop size is not not a multiple of HeapWord size");
   TraceTime timer("Genesis", TraceStartupTime);
+    //计算部分重要的系统类的关键属性在oop中的偏移量，方便快速根据内存偏移读取属性值
   JavaClasses::compute_hard_coded_offsets();
 
+    //初始化collectedHeap和TLAB
+    // 此方法对所有的垃圾回收方式进行了全局的初始化
   jint status = Universe::initialize_heap();
   if (status != JNI_OK) {
     return status;
   }
 
+    //初始化负责元空间内存管理的Metaspace
+    // 元空间初始化,包括GC和内存大小等
   Metaspace::global_initialize();
 
   // Create memory for metadata.  Must be after initializing heap for
   // DumpSharedSpaces.
+    // 初始化ClassLoaderData的_the_null_class_loader_data属性
+    // 主要是在元空间添加bootstrap加载器的信息和引用.
   ClassLoaderData::init_null_class_loader_data();
 
   // We have a heap so create the Method* caches before
   // Metaspace::initialize_shared_spaces() tries to populate them.
+    // 初始化属性
   Universe::_finalizer_register_cache = new LatestMethodCache();
   Universe::_loader_addClass_cache    = new LatestMethodCache();
   Universe::_pd_implies_cache         = new LatestMethodCache();
   Universe::_throw_illegal_access_error_cache = new LatestMethodCache();
 
+    //UseSharedSpaces默认为true，表示为元数据使用共享空间
   if (UseSharedSpaces) {
     // Read the data structures supporting the shared spaces (shared
     // system dictionary, symbol table, etc.).  After that, access to
     // the file (other than the mapped regions) is no longer needed, and
     // the file is closed. Closing the file does not affect the
     // currently mapped regions.
+      //初始化共享空间
     MetaspaceShared::initialize_shared_spaces();
     StringTable::create_table();
   } else {
+      // 创建符号表
+      //不使用共享空间时，分别初始化各个组件，SymbolTable表示符号表，StringTable表示字符串表
     SymbolTable::create_table();
     StringTable::create_table();
     ClassLoader::create_package_info_table();
@@ -680,20 +729,26 @@ static const uint64_t UnscaledOopHeapMax = (uint64_t(max_juint) + 1);
 // OopEncodingHeapMax == UnscaledOopHeapMax << LogMinObjAlignmentInBytes;
 
 char* Universe::preferred_heap_base(size_t heap_size, size_t alignment, NARROW_OOP_MODE mode) {
+    //校验这些参数已经是取整过了
   assert(is_size_aligned((size_t)OopEncodingHeapMax, alignment), "Must be");
   assert(is_size_aligned((size_t)UnscaledOopHeapMax, alignment), "Must be");
   assert(is_size_aligned(heap_size, alignment), "Must be");
 
+    //HeapBaseMinAddress表示Java堆的内存基地址，x86下默认是2G，将HeapBaseMinAddress按照alignment取整
   uintx heap_base_min_address_aligned = align_size_up(HeapBaseMinAddress, alignment);
 
   size_t base = 0;
 #ifdef _LP64
+    //如果是64位系统
+    //如果开启指针压缩，64位下默认为true
   if (UseCompressedOops) {
+      //校验mode合法
     assert(mode == UnscaledNarrowOop  ||
            mode == ZeroBasedNarrowOop ||
            mode == HeapBasedNarrowOop, "mode is invalid");
     const size_t total_size = heap_size + heap_base_min_address_aligned;
     // Return specified base for the first request.
+      //根据不同的NARROW_OOP_MODE分别计算
     if (!FLAG_IS_DEFAULT(HeapBaseMinAddress) && (mode == UnscaledNarrowOop)) {
       base = heap_base_min_address_aligned;
 
@@ -771,9 +826,11 @@ char* Universe::preferred_heap_base(size_t heap_size, size_t alignment, NARROW_O
   return (char*)base; // also return NULL (don't care) for 32-bit VM
 }
 
+// Java堆的初始化入口
 jint Universe::initialize_heap() {
 
   if (UseParallelGC) {
+      //如果使用ParallelGC
 #if INCLUDE_ALL_GCS
     Universe::_collectedHeap = new ParallelScavengeHeap();
 #else  // INCLUDE_ALL_GCS
@@ -781,6 +838,7 @@ jint Universe::initialize_heap() {
 #endif // INCLUDE_ALL_GCS
 
   } else if (UseG1GC) {
+      //如果使用G1GC
 #if INCLUDE_ALL_GCS
     G1CollectorPolicyExt* g1p = new G1CollectorPolicyExt();
     g1p->initialize_all();
@@ -791,8 +849,10 @@ jint Universe::initialize_heap() {
 #endif // INCLUDE_ALL_GCS
 
   } else {
+      //如果使用分代回收
     GenCollectorPolicy *gc_policy;
 
+      //不同的回收策略
     if (UseSerialGC) {
       gc_policy = new MarkSweepPolicy();
     } else if (UseConcMarkSweepGC) {
@@ -813,8 +873,10 @@ jint Universe::initialize_heap() {
     Universe::_collectedHeap = new GenCollectedHeap(gc_policy);
   }
 
+    //设置TLAB的最大值
   ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
 
+    //初始化collectedHeap
   jint status = Universe::heap()->initialize();
   if (status != JNI_OK) {
     return status;
@@ -828,6 +890,7 @@ jint Universe::initialize_heap() {
     // See needs_explicit_null_check.
     // Only set the heap base for compressed oops because it indicates
     // compressed oops for pstack code.
+      //根据不同的堆内存大小设置narrow_oop_shift
     if (((uint64_t)Universe::heap()->reserved_region().end() > OopEncodingHeapMax)) {
       // Can't reserve heap below 32Gb.
       // keep the Universe::narrow_oop_base() set in Universe::reserve_heap()
@@ -857,10 +920,12 @@ jint Universe::initialize_heap() {
     Universe::set_narrow_ptrs_base(Universe::narrow_oop_base());
 
     if (PrintCompressedOopsMode || (PrintMiscellaneous && Verbose)) {
+        //打印日志
       Universe::print_compressed_oops_mode(tty);
     }
   }
   // Universe::narrow_oop_base() is one page below the heap.
+    //校验Universe初始化是否正确
   assert((intptr_t)Universe::narrow_oop_base() <= (intptr_t)(Universe::heap()->base() -
          os::vm_page_size()) ||
          Universe::narrow_oop_base() == NULL, "invalid value");
@@ -874,6 +939,7 @@ jint Universe::initialize_heap() {
   if (UseTLAB) {
     assert(Universe::heap()->supports_tlab_allocation(),
            "Should support thread-local allocation buffers");
+      //TLAB的初始化
     ThreadLocalAllocBuffer::startup_initialization();
   }
   return JNI_OK;
@@ -897,24 +963,32 @@ void Universe::print_compressed_oops_mode(outputStream* st) {
 }
 
 // Reserve the Java heap, which is now the same for all GCs.
+// reserve_heap方法用于给Java堆申请一段连续的内存空间，同时计算在开启指针压缩时的指针基地址，所有的垃圾回收器在初始化的时候都会调用此方法
 ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
+    //校验参数
   assert(alignment <= Arguments::conservative_max_heap_alignment(),
       err_msg("actual alignment " SIZE_FORMAT " must be within maximum heap alignment " SIZE_FORMAT,
           alignment, Arguments::conservative_max_heap_alignment()));
+    //heap_size取整
   size_t total_reserved = align_size_up(heap_size, alignment);
+    //使用指针压缩时堆空间不能超过OopEncodingHeapMax，是计算出来的，32G
   assert(!UseCompressedOops || (total_reserved <= (OopEncodingHeapMax - os::vm_page_size())),
       "heap size is too big for compressed oops");
 
+    //是否使用大内存页，UseLargePages默认是false
   bool use_large_pages = UseLargePages && is_size_aligned(alignment, os::large_page_size());
   assert(!UseLargePages
       || UseParallelGC
       || use_large_pages, "Wrong alignment to use large pages");
 
+    //计算Java堆的基地址
   char* addr = Universe::preferred_heap_base(total_reserved, alignment, Universe::UnscaledNarrowOop);
 
+    //在执行构造方法的时候会向操作系统申请一段连续的内存空间
   ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, addr);
 
   if (UseCompressedOops) {
+      //如果申请失败，即该地址已经被分配了，则重试重新申请，每次重试时使用的NARROW_OOP_MODE不同
     if (addr != NULL && !total_rs.is_reserved()) {
       // Failed to reserve at specified address - the requested memory
       // region is taken already, for example, by 'java' launcher.
@@ -926,6 +1000,7 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
 
       if (addr != NULL && !total_rs0.is_reserved()) {
         // Failed to reserve at specified address again - give up.
+          //继续重试
         addr = Universe::preferred_heap_base(total_reserved, alignment, Universe::HeapBasedNarrowOop);
         assert(addr == NULL, "");
 
@@ -938,6 +1013,7 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
     }
   }
 
+    //重试依然失败，抛出异常
   if (!total_rs.is_reserved()) {
     vm_exit_during_initialization(err_msg("Could not reserve enough space for " SIZE_FORMAT "KB object heap", total_reserved/K));
     return total_rs;
@@ -946,6 +1022,7 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
   if (UseCompressedOops) {
     // Universe::initialize_heap() will reset this to NULL if unscaled
     // or zero-based narrow oops are actually used.
+      //设置压缩指针的基地址
     address base = (address)(total_rs.base() - os::vm_page_size());
     Universe::set_narrow_oop_base(base);
   }
@@ -989,6 +1066,8 @@ Universe::NARROW_OOP_MODE Universe::narrow_oop_mode() {
 }
 
 
+// 预加载类
+// universe2_init方法是在universe_init方法执行完成后调用的，用来初始化基本类型的数组Klass，vmSymbols，SystemDictionary，JDK_Version等组件
 void universe2_init() {
   EXCEPTION_MARK;
   Universe::genesis(CATCH);
@@ -998,12 +1077,18 @@ void universe2_init() {
 // This function is defined in JVM.cpp
 extern void initialize_converter_functions();
 
+/**
+ *  universe_post_init是在编译器等JVM主要组件都初始化完成后调用的，主要用来初始化Universe中定义的各种异常oop，CollectedHeap的再初始化，添加MemoryPool等
+ */
 bool universe_post_init() {
+    //is_init_completed是指JVM是否完成初始化
   assert(!is_init_completed(), "Error: initialization not yet completed!");
   Universe::_fully_initialized = true;
   EXCEPTION_MARK;
   { ResourceMark rm;
+      //确保解释器初始化完成，实际解释器会在此方法之前通过interpreter_init方法完成初始化
     Interpreter::initialize();      // needed for interpreter entry points
+      //UseSharedSpaces默认为true，表示元数据是否使用共享空间
     if (!UseSharedSpaces) {
       HandleMark hm(THREAD);
       KlassHandle ok_h(THREAD, SystemDictionary::Object_klass());
@@ -1016,9 +1101,11 @@ bool universe_post_init() {
   Klass* k;
   instanceKlassHandle k_h;
     // Setup preallocated empty java.lang.Class array
+    //初始化java.lang.Class 对应的klass数组
     Universe::_the_empty_class_klass_array = oopFactory::new_objArray(SystemDictionary::Class_klass(), 0, CHECK_false);
 
     // Setup preallocated OutOfMemoryError errors
+    //初始化不同场景下OutOfMemoryError对应的oop，实际都是一个类java_lang_OutOfMemoryError的实例
     k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_OutOfMemoryError(), true, CHECK_false);
     k_h = instanceKlassHandle(THREAD, k);
     Universe::_out_of_memory_error_java_heap = k_h->allocate_instance(CHECK_false);
@@ -1031,13 +1118,16 @@ bool universe_post_init() {
 
     // Setup preallocated NullPointerException
     // (this is currently used for a cheap & dirty solution in compiler exception handling)
+    //初始化java_lang_NullPointerException
     k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_NullPointerException(), true, CHECK_false);
     Universe::_null_ptr_exception_instance = InstanceKlass::cast(k)->allocate_instance(CHECK_false);
     // Setup preallocated ArithmeticException
     // (this is currently used for a cheap & dirty solution in compiler exception handling)
+    //初始化java_lang_ArithmeticException
     k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_ArithmeticException(), true, CHECK_false);
     Universe::_arithmetic_exception_instance = InstanceKlass::cast(k)->allocate_instance(CHECK_false);
     // Virtual Machine Error for when we get into a situation we can't resolve
+    //初始化java_lang_VirtualMachineError
     k = SystemDictionary::resolve_or_fail(
       vmSymbols::java_lang_VirtualMachineError(), true, CHECK_false);
     bool linked = InstanceKlass::cast(k)->link_class_or_fail(CHECK_false);
@@ -1050,9 +1140,11 @@ bool universe_post_init() {
 
     Universe::_vm_exception = InstanceKlass::cast(k)->allocate_instance(CHECK_false);
 
+    //DumpSharedSpaces默认为false，如果为true，表示JVM会将加载的类Dump到一个文件上给其他的JVM使用
   if (!DumpSharedSpaces) {
     // These are the only Java fields that are currently set during shared space dumping.
     // We prefer to not handle this generally, so we always reinitialize these detail messages.
+      //设置不同类型的OutOfMemoryError的异常提示
     Handle msg = java_lang_String::create_from_str("Java heap space", CHECK_false);
     java_lang_Throwable::set_message(Universe::_out_of_memory_error_java_heap, msg());
 
@@ -1078,6 +1170,7 @@ bool universe_post_init() {
     assert(k->name() == vmSymbols::java_lang_OutOfMemoryError(), "should be out of memory error");
     k_h = instanceKlassHandle(THREAD, k);
 
+      //初始化_preallocated_out_of_memory_error_array，PreallocatedOutOfMemoryErrorCount默认值为4
     int len = (StackTraceInThrowable) ? (int)PreallocatedOutOfMemoryErrorCount : 0;
     Universe::_preallocated_out_of_memory_error_array = oopFactory::new_objArray(k_h(), len, CHECK_false);
     for (int i=0; i<len; i++) {
@@ -1093,6 +1186,7 @@ bool universe_post_init() {
   // Setup static method for registering finalizers
   // The finalizer klass must be linked before looking up the method, in
   // case it needs to get rewritten.
+    // 初始化_finalizer_register_cache属性，对应java_lang_ref_Finalizer类的register(Object finalizee)方法
   InstanceKlass::cast(SystemDictionary::Finalizer_klass())->link_class(CHECK_false);
   Method* m = InstanceKlass::cast(SystemDictionary::Finalizer_klass())->find_method(
                                   vmSymbols::register_method_name(),
@@ -1104,6 +1198,7 @@ bool universe_post_init() {
   Universe::_finalizer_register_cache->init(
     SystemDictionary::Finalizer_klass(), m);
 
+    //初始化_throw_illegal_access_error_cache属性，对应 Unsafe类的throwIllegalAccessError() 方法
   InstanceKlass::cast(SystemDictionary::misc_Unsafe_klass())->link_class(CHECK_false);
   m = InstanceKlass::cast(SystemDictionary::misc_Unsafe_klass())->find_method(
                                   vmSymbols::throwIllegalAccessError_name(),
@@ -1118,6 +1213,7 @@ bool universe_post_init() {
     SystemDictionary::misc_Unsafe_klass(), m);
 
   // Setup method for registering loaded classes in class loader vector
+    //初始化属性_loader_addClass_cache，对应sun_reflect_DelegatingClassLoader类的addClass方法
   InstanceKlass::cast(SystemDictionary::ClassLoader_klass())->link_class(CHECK_false);
   m = InstanceKlass::cast(SystemDictionary::ClassLoader_klass())->find_method(vmSymbols::addClass_name(), vmSymbols::class_void_signature());
   if (m == NULL || m->is_static()) {
@@ -1128,6 +1224,7 @@ bool universe_post_init() {
     SystemDictionary::ClassLoader_klass(), m);
 
   // Setup method for checking protection domain
+    //初始化属性_pd_implies_cache，对应java_security_ProtectionDomain类的impliesCreateAccessControlContext方法
   InstanceKlass::cast(SystemDictionary::ProtectionDomain_klass())->link_class(CHECK_false);
   m = InstanceKlass::cast(SystemDictionary::ProtectionDomain_klass())->
             find_method(vmSymbols::impliesCreateAccessControlContext_name(),
@@ -1147,24 +1244,30 @@ bool universe_post_init() {
   // The folowing is initializing converter functions for serialization in
   // JVM.cpp. If we clean up the StrictMath code above we may want to find
   // a better solution for this as well.
+    //初始化jvm.cpp中定义的基类类型间的转换方法，如IntBitsToFloatFn，实际取的是包装类的方法，对应java/lang/Float类的intBitsToFloat方法
   initialize_converter_functions();
 
   // This needs to be done before the first scavenge/gc, since
   // it's an input to soft ref clearing policy.
+    //保证在第一次GC前调用，获取当前堆的容量和已使用内存，保存到_heap_capacity_at_last_gc和_heap_used_at_last_gc属性中
   {
     MutexLocker x(Heap_lock);
     Universe::update_heap_info_at_gc();
   }
 
   // ("weak") refs processing infrastructure initialization
+    //Java堆的初始化
   Universe::heap()->post_initialize();
 
   // Initialize performance counters for metaspaces
+    //初始化元空间的性能统计，开启UsePerfData时才有效，默认是false
   MetaspaceCounters::initialize_performance_counters();
   CompressedClassSpaceCounters::initialize_performance_counters();
 
+    //添加元空间对应的memory_pool
   MemoryService::add_metaspace_memory_pools();
 
+    //添加Java堆对应的memory_pool
   MemoryService::set_universe_heap(Universe::_collectedHeap);
 #if INCLUDE_CDS
   if (UseSharedSpaces) {

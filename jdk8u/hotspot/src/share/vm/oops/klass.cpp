@@ -51,6 +51,7 @@
 #endif
 
 bool Klass::is_cloneable() const {
+    //数组类klass和实现java.lang.Cloneable接口的普通Java类的_access_flags会被标记成clone
   return _access_flags.is_cloneable() ||
          is_subtype_of(SystemDictionary::Cloneable_klass());
 }
@@ -92,6 +93,8 @@ bool Klass::search_secondary_supers(Klass* k) const {
   int cnt = secondary_supers()->length();
   for (int i = 0; i < cnt; i++) {
     if (secondary_supers()->at(i) == k) {
+        // 设置_secondary_super_cache属性，保存这次查询的结果
+        // 可以看到，属性_secondary_super_cache保存了这一次父类查询的结果。查询的逻辑很简单，遍历_secondary_supers数组中的值并比较即可。
       ((Klass*)this)->set_secondary_super_cache(k);
       return true;
     }
@@ -210,10 +213,23 @@ Klass::Klass() {
   _shared_class_path_index = -1;
 }
 
+/**
+ * 获取_layout_helper属性的值
+ *
+ * 比如，初始化boolean类型的一维数组时，调用语句如下：
+ * _boolArrayKlassObj      = TypeArrayKlass::create_klass(T_BOOLEAN, sizeof(jboolean), CHECK);
+ * 最终调用到这个函数：因为etype(T_BOOLEAN)为基本类型，所以值为0xC0；
+ * hsize调用arrayOopDesc::base_offset_in_bytes()方法获取，值为16，后面在讲解arrayOopDesc时会介绍，
+ * 数组对象其实是由对象头、对象字段数据和对齐填充组成，而这里获取的就是对象头的大小；
+ * esize表示对应类型存储所需要的字节数，对于T_BOOLEAN来说，只需要1个字节即可，所以esz为0。
+ * 最后调用array_layout_helper()方法按照约定组合成一个int类型的数字即可。
+ */
 jint Klass::array_layout_helper(BasicType etype) {
   assert(etype >= T_BOOLEAN && etype <= T_OBJECT, "valid etype");
   // Note that T_ARRAY is not allowed here.
+    // hsize表示数组对象头部大小
   int  hsize = arrayOopDesc::base_offset_in_bytes(etype);
+    // 对应类型存储所需要的字节数
   int  esize = type2aelembytes(etype);
   bool isobj = (etype == T_OBJECT);
   int  tag   =  isobj ? _lh_array_tag_obj_value : _lh_array_tag_type_value;
@@ -239,12 +255,17 @@ bool Klass::can_be_primary_super_slow() const {
     return true;
 }
 
+/**
+ * 在设置当前类的父类时通常都会调用initialize_supers方法，同时也会设置_primary_supers、super_check_offset，如果继承链过长，
+ * 还有可能设置secondary_supers、secondary_super_cache等值。这此属性中存储继承链中涉及到的类以方便快速的进行类关系之间的判断，例如父子关系的判断。　　
+ */
 void Klass::initialize_supers(Klass* k, TRAPS) {
   if (FastSuperclassLimit == 0) {
     // None of the other machinery matters.
     set_super(k);
     return;
   }
+    // 当前类的父类k可能为NULL，例如Object的父类为NULL
   if (k == NULL) {
     set_super(NULL);
     _primary_supers[0] = this;
@@ -252,16 +273,21 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
   } else if (k != super() || k == SystemDictionary::Object_klass()) {
     assert(super() == NULL || super() == SystemDictionary::Object_klass(),
            "initialize this only once to a non-trivial value");
+      // 设置Klass的_super属性
     set_super(k);
     Klass* sup = k;
     int sup_depth = sup->super_depth();
+      // primary_super_limit()方法得到的值一般默认为8
     juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
+      // 当父类的的继承链长度大于等于primary_super_limit()时，当前的深度只能是primary_super_limit()，也就是8,因为_primary_supers中只存储8个类
     if (!can_be_primary_super_slow())
       my_depth = primary_super_limit();
+      // my_depth默认的值为8
     for (juint i = 0; i < my_depth; i++) {
       _primary_supers[i] = sup->_primary_supers[i];
     }
     Klass* *super_check_cell;
+      // primary_super_limit()的默认为8
     if (my_depth < primary_super_limit()) {
       _primary_supers[my_depth] = this;
       super_check_cell = &_primary_supers[my_depth];
@@ -269,7 +295,10 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
       // Overflow of the primary_supers array forces me to be secondary.
       super_check_cell = &_secondary_super_cache;
     }
-    set_super_check_offset((address)super_check_cell - (address) this);
+      // 通过_super_check_offset这个偏移量可以快速定义到当前在_primary_supers中的位置
+    juint  _super_check_offset = (address)super_check_cell - (address) this;
+      // 设置Klass中的_super_check_offset属性
+    set_super_check_offset(_super_check_offset);
 
 #ifdef ASSERT
     {
@@ -293,6 +322,9 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
 #endif
   }
 
+    /**
+     * 可以看到，会将父亲继承链中多于8个的父类存储到secondary_supers数组中，不过因为继承链一般都不会多于8个，所以设置了默认值为8。　　
+     */
   if (secondary_supers() == NULL) {
     KlassHandle this_kh (THREAD, this);
 
@@ -301,6 +333,8 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
     // if the inline "_primary_supers" array overflows.
     int extras = 0;
     Klass* p;
+      // 当p不为NULL并且p已经存储在了_secondary_supers数组中时，条件为true
+      // 也就是当前类的父类多于8个，将多出来的存储到了_secondary_supers数组中了
     for (p = super(); !(p == NULL || p->can_be_primary_super()); p = p->super()) {
       ++extras;
     }
@@ -308,7 +342,9 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
     ResourceMark rm(THREAD);  // need to reclaim GrowableArrays allocated below
 
     // Compute the "real" non-extra secondaries.
+      // 计算secondaries需要的大小，因为secondaries数组中还需要存储当前类的所有实现接口（包括直接和间接实现的接口）
     GrowableArray<Klass*>* secondaries = compute_secondary_supers(extras);
+      // extras为0时直接返回，不需要额外的处理
     if (secondaries == NULL) {
       // secondary_supers set by compute_secondary_supers
       return;
@@ -341,7 +377,7 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
                                        class_loader_data(), new_length, CHECK);
     int fill_p = primaries->length();
     for (int j = 0; j < fill_p; j++) {
-      s2->at_put(j, primaries->pop());  // add primaries in reverse order.
+      s2->at_put(j, primaries->pop());  // add primaries in reverse order.  也就是父类永远在数组前，子类永远在数组后
     }
     for( int j = 0; j < secondaries->length(); j++ ) {
       s2->at_put(j+fill_p, secondaries->at(j));  // add secondaries on the end.
@@ -354,6 +390,7 @@ void Klass::initialize_supers(Klass* k, TRAPS) {
     }
   #endif
 
+      // 设置_secondary_supers属性
     this_kh->set_secondary_supers(s2);
   }
 }
@@ -388,20 +425,25 @@ void Klass::set_next_sibling(Klass* s) {
   _next_sibling = s;
 }
 
+// 该函数设置_next_sibling与_subklass的值
 void Klass::append_to_sibling_list() {
   debug_only(verify();)
   // add ourselves to superklass' subklass list
+    // 获取到_super属性的值
   InstanceKlass* super = superklass();
   if (super == NULL) return;        // special case: class Object
   assert((!super->is_interface()    // interfaces cannot be supers
           && (super->superklass() == NULL || !is_interface())),
          "an interface can only be a subklass of Object");
+    // 获取_subklass属性的值
   Klass* prev_first_subklass = super->subklass_oop();
   if (prev_first_subklass != NULL) {
     // set our sibling to be the superklass' previous first subklass
+      // 设置_next_sibling属性的值
     set_next_sibling(prev_first_subklass);
   }
   // make ourselves the superklass' first subklass
+    // 设置_subklass属性的值
   super->set_subklass(this);
   debug_only(verify();)
 }

@@ -77,6 +77,11 @@ import static javax.lang.model.SourceVersion.*;
  * level; this visitor will have different default behavior for the
  * visit method in question.  When the new visitor is introduced, all
  * or portions of this visitor may be deprecated.
+ * 一个具有默认行为的程序元素的Scanner，适用于jdk1.6。这个类中的visitXYZ方法通过调用对它们所包围的元素、参数等对应的scan方法来扫描它们的组件元素.
+ * 子类可以通过覆盖visitXYZ方法来控制访问的顺序元素。注意，Scanner的客户端可以获得所期望的行为，即调用感兴趣的根对象上的v.scan(e, p)而不是v.visit(e, p).
+ *
+ *  当子类重写visitXYZ方法时，新方法通过调用super.visitXYZ来扫描其所包围的元素，具体访问者可以控制关于附加处理的组件元素遍历的顺序；
+ * 例如，在重写方法开始时始终调用super.visitXYZ将产生先序遍历，等等。如果选用按照其他顺序进行遍历,则按照需要的顺序调用对应的visit方法,而不是适用 super.visitXYZ.
  *
  * @param <R> the return type of this visitor's methods.  Use {@link
  *            Void} for visitors that do not need to return results.

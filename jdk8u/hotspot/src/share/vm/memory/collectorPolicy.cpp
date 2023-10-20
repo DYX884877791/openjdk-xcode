@@ -639,6 +639,10 @@ void TwoGenerationCollectorPolicy::initialize_size_info() {
   DEBUG_ONLY(TwoGenerationCollectorPolicy::assert_size_info();)
 }
 
+/**
+ * 调用栈比较深，最终会在Java堆中创建对象，正常情况下满足：对象在年轻代的Eden空间创建，如果对象大于年轻代的创建大小阈值（因为年轻代使用复制算法，太大的对象一直拷贝影响性能），
+ * 如果Eden的空间不足够创建此对象，此时就会去老年代创建此对象，如果老年代也开辟不了对象，此时就会发生GC，发生GC后再去尝试开辟对象。
+ */
 HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
                                         bool is_tlab,
                                         bool* gc_overhead_limit_was_exceeded) {
@@ -656,6 +660,7 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
 
   // Loop until the allocation is satisified,
   // or unsatisfied after GC.
+    // 循环创建对象，因为可能一次创建不成功。
   for (uint try_count = 1, gclocker_stalled_count = 0; /* return or throw */; try_count += 1) {
     HandleMark hm; // discard any handles allocated in each iteration
 
@@ -663,13 +668,20 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
     Generation *gen0 = gch->get_gen(0);
     assert(gen0->supports_inline_contig_alloc(),
       "Otherwise, must do alloc within heap lock");
+      // 是否能够直接在gen0代（年轻代）开辟对象。
+      // 需要满足条件：
+      // 1、如果创建的对象大于年轻代的大小阈值，会直接去其他代创建
+      // 2、如果eden空间不足够开辟当前对象的话会去其他代创建
     if (gen0->should_allocate(size, is_tlab)) {
+        // 尝试在eden开辟对象
+        // 如果因为eden空间不够了，会尝试去其他代创建此对象
       result = gen0->par_allocate(size, is_tlab);
       if (result != NULL) {
         assert(gch->is_in_reserved(result), "result not in heap");
         return result;
       }
     }
+    // 代表在年轻代开辟对象失败了，后续要根据策略选择其他代开辟此对象，必要时发生GC
     uint gc_count_before;  // read inside the Heap_lock locked region
     {
       MutexLocker ml(Heap_lock);
@@ -679,8 +691,15 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
       }
       // Note that only large objects get a shot at being
       // allocated in later generations.
+        // 是否需要在其他代开辟此对象（大对象直接在老年代开辟（防止在年轻代一直复制浪费性能））
       bool first_only = ! should_try_older_generation_allocation(size);
 
+        /*
+         *  得出2点
+         *  1、如果创建的对象大于年轻代的大小阈值，会直接去其他代创建
+         *  2、如果eden空间不足够开辟当前对象的话会去其他代创建
+         */
+        // 尝试在其他代开辟对象。
       result = gch->attempt_allocation(size, is_tlab, first_only);
       if (result != NULL) {
         assert(gch->is_in_reserved(result), "result not in heap");
@@ -727,9 +746,12 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
       }
 
       // Read the gc count while the heap lock is held.
+        // 记录一下发生GC前的次数
       gc_count_before = Universe::heap()->total_collections();
     }
 
+      // 因为在年轻代和老年代创建对象都失败了，所以需要GC回收一下内存了。
+      // 然后再尝试去开辟对象。
     VM_GenCollectForAllocation op(size, is_tlab, gc_count_before);
     VMThread::execute(&op);
     if (op.prologue_succeeded()) {

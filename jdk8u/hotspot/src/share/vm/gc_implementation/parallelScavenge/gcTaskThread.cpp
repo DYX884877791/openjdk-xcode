@@ -33,6 +33,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/os.hpp"
 #include "runtime/thread.hpp"
+#include "utilities/slog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -44,6 +45,7 @@ GCTaskThread::GCTaskThread(GCTaskManager* manager,
   _time_stamps(NULL),
   _time_stamp_index(0)
 {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/gcTaskThread.cpp中的GCTaskThread::GCTaskThread构造函数...");
   if (!os::create_thread(this, os::pgc_thread))
     vm_exit_out_of_memory(0, OOM_MALLOC_ERROR, "Cannot create GC thread. Out of system resources.");
 
@@ -63,6 +65,7 @@ GCTaskThread::~GCTaskThread() {
 }
 
 void GCTaskThread::start() {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/gcTaskThread.cpp中的GCTaskThread::start函数...");
   os::start_thread(this);
 }
 
@@ -95,6 +98,7 @@ void GCTaskThread::print_task_time_stamps() {
 // for tasks to be enqueued for execution.
 
 void GCTaskThread::run() {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/gcTaskThread.cpp中的GCTaskThread::run()函数...");
   // Set up the thread for stack overflow support
   this->record_stack_base_and_size();
   this->initialize_thread_local_storage();

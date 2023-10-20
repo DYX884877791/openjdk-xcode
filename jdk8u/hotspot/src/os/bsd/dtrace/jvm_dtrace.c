@@ -37,6 +37,9 @@
 #include <thread.h>
 #include <unistd.h>
 #include "jvm_dtrace.h"
+extern "C" {
+    #include "utilities/slog.hpp"
+}
 
 // NOTE: These constants are used in JVM code as well.
 // KEEP JVM CODE IN SYNC if you are going to change these...
@@ -92,6 +95,7 @@ static thread_key_t jvm_error_key;
 
 /* init function for this library */
 static void init_jvm_dtrace() {
+    slog_debug("进入hotspot/src/os/bsd/dtrace/jvm_dtrace.c中的init_jvm_dtrace函数...");
     /* check for env. var for debug mode */
     libjvm_dtrace_debug = getenv("LIBJVM_DTRACE_DEBUG") != NULL;
     /* create key for thread local error message */

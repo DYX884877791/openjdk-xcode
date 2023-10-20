@@ -36,6 +36,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 
 
 // Initialization done by VM thread in vm_init_globals()
@@ -82,47 +83,77 @@ void stubRoutines_init2(); // note: StubRoutines need 2-phase init
 void perfMemory_exit();
 void ostream_exit();
 
+/**
+ * 1.初始化java基本类型系统
+ * 2.初始化事件队列
+ * 3.初始化全局锁
+ * 4.初始化chunkpool
+ * 这是hotspot实现的内存池，包括_large_pool，_medium_pool，_small_pool和_tiny_pool，这样系统就不必执行malloc/free
+ * 5.初始化JVM性能统计数据区(PerfData)，由选项UsePerfData设置。
+ */
 void vm_init_globals() {
+    // threadshadow初始化,该类是处理线程的exception,是所有线程类的父类.线程的exception是从外部挂上去的,这个挂载就是threadshadow类,所以就像是影子一样如影随从.
   check_ThreadShadow();
+    // basic_types初始化,基本类型的初始化,判断类型和大小是否是正确
   basic_types_init();
+    // eventlog的初始化,全部事件有消息,违例,多重定义,类未加载和破环优化的消息.
   eventlog_init();
+    // 互斥锁初始化,使用宏定义来预先定义了所有的互斥锁类型
   mutex_init();
+    // 小块内存初始化
   chunkpool_init();
+    // 永久区内存初始化
   perfMemory_init();
 }
 
 
 jint init_globals() {
+  slog_debug("进入hotspot/src/share/vm/runtime/init.cpp中的init_globals函数...");
   HandleMark hm;
   management_init();
+    // 在init_globals()函数中调用bytecodes_init()函数初始化好字节码指令后
   bytecodes_init();
   classLoader_init();
   codeCache_init();
   VM_Version_init();
   os_init_globals();
   stubRoutines_init1();
+    // 全局初始化,这个又涉及了诸多初始化方面
   jint status = universe_init();  // dependent on codeCache_init and
                                   // stubRoutines_init1 and metaspace_init.
   if (status != JNI_OK)
     return status;
 
+    // 在bytecodes_init之后会调用interpreter_init()函数初始化解释器。函数最终会调用到TemplateInterpreter::initialize()函数
+    // 解释器的引用初始化.
   interpreter_init();  // before any methods loaded
+    // 方法调用计数器初始化.
   invocationCounter_init();  // before any methods loaded
   marksweep_init();
+    // 获取权限初始化,比如public,private等.
   accessFlags_init();
   templateTable_init();
+    // 接口的额外支持的初始化,主要针对ASSERT来说.
   InterfaceSupport_init();
   SharedRuntime::generate_stubs();
+    // 类似universe_init的初始化,只是这里涉及的内容比较少.
   universe2_init();  // dependent on codeCache_init and stubRoutines_init1
+    // 引用处理的初始化,主要是和软引用,弱引用的处理有关.
   referenceProcessor_init();
+    // jni的调用初始化.
   jni_handles_init();
 #if INCLUDE_VM_STRUCTS
+    // VM结构的初始化,主要是校验一些基本设置和数据就够是否正确.
   vmStructs_init();
 #endif // INCLUDE_VM_STRUCTS
 
+    // 虚表中有关调用的初始化
   vtableStubs_init();
+    // 内联缓存初始化
   InlineCacheBuffer_init();
+    // 编译器初始化,主要针对命令行和文件的编译.
   compilerOracle_init();
+    // 编译策略初始化,这里主要和JIT和AOT有关.
   compilationPolicy_init();
   compileBroker_init();
   VMRegImpl::set_regName();
@@ -130,7 +161,9 @@ jint init_globals() {
   if (!universe_post_init()) {
     return JNI_ERR;
   }
+    // 有关java的class文件初始化
   javaClasses_init();   // must happen after vtable initialization
+    // 调用的第二次初始化,和第一次一样,只是由于之前有了解释器和编译器等需要调用的组件的加入,这里就再次生成一遍.
   stubRoutines_init2(); // note: StubRoutines need 2-phase init
 
 #if INCLUDE_NMT

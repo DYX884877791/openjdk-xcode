@@ -775,10 +775,12 @@ public class Runtime {
         if (security != null) {
             security.checkLink(filename);
         }
+        // 检查是否是绝对路径
         if (!(new File(filename).isAbsolute())) {
             throw new UnsatisfiedLinkError(
                 "Expecting an absolute path of the library: " + filename);
         }
+        // 可以看到最终都是调用ClassLoader.loadLibrary方法完成动态链接库文件的加载
         ClassLoader.loadLibrary(fromClass, filename, true);
     }
 
@@ -831,11 +833,15 @@ public class Runtime {
         loadLibrary0(Reflection.getCallerClass(), libname);
     }
 
+    /**
+     * fromClass 调用者
+     */
     synchronized void loadLibrary0(Class<?> fromClass, String libname) {
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
             security.checkLink(libname);
         }
+        // 检查是否包含路径分隔符
         if (libname.indexOf((int)File.separatorChar) != -1) {
             throw new UnsatisfiedLinkError(
     "Directory separator should not appear in library name: " + libname);

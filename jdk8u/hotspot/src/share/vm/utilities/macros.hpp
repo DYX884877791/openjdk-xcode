@@ -226,6 +226,7 @@
 #define NOT_CHECK_UNHANDLED_OOPS(code)  code
 #endif // CHECK_UNHANDLED_OOPS
 
+// 如果定义了宏CC_INTERP，则Interpreter继承自CppInterpreter，否则继承自TemplateInterpreter
 #ifdef CC_INTERP
 #define CC_INTERP_ONLY(code) code
 #define NOT_CC_INTERP(code)

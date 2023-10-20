@@ -532,7 +532,7 @@ public:
 
 protected:
   // OS data associated with the thread
-  OSThread* _osthread;  // Platform-specific thread information
+  OSThread* _osthread;  // Platform-specific thread information 特定于平台的线程信息
 
   // Thread local resource area for temporary allocation within the VM
   ResourceArea* _resource_area;
@@ -637,8 +637,8 @@ protected:
  public:
   volatile intptr_t _Stalled ;
   volatile int _TypeTag ;
-  ParkEvent * _ParkEvent ;                     // for synchronized()
-  ParkEvent * _SleepEvent ;                    // for Thread.sleep
+  ParkEvent * _ParkEvent ;                     // for synchronized()    用于 synchronized(), 实现 wait/notify
+  ParkEvent * _SleepEvent ;                    // for Thread.sleep      用于 Thread.sleep
   ParkEvent * _MutexEvent ;                    // for native internal Mutex/Monitor
   ParkEvent * _MuxEvent ;                      // for low-level muxAcquire-muxRelease
   int NativeSyncRecursion ;                    // diagnostic
@@ -784,7 +784,7 @@ class JavaThread: public Thread {
  private:
   bool           _in_asgct;                      // Is set when this JavaThread is handling ASGCT call
   JavaThread*    _next;                          // The next thread in the Threads list
-  oop            _threadObj;                     // The Java level thread object
+  oop            _threadObj;                     // The Java level thread object  Java级别线程对象
 
 #ifdef ASSERT
  private:
@@ -1391,11 +1391,14 @@ class JavaThread: public Thread {
   JNIEnv* jni_environment()                      { return &_jni_environment; }
 
   static JavaThread* thread_from_jni_environment(JNIEnv* env) {
+      //每个JavaThread都有一个单独的JNIEnv实例，此处是根据env的地址和其在JavaThread中的属性偏移量倒推出JavaThread的地址
     JavaThread *thread_from_jni_env = (JavaThread*)((intptr_t)env - in_bytes(jni_environment_offset()));
     // Only return NULL if thread is off the thread list; starting to
     // exit should not return NULL.
     if (thread_from_jni_env->is_terminated()) {
+        //如果JVM正在退出的过程中，则阻塞当前线程
        thread_from_jni_env->block_if_vm_exited();
+        //返回NULL
        return NULL;
     } else {
        return thread_from_jni_env;
@@ -1760,6 +1763,7 @@ public:
 
   // JSR166 per-thread parker
 private:
+    // 用于 LockSupport::park
   Parker*    _parker;
 public:
   Parker*     parker() { return _parker; }
@@ -1831,6 +1835,9 @@ inline size_t JavaThread::stack_available(address cur_sp) {
 }
 
 // A thread used for Compilation.
+// CompilerThread表示一个专门执行后台编译的线程，其定义位于hospot/src/share/vm/runtime/thread.hpp中。
+// CompilerThread继承自JavaThread，在JavaThread的基础上添加了若干编译相关的属性。
+// 其定义的方法主要是读写属性的，重点关注其初始化方法
 class CompilerThread : public JavaThread {
   friend class VMStructs;
  private:

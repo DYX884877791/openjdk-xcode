@@ -35,6 +35,9 @@ import java.net.URL;
 
 import sun.hotspot.parser.DiagnosticCommand;
 
+/**
+ * https://zhanghaoxin.blog.csdn.net/article/details/111692370
+ */
 public class WhiteBox {
   @SuppressWarnings("serial")
   public static class WhiteBoxPermission extends BasicPermission {

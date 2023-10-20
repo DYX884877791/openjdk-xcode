@@ -41,6 +41,7 @@
 #   This was done to minimize the impact of profiles on the regular
 #   non-profile build.
 #
+# rt.jar包在jdk的lib目录下，主要提供java语言层面的运行时库，由java开发。rt.jar包含的文件范围由:jdk/make/profile-rtjar-includes.txt定义
 PROFILE_1_RTJAR_INCLUDE_PACKAGES := \
     com/sun/demo/jvmti/hprof \
     com/sun/java/util/jar/pack \

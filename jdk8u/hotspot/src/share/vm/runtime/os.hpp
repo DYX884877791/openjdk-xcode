@@ -53,6 +53,8 @@
 # endif
 #endif
 
+#define ENUM_TYPE_CASE(x) case x: return(#x);
+
 class AgentLibrary;
 
 // os defines the interface to operating system; this includes traditional
@@ -444,15 +446,32 @@ class os: AllStatic {
 
   // threads
 
+   /**
+    * JVM层面的抽象
+    * 在JVM中定义了线程的类型，在hotspot/src/share/vm/runtime/os.hpp文件中，以枚举的形式定义
+    */
   enum ThreadType {
-    vm_thread,
-    cgc_thread,        // Concurrent GC thread
-    pgc_thread,        // Parallel GC thread
-    java_thread,
-    compiler_thread,
-    watcher_thread,
-    os_thread
+    vm_thread,         // JVM内部工作线程
+    cgc_thread,        // Concurrent GC thread  并发GC线程
+    pgc_thread,        // Parallel GC thread    并行GC线程
+    java_thread,       // java层面定义的线程
+    compiler_thread,   // Jit编译线程
+    watcher_thread,    // JVM内部的定时处理
+    os_thread          // 操作系统用的线程
   };
+
+  static const char* get_thread_type(enum ThreadType thr_type) {
+    switch(thr_type) {
+        ENUM_TYPE_CASE(vm_thread)
+        ENUM_TYPE_CASE(cgc_thread)
+        ENUM_TYPE_CASE(pgc_thread)
+        ENUM_TYPE_CASE(java_thread)
+        ENUM_TYPE_CASE(compiler_thread)
+        ENUM_TYPE_CASE(watcher_thread)
+        ENUM_TYPE_CASE(os_thread)
+    }
+    return "Unknown ThreadType";
+  }
 
   static bool create_thread(Thread* thread,
                             ThreadType thr_type,

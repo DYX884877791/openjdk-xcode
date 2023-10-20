@@ -101,6 +101,7 @@ $(eval $(call SetupArchive,BUILD_LOCALEDATA_JAR, , \
 # Full JRE exclude list for rt.jar and resources.jar
 # This value should exclude types destined for jars other than rt.jar and resources.jar.
 # When building a Profile this value augments the profile specific exclusions
+# 声明rt.jar需要排除的范围...
 RT_JAR_EXCLUDES += \
     com/sun/codemodel \
     com/sun/crypto/provider \
@@ -215,6 +216,7 @@ RT_JAR_EXCLUDES += \
     jdk/jfr
 
 # Find all files in the classes dir to use as dependencies. This could be more fine granular.
+# 在jdk编译输出classes目录下查询所有定义依赖的文件...
 ALL_FILES_IN_CLASSES := $(call not-containing, _the., $(filter-out %javac_state, \
     $(call CacheFind, $(JDK_OUTPUTDIR)/classes)))
 
@@ -456,6 +458,8 @@ $(eval $(call SetupArchive,BUILD_CLDRDATA_JAR, , \
 
 ##########################################################################################
 
+# tools.jar包在jdk的lib目录下，主要提供jdk/bin目录下java工具的虚拟机里面的实现代码，由java开发。生成tools.jar包的makefile文件是：文件名为：/openjdk/jdk/make/CreateJars.gmk
+# 声明tools.jar所包含的目录范围
 TOOLS_JAR_INCLUDES := \
     com/sun/codemodel \
     com/sun/istack/internal/tools \
@@ -510,8 +514,10 @@ TOOLS_JAR_INCLUDES := \
     sun/tools/util
 
 # The sjavac tools is not ready for public consumption.
+# tools.jar排除sjavac工具
 TOOLS_JAR_EXCLUDES = com/sun/tools/sjavac
 
+# 调用SetupArchive打包生成tools.jar
 $(eval $(call SetupArchive,BUILD_TOOLS_JAR, , \
     SRCS := $(JDK_OUTPUTDIR)/classes, \
     SUFFIXES := .class .prp .gif .properties .xml .css .xsd .js .html .txt .java \

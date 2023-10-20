@@ -338,6 +338,7 @@ class vframeStreamCommon : StackObj {
   }
   void security_next();
 
+    // 是否到达末尾
   bool at_end() const { return _mode == at_end_mode; }
 
   // Implements security traversal. Skips depth no. of frame including

@@ -45,6 +45,9 @@ import sun.security.util.SecurityConstants;
 
 
 /**
+ * Java 线程其实是映射到操作系统的内核线程上的，所以 Java 线程基本上也就是操作系统在进行管理。
+ * 在 Linux系统中，线程和进程用的是同一个结构体进行描述的，只不过进程拥有自己独立的地址空间，而同一个进程的多个线程之间是共享资源的。
+ *
  * A <i>thread</i> is a thread of execution in a program. The Java
  * Virtual Machine allows an application to have multiple threads of
  * execution running concurrently.
@@ -144,6 +147,10 @@ class Thread implements Runnable {
     /* Make sure registerNatives is the first thing <clinit> does. */
     private static native void registerNatives();
     static {
+        /**
+         * 这个方法是用于注册线程执行过程中需要的一些本地方法，比如：start0、isAlive、yield、sleep、interrupt0等。
+         *  「registerNatives」，本地方法定义在 Thread.c 中
+         */
         registerNatives();
     }
 
@@ -266,6 +273,8 @@ class Thread implements Runnable {
     public static native Thread currentThread();
 
     /**
+     * yeild就是一个本地方法，用于让出当前线程的CPU时间片
+     *
      * A hint to the scheduler that the current thread is willing to yield
      * its current use of a processor. The scheduler is free to ignore this
      * hint.
@@ -284,6 +293,8 @@ class Thread implements Runnable {
     public static native void yield();
 
     /**
+     * sleep是让当前线程休眠，有两个版本，一个指定休眠的毫秒数，一个指定休眠的毫秒数和纳秒数，同join方法，纳秒数实际会四舍五入成毫秒数，最终都是调用第一个版本，该方法是一个本地方法
+     *
      * Causes the currently executing thread to sleep (temporarily cease
      * execution) for the specified number of milliseconds, subject to
      * the precision and accuracy of system timers and schedulers. The thread
@@ -700,6 +711,8 @@ class Thread implements Runnable {
      */
     public synchronized void start() {
         /**
+         * 0表示状态是NEW，如果不是0则抛出异常
+         *
          * This method is not invoked for the main method thread or "system"
          * group threads created/set up by the VM. Any new functionality added
          * to this method in the future may have to also be added to the VM.
@@ -709,9 +722,13 @@ class Thread implements Runnable {
         if (threadStatus != 0)
             throw new IllegalThreadStateException();
 
-        /* Notify the group that this thread is about to be started
+        /**
+         * 通知所属的ThreadGroup该线程启动执行了，ThreadGroup本身维护了已启动线程的数组和计数
+         *
+         * Notify the group that this thread is about to be started
          * so that it can be added to the group's list of threads
-         * and the group's unstarted count can be decremented. */
+         * and the group's unstarted count can be decremented.
+         */
         group.add(this);
 
         boolean started = false;
@@ -721,15 +738,26 @@ class Thread implements Runnable {
         } finally {
             try {
                 if (!started) {
+                    //增加未启动线程计数，将其从已启动数组中移除
                     group.threadStartFailed(this);
                 }
             } catch (Throwable ignore) {
+                //启动失败本身会抛出异常给调用方
                 /* do nothing. If start0 threw a Throwable then
                   it will be passed up the call stack */
             }
         }
     }
 
+    /**
+     * start0() 是一个本地方法，按照 JNI 规范可以到 hotspot 虚拟源码中查找 java_lang_Thread_start0 这个函数
+     * start0就是一个本地方法，会给当前Thread实例创建一个C++ JavaThread实例和OSThread实例，
+     * 前者是线程在JVM中的表示，后者表示底层操作系统的原生线程，这三个都是一对一关系，Thread实例和JavaThread，JavaThread和OSThread都保存了彼此的引用。
+     *
+     * 创建并初始化完成后，会设置OSThread的优先级，栈帧大小等属性，然后启动OSThread执行JavaThread的run方法，该方法会执行Thread实例的run方法。
+     * 注意如果重复调用start方法或者因为内存不足导致OSThread创建失败都会抛出异常
+     * jdk/src/share/native/java/lang/Thread.c
+     */
     private native void start0();
 
     /**
@@ -878,6 +906,14 @@ class Thread implements Runnable {
     }
 
     /**
+     * interrupt方法用于中断某个处于阻塞状态的线程，如调用sleep方法后被阻塞的线程，中断后该线程就会抛出InterruptedException异常；
+     * interrupted方法用于判断某个线程是否被中断了。
+     *
+     *  如果线程堵塞在object.wait、Thread.join和Thread.sleep，将会清除线程的中断状态，并抛出InterruptedException;
+     *  如果线程堵塞在java.nio.channels.InterruptibleChannel的IO上，Channel将会被关闭，线程被置为中断状态，并抛出java.nio.channels.ClosedByInterruptException；
+     *  如果线程堵塞在java.nio.channels.Selector上，线程被置为中断状态，select方法会马上返回，类似调用wakeup的效果；
+     *  如果不是以上三种情况，thread.interrupt()方法仅仅是设置线程的中断状态为true。
+     *
      * Interrupts this thread.
      *
      * <p> Unless the current thread is interrupting itself, which is
@@ -920,10 +956,13 @@ class Thread implements Runnable {
         if (this != Thread.currentThread())
             checkAccess();
 
+        //  blockerLock就是操作blocker的锁
         synchronized (blockerLock) {
             Interruptible b = blocker;
             if (b != null) {
+                // 可中断IO在开始执行IO前会设置blocker，正常情形下为null
                 interrupt0();           // Just to set the interrupt flag
+                // 调用其interrupt方法
                 b.interrupt(this);
                 return;
             }
@@ -949,6 +988,7 @@ class Thread implements Runnable {
      * @revised 6.0
      */
     public static boolean interrupted() {
+        //  currentThread和isInterrupted都是本地方法
         return currentThread().isInterrupted(true);
     }
 
@@ -1064,6 +1104,8 @@ class Thread implements Runnable {
     }
 
     /**
+     * setPriority用于设置线程的优先级
+     *
      * Changes the priority of this thread.
      * <p>
      * First the <code>checkAccess</code> method of this thread is called
@@ -1090,13 +1132,16 @@ class Thread implements Runnable {
     public final void setPriority(int newPriority) {
         ThreadGroup g;
         checkAccess();
+        // 参数非法校验
         if (newPriority > MAX_PRIORITY || newPriority < MIN_PRIORITY) {
             throw new IllegalArgumentException();
         }
         if((g = getThreadGroup()) != null) {
             if (newPriority > g.getMaxPriority()) {
+                // 不能超过线程组的最高优先级
                 newPriority = g.getMaxPriority();
             }
+            // 修改priority属性并调用setPriority0方法
             setPriority0(priority = newPriority);
         }
     }
@@ -1223,6 +1268,9 @@ class Thread implements Runnable {
     public native int countStackFrames();
 
     /**
+     *  注意join方法是synchronized方法，当Java线程退出的时候会在JavaThread::exit方法中调用ObjectLocker的notify_all方法，
+     * 唤醒所有在该Thread实例关联的重量级锁上等待的线程，即调用join方法的线程
+     *
      * Waits at most {@code millis} milliseconds for this thread to
      * die. A timeout of {@code 0} means to wait forever.
      *
@@ -1249,20 +1297,28 @@ class Thread implements Runnable {
         long now = 0;
 
         if (millis < 0) {
+            // 参数非法
             throw new IllegalArgumentException("timeout value is negative");
         }
 
         if (millis == 0) {
+            // isAlive是一个本地方法
+            // 调用join方法的线程判断目标线程不存在了就会终止while循环，退出join方法
+            // 判断Java线程是否存活的本地方法isAlive的实现在hotspot/src/share/vm/prims/jvm.cpp中的
+            // JVM_ENTRY(jboolean, JVM_IsThreadAlive(JNIEnv* env, jobject jthread))
             while (isAlive()) {
+                // 无期限等待
                 wait(0);
             }
         } else {
             while (isAlive()) {
+                //now初始是0
                 long delay = millis - now;
                 if (delay <= 0) {
                     break;
                 }
                 wait(delay);
+                //被唤醒后更新now，表示已等待的时间
                 now = System.currentTimeMillis() - base;
             }
         }
@@ -1305,6 +1361,7 @@ class Thread implements Runnable {
                                 "nanosecond timeout value out of range");
         }
 
+        // 实际没有处理纳秒，还是将其四舍五入成毫秒了
         if (nanos >= 500000 || (nanos != 0 && millis == 0)) {
             millis++;
         }
@@ -1313,6 +1370,8 @@ class Thread implements Runnable {
     }
 
     /**
+     * join方法用于等待创建的线程执行完成并退出，该方法有三个版本，一个是无参数的，表示无期限等待，一个是有一个参数，指定等待的毫秒数，一个是有两个参数，指定等待的毫秒数和纳秒数
+     *
      * Waits for this thread to die.
      *
      * <p> An invocation of this method behaves in exactly the same
@@ -1482,6 +1541,8 @@ class Thread implements Runnable {
     }
 
     /**
+     * holdsLock是一个本地方法，用于判断当前线程是否持有某个对象的锁
+     *
      * Returns <tt>true</tt> if and only if the current thread holds the
      * monitor lock on the specified object.
      *
@@ -1746,11 +1807,15 @@ class Thread implements Runnable {
      */
     public enum State {
         /**
+         * 新创建，未启动
+         *
          * Thread state for a thread which has not yet started.
          */
         NEW,
 
         /**
+         * 在jvm 中运行，也可能正在等待操作系统的其他资源
+         *
          * Thread state for a runnable thread.  A thread in the runnable
          * state is executing in the Java virtual machine but it may
          * be waiting for other resources from the operating system
@@ -1759,6 +1824,8 @@ class Thread implements Runnable {
         RUNNABLE,
 
         /**
+         * 阻塞，并且正在等待监视器锁
+         *
          * Thread state for a thread blocked waiting for a monitor lock.
          * A thread in the blocked state is waiting for a monitor lock
          * to enter a synchronized block/method or
@@ -1768,6 +1835,8 @@ class Thread implements Runnable {
         BLOCKED,
 
         /**
+         * 处于等待状态的线程，正在等待另一个线程执行特定的操作
+         *
          * Thread state for a waiting thread.
          * A thread is in the waiting state due to calling one of the
          * following methods:
@@ -1789,6 +1858,8 @@ class Thread implements Runnable {
         WAITING,
 
         /**
+         * 限期等待， 可以设置最大等待时间
+         *
          * Thread state for a waiting thread with a specified waiting time.
          * A thread is in the timed waiting state due to calling one of
          * the following methods with a specified positive waiting time:
@@ -1803,6 +1874,8 @@ class Thread implements Runnable {
         TIMED_WAITING,
 
         /**
+         * 结束
+         *
          * Thread state for a terminated thread.
          * The thread has completed execution.
          */

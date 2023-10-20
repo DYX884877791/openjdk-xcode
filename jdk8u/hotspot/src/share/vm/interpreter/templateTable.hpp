@@ -52,23 +52,35 @@
 // A Template describes the properties of a code template for a given bytecode
 // and provides a generator to generate the code template.
 
+// Template的定义位于templateTable.hpp中，用来描述一个字节码模板的属性，并提供一个用来生成字节码模板的函数
 class Template VALUE_OBJ_CLASS_SPEC {
  private:
   enum Flags {
+      // 标志需要使用字节码指针（byte code pointer，数值为字节码基址+字节码偏移量）。表示生成的模板代码中是否需要使用指向字节码指令的指针，其实也就是说是否需要读取字节码指令的操作数，
+      // 所以含有操作数的指令大部分都需要bcp，但是有一些是不需要的，如monitorenter与monitorexit等，这些的操作数都在表达式栈中，表达式栈顶就是其操作数，并不需要从Class文件中读取，所以不需要bcp；
     uses_bcp_bit,                                // set if template needs the bcp pointing to bytecode
-    does_dispatch_bit,                           // set if template dispatches on its own
+      // 标志表示自己是否含有控制流转发逻辑，如tableswitch、lookupswitch、invokevirtual、ireturn等字节码指令，本身就需要进行控制流转发；
+    does_dispatch_bit,                           // set if template dispatches on its own 就其本身而言; 靠自己
+      // 标志是否需要调用JVM函数，在调用TemplateTable::call_VM()函数时都会判断是否有这个标志，通常方法调用JVM函数时都会通过调用TemplateTable::call_VM()函数来间接完成调用。JVM函数就是用C++写的函数。
     calls_vm_bit,                                // set if template calls the vm
+      // 标志是否是wide指令（使用附加字节扩展全局变量索引）
     wide_bit                                     // set if template belongs to a wide instruction
   };
 
   typedef void (*generator)(int arg);
 
+    // 用来描述字节码模板的属性，相关属性通过枚举Flags指定
   int       _flags;                              // describes interpreter template properties (bcp unknown)
+    // 执行字节码指令前的栈顶值类型
   TosState  _tos_in;                             // tos cache state before template execution
+    // 执行字节码指令后的栈顶值类型
   TosState  _tos_out;                            // tos cache state after  template execution
+    // generator是用来生成字节码模板的函数的别名，其函数定义是typedef void (*generator)(int arg);
   generator _gen;                                // template code generator
+    // 用来生成字节码模板的参数
   int       _arg;                                // argument for template code generator
 
+    // Template定义的方法中除属性相关的如uses_bcp外，就三个方法initialize、bytecode、generate
   void      initialize(int flags, TosState tos_in, TosState tos_out, generator gen, int arg);
 
   friend class TemplateTable;
@@ -89,6 +101,19 @@ class Template VALUE_OBJ_CLASS_SPEC {
 // The TemplateTable defines all Templates and provides accessor functions
 // to get the template for a given bytecode.
 
+// OpenJDK的模板解释器会维护一个模板表，这个模板表会建立一个opcode到machine code的对应关系，
+// 模板表TemplateTable保存了各个字节码的模板（目标代码生成函数和参数），即各个字节码转换机器码片段的模板，通过他的函数名称就知道是和字节码指令 opcode 是对应的。
+//
+// OpenJDK模板解释器中的模板表实现分为两部分：一部分是架构无关的公共代码，主要位于src/hotspot/share/interpreter/templateTable.hpp
+// 和src/hotspot/share/interpreter/templateTable.cpp中；
+// 一部分是架构相关的代码，主要位于hotspot/src/cpu/x86/vm/templateTable_x86_64.hpp和hotspot/src/cpu/x86/vm/templateTable_x86_64.cpp之中。
+// 这两者结合起来构成了一个完整的模板表。公共代码部分主要是类的整体实现，包含了类的初始化等；
+// 平台相关的代码主要是包含了模板表中具体opcode所对应的生成函数，这个生成函数可以为对应的opcode生成machine code，
+// 这也就是模板表所建立的从opcode到machine code的对应关系——为每个opcode做一个生成函数来生成对应的machine code。所以，在不同平台进行OpenJDK移植的时候，主要是关心目标平台相关的这部分模板表。
+//
+//目标平台相关的模板表中包含了具体指令的生成函数，生成函数一般是用目标平台的汇编语言所编写，最终会生成机器码。
+// TemplateTable的定义位于同目录的templateTable.hpp中，表示字节码指令的模板类，定义了所有指令的指令模板，并提供了获取给定字节码指令的模板的方法
+// 跟平台相关的方法定义通过宏的方式引入
 class TemplateTable: AllStatic {
  public:
   enum Operation { add, sub, mul, div, rem, _and, _or, _xor, shl, shr, ushr };
@@ -96,16 +121,22 @@ class TemplateTable: AllStatic {
   enum CacheByte { f1_byte = 1, f2_byte = 2 };  // byte_no codes
 
  private:
+    // 是否完成初始化
   static bool            _is_initialized;        // true if TemplateTable has been initialized
+    // Template数组，表示各字节码指令对应的Template
   static Template        _template_table     [Bytecodes::number_of_codes];
+    // Template数组，宽字节下的各字节码指令对应的Template
   static Template        _template_table_wide[Bytecodes::number_of_codes];
 
+    // 当前正在生成的Template模板
   static Template*       _desc;                  // the current template to be generated
   static Bytecodes::Code bytecode()              { return _desc->bytecode(); }
 
+    // 关联的BarrierSet实例
   static BarrierSet*     _bs;                    // Cache the barrier set.
  public:
   //%note templates_1
+  // 用来生成字节码模板的Assembler实例
   static InterpreterMacroAssembler* _masm;       // the assembler used when generating templates
 
  private:
@@ -130,6 +161,7 @@ class TemplateTable: AllStatic {
   static void call_VM(Register oop_result, Register last_java_sp, address entry_point, Register arg_1, Register arg_2);
   static void call_VM(Register oop_result, Register last_java_sp, address entry_point, Register arg_1, Register arg_2, Register arg_3);
 
+    // 私有方法大部分都是跟指令对应的方法,如下：
   // bytecodes
   static void nop();
 
@@ -344,11 +376,13 @@ class TemplateTable: AllStatic {
   friend class InterpreterMacroAssembler;
 
  public:
+    //  对外public static方法就4个
   // Initialization
   static void initialize();
   static void pd_initialize();
 
   // Templates
+    //先检查是否是非宽字节指令，如果是则返回对应的Template
   static Template* template_for     (Bytecodes::Code code)  { Bytecodes::check     (code); return &_template_table     [code]; }
   static Template* template_for_wide(Bytecodes::Code code)  { Bytecodes::wide_check(code); return &_template_table_wide[code]; }
 

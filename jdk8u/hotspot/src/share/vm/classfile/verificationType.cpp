@@ -42,28 +42,36 @@ VerificationType VerificationType::from_tag(u1 tag) {
   }
 }
 
+// 就是检查一个类型 to （当前类型）是否可以被 from 类型赋值
 bool VerificationType::is_reference_assignable_from(
     const VerificationType& from, ClassVerifier* context,
     bool from_field_is_protected, TRAPS) const {
   instanceKlassHandle klass = context->current_class();
+    // 如果 from 为 null，则合法（null 可以复制给任意对象和数组类型）
   if (from.is_null()) {
     // null is assignable to any reference
     return true;
   } else if (is_null()) {
     return false;
   } else if (name() == from.name()) {
+      // 如果 from 和 to 是同一类型，则也合法
     return true;
   } else if (is_object()) {
+      // 对象引用类型
     // We need check the class hierarchy to check assignability
+      // 如果 to 是一个对象类型，则需要检查 from 和 to 类型是否有继承关系
     if (name() == vmSymbols::java_lang_Object()) {
       // any object or array is assignable to java.lang.Object
+        // 如果 to 为 java.lang.Object 类型，则也是合法
       return true;
     }
+      // 加载 to 类型的 class 文件以便获取更多的信息
     Klass* obj = SystemDictionary::resolve_or_fail(
         name(), Handle(THREAD, klass->class_loader()),
         Handle(THREAD, klass->protection_domain()), true, CHECK_false);
     KlassHandle this_class(THREAD, obj);
 
+      // 如果是接口类型，则认为合法（至于为什么，英文注释里有）
     if (this_class->is_interface() && (!from_field_is_protected ||
         from.name() != vmSymbols::java_lang_Object())) {
       // If we are not trying to access a protected field or method in
@@ -71,9 +79,11 @@ bool VerificationType::is_reference_assignable_from(
       // including java.lang.Cloneable and java.io.Serializable.
       return true;
     } else if (from.is_object()) {
+        // 如果 from 是对象引用类型，则需要加载 from 类型的类文件
       Klass* from_class = SystemDictionary::resolve_or_fail(
           from.name(), Handle(THREAD, klass->class_loader()),
           Handle(THREAD, klass->protection_domain()), true, CHECK_false);
+        // 判断 from 是否是 to 的子类型
       bool result = InstanceKlass::cast(from_class)->is_subclass_of(this_class());
       if (result && DumpSharedSpaces) {
         if (klass()->is_subclass_of(from_class) && klass()->is_subclass_of(this_class())) {
@@ -93,6 +103,7 @@ bool VerificationType::is_reference_assignable_from(
       return result;
     }
   } else if (is_array() && from.is_array()) {
+      // 判断数组的情况
     VerificationType comp_this = get_component(context, CHECK_false);
     VerificationType comp_from = from.get_component(context, CHECK_false);
     if (!comp_this.is_bogus() && !comp_from.is_bogus()) {

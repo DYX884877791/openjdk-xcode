@@ -38,6 +38,11 @@ import javax.lang.model.element.ExecutableElement;
  *   where no actual type is appropriate; for example, the superclass
  *   of {@code java.lang.Object}.
  * </ul>
+ * 在没有实际类型合适的情况下使用的伪类型.其情况如下:
+ *
+ *  TypeKind#VOID –> 代表对应的void 关键字
+ *  TypeKind#PACKAGE –> 对应packeage 的伪元素
+ *  TypeKind#NONE –> 代表没有对应类型,如 Object 就没有父类
  *
  * @author Joseph D. Darcy
  * @author Scott Seligman

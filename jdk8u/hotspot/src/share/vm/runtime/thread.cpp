@@ -83,6 +83,9 @@
 #include "utilities/events.hpp"
 #include "utilities/preserveException.hpp"
 #include "utilities/macros.hpp"
+extern "C" {
+  #include "utilities/slog.hpp"
+}
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -217,6 +220,7 @@ void Thread::operator delete(void* p) {
 
 
 Thread::Thread() {
+    slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的Thread::Thread构造函数...");
   // stack and get_thread
   set_stack_base(NULL);
   set_stack_size(0);
@@ -224,6 +228,7 @@ Thread::Thread() {
   set_lgrp_id(-1);
 
   // allocated data structures
+    // 其关联了一个os的thread,也就是系统的thread,在unix系统上就是posix的thread库,该库调用了系统调用来创建线程,所以JavaThread是内核线程的描述操作类,本质上是内核线程.
   set_osthread(NULL);
   set_resource_area(new (mtThread)ResourceArea());
   DEBUG_ONLY(_current_resource_mark = NULL;)
@@ -319,6 +324,7 @@ void Thread::initialize_thread_local_storage() {
 }
 
 void Thread::record_stack_base_and_size() {
+    // 主要就是获取栈顶,进入os::current_stack_base方法
   set_stack_base(os::current_stack_base());
   set_stack_size(os::current_stack_size());
   if (is_Java_thread()) {
@@ -453,16 +459,22 @@ void Thread::set_priority(Thread* thread, ThreadPriority priority) {
   trace("set priority", thread);
   debug_only(check_for_dangling_thread_pointer(thread);)
   // Can return an error!
+    // 设置线程优先级
   (void)os::set_priority(thread, priority);
 }
 
 
 void Thread::start(Thread* thread) {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的Thread::start函数...");
   trace("start", thread);
+    // 如果没有禁用线程 DisableStartThread 并且是 Java 线程 thread->is_Java_thread()，那么设置线程状态为 RUNNABLE。
   // Start is different from resume in that its safety is guaranteed by context or
   // being called from a Java method synchronized on the Thread object.
+    // DisableStartThread默认是false
   if (!DisableStartThread) {
     if (thread->is_Java_thread()) {
+        // 如果是java线程，设置线程状态
+        //如果是用户创建的java线程，在启动线程之前，将线程状态初始化为 RUNNABLE
       // Initialize the thread state to RUNNABLE before starting this thread.
       // Can not set it after the thread started because we do not know the
       // exact thread state at that time. It could be in MONITOR_WAIT or
@@ -470,6 +482,8 @@ void Thread::start(Thread* thread) {
       java_lang_Thread::set_thread_status(((JavaThread*)thread)->threadObj(),
                                           java_lang_Thread::RUNNABLE);
     }
+      // 启动原生线程
+      // 不同的 OS 会有不同的启动代码逻辑，跑到os.cpp中的start_thread方法
     os::start_thread(thread);
   }
 }
@@ -804,9 +818,11 @@ bool JavaThread::profile_last_Java_frame(frame* _fr) {
 void Thread::interrupt(Thread* thread) {
   trace("interrupt", thread);
   debug_only(check_for_dangling_thread_pointer(thread);)
+    // Thread::interrupt调用os::interrupt方法
   os::interrupt(thread);
 }
 
+// 返回当前线程是否已经被中断
 bool Thread::is_interrupted(Thread* thread, bool clear_interrupted) {
   trace("is_interrupted", thread);
   debug_only(check_for_dangling_thread_pointer(thread);)
@@ -861,10 +877,12 @@ void Thread::print_on(outputStream* st) const {
   if (osthread() != NULL) {
     int os_prio;
     if (os::get_native_priority(this, &os_prio) == OS_OK) {
+        // 首先打印 OSThread 的优先级
       st->print("os_prio=%d ", os_prio);
     }
     st->print("tid=" INTPTR_FORMAT " ", this);
     ext().print_on(st);
+      // 最后是状态信息
     osthread()->print_on(st);
   }
   debug_only(if (WizardMode) print_owned_locks_on(st);)
@@ -987,11 +1005,17 @@ bool Thread::is_lock_owned(address adr) const {
 
 bool Thread::set_as_starting_thread() {
  // NOTE: this must be called inside the main thread.
+    // 执行了os::create_main_thread,进入该方法
   return os::create_main_thread((JavaThread*)this);
 }
 
+// JVM通过initialize_class函数来加载Java类，该函数是thread.cpp的一个静态函数
 static void initialize_class(Symbol* class_name, TRAPS) {
+    // 解析该类，如果解析失败则返回空指针
+    // 第一步就是解析该类,因为之前已经对类的定义及偏移量有了记录,所以这里就依据此进行解析.
   Klass* klass = SystemDictionary::resolve_or_fail(class_name, true, CHECK);
+    // 将其转换为InstanceKlass 并执行初始化.
+    // 第二步就是初始化
   InstanceKlass::cast(klass)->initialize(CHECK);
 }
 
@@ -1031,17 +1055,26 @@ static Handle create_initial_thread_group(TRAPS) {
 
 // Creates the initial Thread
 static oop create_initial_thread(Handle thread_group, JavaThread* thread, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的create_initial_thread函数...");
+    // 加载并初始化java_lang_Thread类
   Klass* k = SystemDictionary::resolve_or_fail(vmSymbols::java_lang_Thread(), true, CHECK_NULL);
   instanceKlassHandle klass (THREAD, k);
+    // 分配一个instanceHandle
   instanceHandle thread_oop = klass->allocate_instance_handle(CHECK_NULL);
 
+    // Thread实例oop保存关联的JavaThread
   java_lang_Thread::set_thread(thread_oop(), thread);
+    // 设置线程优先级为NormPriority--> main线程的优先级就是NormPriority，由该线程创建的子线程的优先级就默认是NormPriority。
   java_lang_Thread::set_priority(thread_oop(), NormPriority);
+    // JavaThread保存关联的Thread实例oop
   thread->set_threadObj(thread_oop());
 
+    // 初始化一个字符串main
   Handle string = java_lang_String::create_from_str("main", CHECK_NULL);
 
   JavaValue result(T_VOID);
+    // 调用Thread的构造方法，创建的Thread实例保存在thread_oop中
+  slog_debug("通过调用JavaCalls::call_special函数来执行java.lang.Thread的构造方法...");
   JavaCalls::call_special(&result, thread_oop,
                                    klass,
                                    vmSymbols::object_initializer_name(),
@@ -1053,10 +1086,14 @@ static oop create_initial_thread(Handle thread_group, JavaThread* thread, TRAPS)
 }
 
 static void call_initializeSystemClass(TRAPS) {
+    // 首先获取Klass（类元信息在虚拟机中的结构表示，就是一个c++中的类），在hotspot/src/share/vm/classfile/vmSymbols.hpp中找找java_lang_System对应的值：
+    // 可以看到代表的就是java.lang.System类，同时，initializeSystemClass_name也定义在vmSymbols.hpp中：
   Klass* k =  SystemDictionary::resolve_or_fail(vmSymbols::java_lang_System(), true, CHECK);
   instanceKlassHandle klass (THREAD, k);
 
   JavaValue result(T_VOID);
+    // 这里使用JavaCalls::call_static就是调用java.lang.System的静态方法initializeSystemClass。还要再啰嗦一句，call_initializeSystemClass是在何处调用的？
+    // 回到thread.cpp中，进入Threads::create_vm方法，在其中找到了call_initializeSystemClass方法的调用
   JavaCalls::call_static(&result, klass, vmSymbols::initializeSystemClass_name(),
                                          vmSymbols::void_method_signature(), CHECK);
 }
@@ -1437,6 +1474,7 @@ void WatcherThread::print_on(outputStream* st) const {
 // A JavaThread is a normal Java thread
 
 void JavaThread::initialize() {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的JavaThread::initialize函数...");
   // Initialize fields
 
   // Set the claimed par_id to UINT_MAX (ie not claiming any par_ids)
@@ -1446,6 +1484,7 @@ void JavaThread::initialize() {
   set_threadObj(NULL);
   _anchor.clear();
   set_entry_point(NULL);
+    // 其中JNIEnv对象的初始化在这里完成，jni_functions()方法返回thread.cpp中的一个全局变量
   set_jni_functions(jni_functions());
   set_callee_target(NULL);
   set_vm_result(NULL);
@@ -1484,6 +1523,7 @@ void JavaThread::initialize() {
   _pending_jni_exception_check_fn = NULL;
   _do_not_unlock_if_synchronized = false;
   _cached_monitor_info = NULL;
+  slog_debug("即将调用Parker::Allocate函数,并将返回值赋值给_parker成员变量...");
   _parker = Parker::Allocate(this) ;
 
 #ifndef PRODUCT
@@ -1504,6 +1544,7 @@ void JavaThread::initialize() {
   }
 
   // Setup safepoint state info for this thread
+    // ThreadSafepointState的设置,可见每个java线程都支持安全点.
   ThreadSafepointState::create(this);
 
   debug_only(_java_call_counter = 0);
@@ -1529,6 +1570,7 @@ JavaThread::JavaThread(bool is_attaching_via_jni) :
   _dirty_card_queue(&_dirty_card_queue_set)
 #endif // INCLUDE_ALL_GCS
 {
+  slog_debug("在JavaThread::JavaThread构造函数中即将调用initialize函数...");
   initialize();
   if (is_attaching_via_jni) {
     _jni_attach_state = _attaching_via_jni;
@@ -1579,7 +1621,11 @@ void JavaThread::block_if_vm_exited() {
 // Remove this ifdef when C1 is ported to the compiler interface.
 static void compiler_thread_entry(JavaThread* thread, TRAPS);
 
+// 在jvm.cpp的JVM_StartThread方法中，调用了这个JavaThread的构造方法
+// JavaThread的构造方法，传入了一个entry_point，这个指的是线程执行函数的入口地址。
+// JavaThread 类的构造方法来看看，他是通过 os::create_thread 函数来进行创建 Java 对应的内核线程
 JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
+// Thread的构造方法就是初始化Thread的各属性
   Thread()
 #if INCLUDE_ALL_GCS
   , _satb_mark_queue(&_satb_mark_queue_set),
@@ -1589,14 +1635,28 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
   if (TraceThreadEvents) {
     tty->print_cr("creating thread %p", this);
   }
+    // 初始化JavaThread自有的各种属性
   initialize();
+    //正常的Java线程都是_not_attaching_via_jni，只有本地线程才是_attached_via_jni
   _jni_attach_state = _not_attaching_via_jni;
+    // entry_point就是执行的run方法
+    //设置入口点，用于回调java代码中的run方法
+    //设置线程的调用方法
   set_entry_point(entry_point);
   // Create the native thread itself.
   // %note runtime_23
+    //判断ThreadType
   os::ThreadType thr_type = os::java_thread;
+    // 是否编译线程，编译线程也是JavaThread，但是对应的os::ThreadType类型不同
   thr_type = entry_point == &compiler_thread_entry ? os::compiler_thread :
                                                      os::java_thread;
+    //创建一个新操作系统层面的线程
+    //创建一个原生线程，底层通过pthread_create创建，创建成功后将其设置到Thread的_osthread属性中，然后等待其初始化完成
+    //，初始化结束后在startThread_lock上等待被唤醒
+    //如果内存不足导致创建失败，则该属性为NULL
+    //  创建Java线程对应的内核线程
+    // os:create_thread 其实主要就是一个用来支持跨平台创建线程的， 以 Linux 为例 （hotspot/src/os/linux/vm/os_linux.cpp）：
+  slog_debug("即将调用os::create_thread函数创建操作系统层面的线程...");
   os::create_thread(this, thr_type, stack_sz);
   // The _osthread may be NULL here because we ran out of memory (too many threads active).
   // We need to throw and OutOfMemoryError - however we cannot do this here because the caller
@@ -1651,24 +1711,33 @@ JavaThread::~JavaThread() {
 
 // The first routine called by a new Java thread
 void JavaThread::run() {
+  slog_debug("JavaThread::run()函数被调用了...");
   // initialize thread-local alloc buffer related fields
+    // 初始TLAB
   this->initialize_tlab();
 
   // used to test validitity of stack trace backs
+    // 记录栈基地址
   this->record_base_of_stack_pointer();
 
   // Record real stack base and size.
+    //记录基地址和线程栈大小
   this->record_stack_base_and_size();
 
   // Initialize thread local storage; set before calling MutexLocker
+    // 初始化ThreadLocalStorage
   this->initialize_thread_local_storage();
 
+    //创建保护区来支持栈溢出错误处理，stack_guard_pages
   this->create_stack_guard_pages();
 
+    //缓存全局变量，注意这个函数什么也没干，空实现
   this->cache_global_variables();
 
   // Thread is now sufficient initialized to be handled by the safepoint code as being
   // in the VM. Change thread state from _thread_new to _thread_in_vm
+    // 修改线程状态，注意此时会检查是否进入安全点同步，如果是则阻塞当前线程
+    //此时，线程已经基本初始化完毕，可以让safe_point接手了，这里修改线程的状态从_thread_new到_thread_in_vm
   ThreadStateTransition::transition_and_fence(this, _thread_new, _thread_in_vm);
 
   assert(JavaThread::current() == this, "sanity check");
@@ -1678,8 +1747,11 @@ void JavaThread::run() {
 
   // This operation might block. We call that after all safepoint checks for a new thread has
   // been completed.
+    // 设置JNIHandleBlock
+    //分配JNIHandleBlock对象，这个调用会阻塞当前线程，所以要在safe_point之后
   this->set_active_handles(JNIHandleBlock::allocate_block());
 
+    //用于JVMTI跟踪线程生命周期
   if (JvmtiExport::should_post_thread_life()) {
     JvmtiExport::post_thread_start(this);
   }
@@ -1688,32 +1760,44 @@ void JavaThread::run() {
 
   // We call another function to do the rest so we are sure that the stack addresses used
   // from there will be lower than the stack base just computed
+    // 执行具体的run方法并在执行完成销毁当前实例
   thread_main_inner();
 
   // Note, thread is no longer valid at this point!
 }
 
 
+/**
+ * 在 thread_main_inner 方法内，再调用之前创建 JavaThread 对象的时候传递进来的 entry_point 方法：
+ */
 void JavaThread::thread_main_inner() {
+  slog_debug("进入thread.cpp中的JavaThread::thread_main_inner函数...");
   assert(JavaThread::current() == this, "sanity check");
   assert(this->threadObj() != NULL, "just checking");
 
   // Execute thread entry point unless this thread has a pending exception
   // or has been stopped before starting.
   // Note: Due to JVM_StopThread we can have pending exceptions already!
+    // 如果没有待处理异常且没有被中止
   if (!this->has_pending_exception() &&
       !java_lang_Thread::is_stillborn(this->threadObj())) {
     {
       ResourceMark rm(this);
+        // 这里有你熟悉的设置的线程名称
       this->set_native_thread_name(this->get_thread_name());
     }
     HandleMark hm(this);
+      // 执行entry_point函数，就是执行Thread的run方法
+      // 调用 entry_point 方法,实际调用的就是 JavaThread对象中的 thread_entry 方法。（在src/share/vm/prims/jvm.cpp中的JVM_StartThread方法所创建的JavaThread对象）
+      // entry_point是在hotspot/src/share/vm/runtime/thread.cpp的JavaThread::JavaThread构造方法中设置的
     this->entry_point()(this, this);
   }
 
   DTRACE_THREAD_PROBE(stop, this);
 
+    // run方法执行完成，准备退出线程
   this->exit(false);
+    // 释放JavaThread对应的内存
   delete this;
 }
 
@@ -1722,16 +1806,22 @@ static void ensure_join(JavaThread* thread) {
   // We do not need to grap the Threads_lock, since we are operating on ourself.
   Handle threadObj(thread, thread->threadObj());
   assert(threadObj.not_null(), "java thread object must exist");
+    // 创建ObjectLocker
   ObjectLocker lock(threadObj, thread);
   // Ignore pending exception (ThreadDeath), since we are exiting anyway
+    // 清除待处理异常，因为线程准备退出了
   thread->clear_pending_exception();
   // Thread is exiting. So set thread_status field in  java.lang.Thread class to TERMINATED.
+    // 设置线程状态为TERMINATED
   java_lang_Thread::set_thread_status(threadObj(), java_lang_Thread::TERMINATED);
   // Clear the native thread instance - this makes isAlive return false and allows the join()
   // to complete once we've done the notify_all below
+    // 将eetop属性置为NULL，这样is_alive方法就会返回false
   java_lang_Thread::set_thread(threadObj(), NULL);
+    // 唤醒所有在该thread oop关联的重量级锁上等待的线程
   lock.notify_all(thread);
   // Ignore pending exception (ThreadDeath), since we are exiting anyway
+    // 清除待处理异常
   thread->clear_pending_exception();
 }
 
@@ -2863,17 +2953,23 @@ void JavaThread::print_thread_state() const {
 
 // Called by Threads::print() for VM_PrintThreads operation
 void JavaThread::print_on(outputStream *st) const {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的JavaThread::print_on函数...");
+    // 打印线程名称
   st->print("\"%s\" ", get_thread_name());
   oop thread_oop = threadObj();
   if (thread_oop != NULL) {
+      // 获取 java 堆中的 java.lang.Thread 对象，打印其 优先级和是否为守护线程信息
     st->print("#" INT64_FORMAT " ", java_lang_Thread::thread_id(thread_oop));
     if (java_lang_Thread::is_daemon(thread_oop))  st->print("daemon ");
     st->print("prio=%d ", java_lang_Thread::priority(thread_oop));
   }
+    // 打印 OSThread 信息
   Thread::print_on(st);
   // print guess for valid stack memory region (assume 4K pages); helps lock debugging
+    // 打印 Java 帧 栈顶信息
   st->print_cr("[" INTPTR_FORMAT "]", (intptr_t)last_Java_sp() & ~right_n_bits(12));
   if (thread_oop != NULL && JDK_Version::is_gte_jdk15x_version()) {
+      // 打印 java 堆中的 java.lang.Thread 对象 的状态信息
     st->print_cr("   java.lang.Thread.State: %s", java_lang_Thread::thread_status_name(thread_oop));
   }
 #ifndef PRODUCT
@@ -2920,6 +3016,7 @@ void JavaThread::verify() {
 // seen prior to having it's threadObj set (eg JNI attaching threads and
 // if vm exit occurs during initialization). These cases can all be accounted
 // for such that this method never returns NULL.
+// 返回JavaThread所指定的线程名称...
 const char* JavaThread::get_thread_name() const {
 #ifdef ASSERT
   // early safepoints can hit while current thread does not yet have TLS
@@ -3010,6 +3107,7 @@ ThreadPriority JavaThread::java_priority() const {
   return priority;
 }
 
+//prio默认是NoPriority
 void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
 
   assert(Threads_lock->owner() == Thread::current(), "must have threads lock");
@@ -3030,15 +3128,19 @@ void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
                     JNIHandles::resolve_non_null(jni_thread));
   assert(InstanceKlass::cast(thread_oop->klass())->is_linked(),
     "must be initialized");
+    // 保存关联的Java Thread实例
   set_threadObj(thread_oop());
+    // 设置Java Thread实例的eetop属性，保存当前JavaThread指针
   java_lang_Thread::set_thread(thread_oop(), this);
 
   if (prio == NoPriority) {
+      // 获取priority属性
     prio = java_lang_Thread::priority(thread_oop());
     assert(prio != NoPriority, "A valid priority should be present");
   }
 
   // Push the Java priority down to the native thread; needs Threads_lock
+    // 将Java线程优先级映射成原生线程优先级，然后设置原生线程的优先级
   Thread::set_priority(this, prio);
 
   prepare_ext();
@@ -3241,11 +3343,14 @@ Klass* JavaThread::security_get_caller_class(int depth) {
 }
 
 static void compiler_thread_entry(JavaThread* thread, TRAPS) {
+    //校验当前线程必须是CompilerThread
   assert(thread->is_Compiler_thread(), "must be compiler thread");
+    //循环的从编译队列中获取编译任务执行编译
   CompileBroker::compiler_thread_loop();
 }
 
 // Create a CompilerThread
+//这里的compiler_thread_entry是一个方法指针，是该线程启动后自动执行的方法
 CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
 : JavaThread(&compiler_thread_entry) {
   _env   = NULL;
@@ -3258,6 +3363,7 @@ CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
   _compiler = NULL;
 
   // Compiler uses resource area for compilation, let's bias it to mtCompiler
+    //设置ResourceArea的类型
   resource_area()->bias_to(mtCompiler);
 
 #ifndef PRODUCT
@@ -3329,45 +3435,86 @@ void Threads::threads_do(ThreadClosure* tc) {
   // If CompilerThreads ever become non-JavaThreads, add them here
 }
 
+/**
+ * 看看Threads::create_vm是在何处调用的，我们进入hotspot/src/share/vm/prims/jni.cpp，找到JNI_CreateJavaVM方法
+ *
+ * 当java虚拟机启动的时候，会启动很多内部的线程，这些线程主要在thread.cpp里的create_vm方法体里实现
+ *
+ * 而在thread.cpp里主要起了2个线程来处理信号相关的
+ *
+ * 1. Signal Dispatcher 线程
+ * 在os.cpp中的signal_init()函数中，启动了signal dispatcher 线程，对signal dispatcher 线程主要是用于处理信号，等待信号并且分发处理，可以详细看signal_thread_entry的方法
+ *
+ * 2. Attach Listener 线程
+ * Attach Listener 线程是负责接收到外部的命令，而对该命令进行执行的并且吧结果返回给发送者。在jvm启动的时候，如果没有指定+StartAttachListener，
+ *  该线程是不会启动的，刚才我们讨论到了在接受到quit信号之后，会调用 AttachListener::is_init_trigger()通过调用AttachListener::init()启动了Attach Listener 线程，同时在不同的操作系统下初始化，在linux中 是在attachListener_Linux.cpp文件中实现的。
+ */
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的Threads::create_vm函数...");
 
   extern void JDK_Version_init();
 
   // Preinitialize version info.
+    // 预初始化，可以由特定平台按需覆盖定义，默认为空实现
   VM_Version::early_initialize();
 
   // Check version
+    // 检查当前JDK版本是否支持代码编译的JDK版本
   if (!is_supported_jni_version(args->version)) return JNI_EVERSION;
 
   // Initialize the output stream module
+    // 流模块的初始化
+  slog_debug("即将调用ostream_init函数进行流模块的初始化...");
   ostream_init();
 
   // Process java launcher properties.
+    // 处理启动器相关参数，如-Dsun.java.launcher
   Arguments::process_sun_java_launcher_properties(args);
 
   // Initialize the os module before using TLS
+    /**
+     * OS模块的初始化，包含设置内存页大小，获取物理内存大小，锁的初始化
+     * os::init()函数，以linux为例，位于hotspot/src/os/linux/vm/os_linux.cpp，用于初步初始化一些linux系统相关内容，主要包括：
+     * 1.初始化随机数产生器种子
+     * 2.设置内存页大小
+     * 3.初始化系统信息
+     * 4.获取原生主线程句柄
+     * 5.初始化时钟
+     */
+  slog_debug("即将调用os::init函数进行OS模块的初始化...");
   os::init();
 
   // Initialize system properties.
+    // 初始化系统属性，所有的属性通过Arguments类的静态属性_system_properties保存，该属性是一个SystemProperty类的指针
+    // 每个属性对应一个SystemProperty实例，通过链表的形式关联起来
+    //与操作系统相关的属性，详细代码位于hotspot/src/share/vm/runtime/arguments.cpp中的void Arguments::init_system_properties()函数
   Arguments::init_system_properties();
 
   // So that JDK version can be used as a discrimintor when parsing arguments
+    // 初始JDK_Version类的静态变量_current，获取当前JDK的版本信息，如_major主版本号，_minor次版本号，_update更新时间等
   JDK_Version_init();
 
   // Update/Initialize System properties after JDK version number is known
+    // 初始特定jdk版本的系统属性
   Arguments::init_version_specific_system_properties();
 
   // Parse arguments
   // Note: this internally calls os::init_container_support()
+    // 解析命令行参数
+  slog_debug("即将调用Arguments::parse函数解析命令行参数...");
   jint parse_result = Arguments::parse(args);
   if (parse_result != JNI_OK) return parse_result;
 
+    // 初始化可用CPU核数，根据配置设置大内存页
   os::init_before_ergo();
 
+    // 设置系统参数，如是否使用指针压缩，堆内存大小，GC参数等
+    // 根据机器的内存、CPU等等硬件信息，初始化了一些JVM内存参数、gc策略、根据CPU不同选择不同策略的BiasedLocking(偏向锁)等等内容，还初始化了JDK8取消持久带新增的Metaspace区。
   jint ergo_result = Arguments::apply_ergo();
   if (ergo_result != JNI_OK) return ergo_result;
 
   if (PauseAtStartup) {
+      // 解析启动文件
     os::pause();
   }
 
@@ -3378,32 +3525,65 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 #endif /* USDT2 */
 
   // Record VM creation timing statistics
+    // 记录启动时间
+    // 启动timer，用于统计一些JVM启动信息
   TraceVmCreationTime create_vm_timer;
   create_vm_timer.start();
 
   // Timing (must come after argument parsing)
+    // 打印启动时间
   TraceTime timer("Create VM", TraceStartupTime);
 
   // Initialize the os module after parsing the args
+    /**
+     * OS模块的二次初始化，包含线程锁的初始，polling_page和mem_serialize_page分配内存，信号处理初始化，设置线程栈大小，libpthread初始化，
+     * 设置线程锁，线程优先级策略的初始化
+     *
+     * os::init_2()函数，位于hotspot/src/os/linux/vm/os_linux.cpp，和os::init()不同的是，os::init()用于初始化一些固定配置，os::init_2()根据外部传进来的参数来进行配置，os::init_2()初始化了以下内容：
+     * 1.初始化快速线程时钟
+     * 2.使用mmap分配一个只读单页内存供safepoint polling使用
+     * safepoint是JVM中很重要的一个概念，在很多场景下都会看到，特别是在GC时。safepoint是指一些特定的位置，当线程运行到这些位置时，线程的一些状态可以被确定。
+     * 3.使用mmap分配memory_serialize_page
+     * memory_serialize_page是用来在不使用memory barrier系指令的场景下模拟其操作，这样VM Thread可以在Java线程状态发生变化时，及时获取到它们的状态，以正确地进行safe point时的管理。
+     * 4.初始化内核信号，安装信号处理handler
+     * 5.设置线程栈大小，设置线程初始栈
+     * 6.初始化libpthread
+     * 7.设置linux最大fd数量
+     * 8.设置用于串行化线程创建的时钟
+     * 9.若开启PerfAllowAtExitRegistration选项，向系统注册atexit函数
+     * 10.初始化线程优先级策略
+     */
+  slog_debug("即将调用os::init_2函数进行OS模块的二次初始化...");
   jint os_init_2_result = os::init_2();
   if (os_init_2_result != JNI_OK) return os_init_2_result;
 
+    // UseNUMA时额外的参数设置
   jint adjust_after_os_result = Arguments::adjust_after_os();
   if (adjust_after_os_result != JNI_OK) return adjust_after_os_result;
 
   // intialize TLS
+    // 初始化TLS
+  slog_debug("即将调用ThreadLocalStorage::init函数进行TLS的初始化...");
   ThreadLocalStorage::init();
 
   // Initialize output stream logging
+    // 初始化GC日志和LoadedClass日志的fileStream对象
   ostream_init_log();
 
   // Convert -Xrun to -agentlib: if there is no JVM_OnLoad
   // Must be before create_vm_init_agents()
+    // 将参数-Xrun 转换成 -agentlib参数
+    // 为了能把-Xrun参数值转换成agentlib的库文件,这个初始化方法是判断agentlib文件列表是否为空.
+    // 加载系统库
+    //在解析JVM配置选项的时候，Arguments模块根据虚拟机选项-Xrun将要加载的本地库加入到_libraryList中，根据-agentlib -agentpath选项
+    // 将要加载的本地代理库加入到_agentList中，当这些库被加载进虚拟机进程后，虚拟机将在库中查找函数符号JVM_Onload或者Agent_OnLoad并调用该函数，实现这些库与虚拟机的连接。
   if (Arguments::init_libraries_at_startup()) {
     convert_vm_init_libraries_to_agents();
   }
 
   // Launch -agentlib/-agentpath and converted -Xrun agents
+    // 根据-agentlib/-agentpath and 转换后 -Xrun参数创建agents
+    // 同上面的一样,这里是判断agent的列表是否为空,也是为了转换-Xrun的参数.
   if (Arguments::init_agents_at_startup()) {
     create_vm_init_agents();
   }
@@ -3414,21 +3594,35 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   _number_of_non_daemon_threads = 0;
 
   // Initialize global data structures and create system classes in heap
+    // 初始化Events,各种锁，ChunkPool，PerfMemory
+    // 初始化全局数据结构
+  slog_debug("即将调用vm_init_globals函数进行全局数据结构的初始化...");
   vm_init_globals();
 
   // Attach the main thread to this os thread
+    // 创建一个新的JavaThread并设置相关属性，注意这里并未创建一个新的线程，而是将当前线程同JavaThread对象关联起来，通过JavaThread管理相关属性
+    // jvm中只有两种线程,一种是JavaThread(),另一种是NonJavaThread.(hotspot/src/share/vm/runtime/thread.cpp中定义的)
+    //在openjdk中，一个Java线程背后涉及到许多数据结构，Java层面是java.lang.Thread，hotspot层面是JavaThread -> OSThread，native层面是pthread_create()创建的线程。
+  slog_debug("在Threads::create_vm函数中创建一个(C++层面的)JavaThread对象并设置相关属性，注意这里并未创建一个新的线程，而是将当前线程同JavaThread对象关联起来，通过JavaThread对象管理相关属性...");
   JavaThread* main_thread = new JavaThread();
+    /**
+     * 首先创建了一个JavaThread类型的main_thread，set_thread_state将线程状态设置为_thread_in_vm，表示该线程处于在JVM中执行的状态，
+     * 设置线程状态,这里为_thread_in_vm,即vm内运行线程
+     */
   main_thread->set_thread_state(_thread_in_vm);
   // must do this before set_active_handles and initialize_thread_local_storage
   // Note: on solaris initialize_thread_local_storage() will (indirectly)
   // change the stack size recorded here to one based on the java thread
   // stacksize. This adjusted size is what is used to figure the placement
   // of the guard pages.
+    // record_stack_base_and_size记录线程栈的基址和大小，initialize_thread_local_storage初始化线程本地存储区TLS，set_active_handles为线程设置JNI句柄，
   main_thread->record_stack_base_and_size();
   main_thread->initialize_thread_local_storage();
 
   main_thread->set_active_handles(JNIHandleBlock::allocate_block());
 
+    // set_as_starting_thread为JavaThread创建了OSThread，并Store pthread info into the OSThread，create_stack_guard_pages初始化这个线程栈。
+  slog_debug("即将调用set_as_starting_thread函数为JavaThread对象创建对应的osThread...");
   if (!main_thread->set_as_starting_thread()) {
     vm_shutdown_during_initialization(
       "Failed necessary internal allocation. Out of swap space");
@@ -3439,12 +3633,22 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Enable guard page *after* os::create_main_thread(), otherwise it would
   // crash Linux VM, see notes in os_linux.cpp.
+    // 创建守护页,此处守护页仅指glibc部分,根据之前java线程的栈布局,仅在栈底之上加入此部分即可.这里就是用了mprotect方法来在正常的栈之上创建了glibc的守护页.
   main_thread->create_stack_guard_pages();
 
   // Initialize Java-Level synchronization subsystem
+    //ObjectMonitor初始化
+    //初始化Java的对象监视器
+    //java的关键字synchronized就是通过对象监视器实现的
+    // 这个是和java synchronized的用法相关,是监视区的初始化,使用的都是宏,不难推测最终调用的是系统的mutex互斥锁.
+  slog_debug("即将调用ObjectMonitor::Initialize()函数进行ObjectMonitor的初始化...");
   ObjectMonitor::Initialize() ;
 
   // Initialize global modules
+    //全局模块初始化，如Management模块，Bytecodes模块，ClassLoader模块，CodeCache模块，StubRoutines模块，Universe模块，Interpreter模块等
+    // init_globals()函数
+    //这个函数实现了对全局模块的初始化，代码位于hotspot/src/share/vm/runtime/init.cpp。这些模块是Hotspot的整体基础
+  slog_debug("即将调用init_globals函数,进行全局模块初始化");
   jint status = init_globals();
   if (status != JNI_OK) {
     delete main_thread;
@@ -3455,41 +3659,69 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   JFR_ONLY(Jfr::on_vm_init();)
 
   // Should be done after the heap is fully created
+    // 在堆创建完成后保存全局的一些设置.
   main_thread->cache_global_variables();
 
+    // 针对java线程的代理设置,可以认为是线程的hook.
   HandleMark hm;
 
+    // 互斥锁设置
   { MutexLocker mu(Threads_lock);
+      // 保存并记录线程
+      // 将创建的main_thread加入线程队列
     Threads::add(main_thread);
   }
 
   // Any JVMTI raw monitors entered in onload will transition into
   // real raw monitor. VM is setup enough here for raw monitor enter.
+    // 将加载时创建的raw monitors转换成真正的raw monitor
   JvmtiExport::transition_pending_onload_raw_monitors();
 
   // Create the VMThread
+    // 创建VMThread
+    // VMThread用于执行VMOptions，VMOptions实现了JVM内部的核心操作，为其他运行时模块以及外部程序接口服务。VMThread创建成功后不断等待、接受并执行指定的VMOptions。
   { TraceTime timer("Start VMThread", TraceStartupTime);
+      // 代表vm的线程创建,此线程可以代表jvm
+    slog_debug("在Threads::create_vm函数中即将调用VMThread::create函数创建VMThread对象...");
     VMThread::create();
+      // 获取新建的vm线程的指针
     Thread* vmthread = VMThread::vm_thread();
 
+      // 创建VMThread对应的OSThread线程，OSThread会调用pthread_create创建真正的内核线程
+    slog_debug("即将调用os::create_thread函数创建VMThread对象对应的osThread...");
     if (!os::create_thread(vmthread, os::vm_thread))
+        // 创建失败
       vm_exit_during_initialization("Cannot create VM thread. Out of system resources.");
 
     // Wait for the VM thread to become ready, and VMThread::run to initialize
     // Monitors can have spurious returns, must always check another state flag
+      // 启动VMThread，并且等待VMThread中必要部分初始化完毕。
+      // 运行代码在hotspot/src/share/vm/runtime/vmThread.cpp文件中。
     {
       MutexLocker ml(Notify_lock);
+        // 启动新建的vm线程,此时注意,现在依然还在0号线程内,只是仅仅启动了vm线程而已,同时main_thread虽然创建,但还没有启动
+      slog_debug("即将启动VMThread线程，并且等待VMThread中必要部分初始化完毕...");
       os::start_thread(vmthread);
+       /**
+        * VMThread创建完成之后，create_vm函数将等到VMThread启动成功，判断VMThread是否已经正常工作的标准是vmthread->active_handles()
+        * 不为NULL，也就是执行了VMThread的run函数
+        */
       while (vmthread->active_handles() == NULL) {
+        slog_debug("vmthread->active_handles()函数返回NULL，即将调用Notify_lock->wait函数进行等待(等待VMThread::run函数中调用Notify_lock->notify函数进行唤醒)...");
         Notify_lock->wait();
+        slog_debug("在Notify_lock等待的线程被唤醒了，检查vmthread->active_handles()是否为NULL");
       }
+      slog_debug("vmthread->active_handles()不为为NULL，继续往下执行...");
     }
   }
 
+    // 判断全局是否初始化完成,此时已完成
   assert (Universe::is_fully_initialized(), "not initialized");
   if (VerifyDuringStartup) {
     // Make sure we're starting with a clean slate.
+      //验证VMThread的状态
     VM_Verify verify_op;
+      // 新启动的vm线程第一件要做的事就是确认准备就绪
     VMThread::execute(&verify_op);
   }
 
@@ -3499,24 +3731,33 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // any byte code.  Now is a good time (the only time) to dump out the
   // internal state of the JVM for sharing.
   if (DumpSharedSpaces) {
+      //Dump元空间
     MetaspaceShared::preload_and_dump(CHECK_0);
     ShouldNotReachHere();
   }
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
+    //标记JVMTI启用
+    // TI报告已进入开始阶段
   JvmtiExport::enter_start_phase();
 
   // Notify JVMTI agents that VM has started (JNI is up) - nop if no agents.
+    //通知JVMTI agents虚机已启动
+    // TI报告vm已经启动
   JvmtiExport::post_vm_start();
 
+    //加载核心Java类文件
+    //初始化主要的JDK类
   {
+    slog_debug("即将加载核心Java类文件...");
     TraceTime timer("Initialize java.lang classes", TraceStartupTime);
 
     if (EagerXrunInit && Arguments::init_libraries_at_startup()) {
       create_vm_init_libraries();
     }
 
+      // 初始化各个相关的类并记录其偏移量和引用等各种信息
     initialize_class(vmSymbols::java_lang_String(), CHECK_0);
 
     // Initialize java_lang.System (needed before creating the thread)
@@ -3524,11 +3765,22 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     initialize_class(vmSymbols::java_lang_ThreadGroup(), CHECK_0);
     Handle thread_group = create_initial_thread_group(CHECK_0);
     Universe::set_main_thread_group(thread_group());
+    /**
+      * 创建Java层Thread
+      *  在java.lang.Thread类初始化好之后，创建了java.lang.Thread，设置到刚才创建的JavaThread中去，main_thread->set_threadObj(thread_object);
+      * 同时这个main_thread也被设置给了java.lang.Thread的eetop。
+      * 到这里，java版的main线程就被创建好了，所以现在就是java.lang.Thread中有JavaThread，JavaThread中有OSThread，OSThread中又有pthread也就是native thread，
+      * 这里的pthread才是真正的可以被操作系统执行的线程，其他的都只是一些结构体，而且这里的pthread就是启动流程时通过pthread_create的主线程，真正的java main函数在这个线程中执行。
+      */
     initialize_class(vmSymbols::java_lang_Thread(), CHECK_0);
+      // 接着为main_thread创建thread_object即Java中的java.lang.Thread对象时使用了create_initial_thread函数，
+      // 该函数返回了oop，实际是类oopDesc* 的别名，在hotspot/src/share/vm/oops/oopsHierarchy.hpp使用了typedef取的别名
     oop thread_object = create_initial_thread(thread_group, main_thread, CHECK_0);
+      //将main_thread同Java中的thread_object关联起来
     main_thread->set_threadObj(thread_object);
     // Set thread status to running since main thread has
     // been started and running.
+      // 设置thread_object的线程状态
     java_lang_Thread::set_thread_status(thread_object,
                                         java_lang_Thread::RUNNABLE);
 
@@ -3577,24 +3829,34 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // compiler does not get loaded through java.lang.Compiler).  "java -version" with the
   // hotspot vm says "nojit" all the time which is confusing.  So, we reset it here.
   // This should also be taken out as soon as 4211383 gets fixed.
+    //将java.vm.info设置成nojit
   reset_vm_info_property(CHECK_0);
 
+    //初始化JNIEnv中GetField相关接口
+    // 准备启动jni的函数
   quicken_jni_functions();
 
   // Set flag that basic initialization has completed. Used by exceptions and various
   // debug stuff, that does not work until all basic classes have been initialized.
+    // 设置初始化完成标识
+    // 设置主体初始化已经完成
   set_init_completed();
 
+    //元空间的预初始化
+    // 元空间后置初始化
   Metaspace::post_initialize();
 
 #ifndef USDT2
   HS_DTRACE_PROBE(hotspot, vm__init__end);
 #else /* USDT2 */
+    // 宏初始化完成
   HOTSPOT_VM_INIT_END();
 #endif /* USDT2 */
 
   // record VM initialization completion time
 #if INCLUDE_MANAGEMENT
+    // 记录初始化完成时间
+    // 管理套件报告vm初始化完成
   Management::record_vm_init_completed();
 #endif // INCLUDE_MANAGEMENT
 
@@ -3603,6 +3865,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Note that we do not use CHECK_0 here since we are inside an EXCEPTION_MARK and
   // set_init_completed has just been called, causing exceptions not to be shortcut
   // anymore. We call vm_exit_during_initialization directly instead.
+    // 完成SystemClassLoader的加载
   SystemDictionary::compute_java_system_loader(THREAD);
   if (HAS_PENDING_EXCEPTION) {
     vm_exit_during_initialization(Handle(THREAD, PENDING_EXCEPTION));
@@ -3612,6 +3875,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Support for ConcurrentMarkSweep. This should be cleaned up
   // and better encapsulated. The ugly nested if test would go away
   // once things are properly refactored. XXX YSR
+    //并发标记的初始化，会创建一个新的执行标记的线程
   if (UseConcMarkSweepGC || UseG1GC) {
     if (UseConcMarkSweepGC) {
       ConcurrentMarkSweepThread::makeSurrogateLockerThread(THREAD);
@@ -3626,15 +3890,29 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Always call even when there are not JVMTI environments yet, since environments
   // may be attached late and JVMTI must track phases of VM execution
+    //JVMTI打标，标识JVM进入可用状态
+    // TI报告进入存活阶段
   JvmtiExport::enter_live_phase();
 
   // Signal Dispatcher needs to be started before VMInit event is posted
+    //创建一个新的线程处理信号
+  slog_debug("即将调用os::signal_init函数初始化信号处理线程...");
   os::signal_init();
 
   // Start Attach Listener if +StartAttachListener or it can't be started lazily
+    // 在linux中如果发现文件.attach_pid#pid存在，才会启动attach listener线程，同时初始化了socket 文件，也就是通常jmap,jstack tool干的事情，
+    // 先创立attach_pid#pid文件，然后发quit信号,通过这种方式暗式的启动了Attach Listener线程
+    // DisableAttachMechanism 这个参数默认是关闭的，也就是说 JVM 默认情况下启用 Attach 机制。
+    // 但是 StartAttachListener 和 ReduceSignalUsage 这两个参数默认都是关闭的，因此 Attach Listener 线程默认并不会被初始化。
+    // 那么 Attach Listener 线程是在什么时候被初始化的呢？
+    // 实际上是依靠Signal Dispatcher，Signal Dispatcher 接收到SIGBREAK信号(它是 SIGQUIT 信号的别名)之后会调用 AttachListener
+    // 的 is_init_trigger 的方法初始化和启动 AttachListener 线程，同时会在 tmp 目录下面创建/tmp/.attach_pid${pid}这样的一个文件，
+    // 代表进程号为 pid 的 JVM 已经初始化了 AttachListener 组件了。
   if (!DisableAttachMechanism) {
+      //移除.java_pid文件，准备好初始化
     AttachListener::vm_start();
     if (StartAttachListener || AttachListener::init_at_startup()) {
+        //初始化
       AttachListener::init();
     }
   }
@@ -3643,23 +3921,29 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Must be done in the JVMTI live phase so that for backward compatibility the JDWP
   // back-end can launch with -Xdebug -Xrunjdwp.
   if (!EagerXrunInit && Arguments::init_libraries_at_startup()) {
+      //加载-Xrun执行的agent 库
     create_vm_init_libraries();
   }
 
   // Notify JVMTI agents that VM initialization is complete - nop if no agents.
+    //通知JVMTI JVM初始化完成
   JvmtiExport::post_vm_initialized();
 
   JFR_ONLY(Jfr::on_vm_start();)
 
   if (CleanChunkPoolAsync) {
+      //开启一个新的线程用于清理ChunkPool
     Chunk::start_chunk_pool_cleaner_task();
   }
 
   // initialize compiler(s)
+    // c1 和 c2编译器初始化，会创建编译线程
 #if defined(COMPILER1) || defined(COMPILER2) || defined(SHARK)
+  slog_debug("c1 和 c2编译器初始化，会创建编译线程");
   CompileBroker::compilation_init();
 #endif
 
+    //加载动态代理相关类
   if (EnableInvokeDynamic) {
     // Pre-initialize some JSR292 core classes to avoid deadlock during class loading.
     // It is done after compilers are initialized, because otherwise compilations of
@@ -3671,6 +3955,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   }
 
 #if INCLUDE_MANAGEMENT
+    //加载Management相关类
   Management::initialize(THREAD);
 #endif // INCLUDE_MANAGEMENT
 
@@ -3678,14 +3963,17 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     // management agent fails to start possibly due to
     // configuration problem and is responsible for printing
     // stack trace if appropriate. Simply exit VM.
+      //management加载失败
     vm_exit(1);
   }
 
+    //初始化监控任务线程
   if (Arguments::has_profile())       FlatProfiler::engage(main_thread, true);
   if (MemProfiling)                   MemProfiler::engage();
   StatSampler::engage();
   if (CheckJNICalls)                  JniPeriodicChecker::engage();
 
+    //偏向锁的初始化
   BiasedLocking::init();
 
 #if INCLUDE_RTM_OPT
@@ -3693,6 +3981,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 #endif
 
   if (JDK_Version::current().post_vm_init_hook_enabled()) {
+      //回调代码中的钩子函数，通知其JVM初始化完成
     call_postVMInitHook(THREAD);
     // The Java side of PostVMInitHook.run must deal with all
     // exceptions and provide means of diagnosis.
@@ -3705,16 +3994,19 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       MutexLockerEx ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
       // Make sure the watcher thread can be started by WatcherThread::start()
       // or by dynamic enrollment.
+      // 确保WatcherThread可以通过start()的形式启动
       WatcherThread::make_startable();
       // Start up the WatcherThread if there are any periodic tasks
       // NOTE:  All PeriodicTasks should be registered by now. If they
       //   aren't, late joiners might appear to start slowly (we might
       //   take a while to process their first tick).
+      // 如果有任何周期的监控任务则启动监控线程
       if (PeriodicTask::num_tasks() > 0) {
           WatcherThread::start();
       }
   }
 
+    //标记JVM启动完成
   create_vm_timer.end();
 #ifdef ASSERT
   _vm_complete = true;
@@ -3932,6 +4224,7 @@ void JavaThread::invoke_shutdown_hooks() {
   }
 
   EXCEPTION_MARK;
+    // 拿到java_lang_Shutdown类对象。也即拿到Shutdown类对象。
   Klass* k =
     SystemDictionary::resolve_or_null(vmSymbols::java_lang_Shutdown(),
                                       THREAD);
@@ -3944,6 +4237,7 @@ void JavaThread::invoke_shutdown_hooks() {
     // (Runtime.addShutdownHook will load it).
     instanceKlassHandle shutdown_klass (THREAD, k);
     JavaValue result(T_VOID);
+      // 调用Shutdown类的shutdown方法。
     JavaCalls::call_static(&result,
                            shutdown_klass,
                            vmSymbols::shutdown_method_name(),
@@ -3995,6 +4289,7 @@ bool Threads::destroy_vm() {
 #endif
   // Wait until we are the last non-daemon thread to execute
   { MutexLocker nu(Threads_lock);
+      // 主线程执行完毕后，JVM关闭需要等待其他非守护线程执行完毕。
     while (Threads::number_of_non_daemon_threads() > 1 )
       // This wait should make safepoint checks, wait without a timeout,
       // and wait as a suspend-equivalent condition.
@@ -4006,6 +4301,7 @@ bool Threads::destroy_vm() {
       // timeout, but that takes time. Making this wait a suspend-
       // equivalent condition solves that timeout problem.
       //
+        // 阻塞等待。
       Threads_lock->wait(!Mutex::_no_safepoint_check_flag, 0,
                          Mutex::_as_suspend_equivalent_flag);
   }
@@ -4023,6 +4319,7 @@ bool Threads::destroy_vm() {
   os::wait_for_keypress_at_exit();
 
   // run Java level shutdown hooks
+    // 执行Java程序注册的ShutdownHooks。
   thread->invoke_shutdown_hooks();
 
   before_exit(thread);
@@ -4091,13 +4388,16 @@ jboolean Threads::is_supported_jni_version(jint version) {
 }
 
 
+//force_daemon默认为false
 void Threads::add(JavaThread* p, bool force_daemon) {
   // The threads lock must be owned at this point
   assert_locked_or_safepoint(Threads_lock);
 
   // See the comment for this method in thread.hpp for its purpose and
   // why it is called here.
+    // 初始化GC相关的队列
   p->initialize_queues();
+    //插入到thread_list链表中
   p->set_next(_thread_list);
   _thread_list = p;
   _number_of_threads++;
@@ -4106,10 +4406,12 @@ void Threads::add(JavaThread* p, bool force_daemon) {
   // Bootstrapping problem: threadObj can be null for initial
   // JavaThread (or for threads attached via JNI)
   if ((!force_daemon) && (threadObj == NULL || !java_lang_Thread::is_daemon(threadObj))) {
+      //非daemon线程计数加1
     _number_of_non_daemon_threads++;
     daemon = false;
   }
 
+    //ThreadService维护的相关计数加1
   ThreadService::add_thread(p, daemon);
 
   // Possible GC point.

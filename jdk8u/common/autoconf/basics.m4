@@ -589,20 +589,26 @@ AC_DEFUN_ONCE([BASIC_SETUP_DEVKIT],
   AC_MSG_RESULT([$EXTRA_PATH])
 ])
 
+# 基础_设置_输出目录
 AC_DEFUN_ONCE([BASIC_SETUP_OUTPUT_DIR],
 [
 
+  # 说明: 定义一个配置名称, 可以用于覆盖默认的build下的配置目录名称
   AC_ARG_WITH(conf-name, [AS_HELP_STRING([--with-conf-name],
       [use this as the name of the configuration @<:@generated from important configuration options@:>@])],
       [ CONF_NAME=${with_conf_name} ])
 
   # Test from where we are running configure, in or outside of src root.
+  # 测试我们从哪开始运行的 confiugre .是在源代码目录的里面或者是外面
   AC_MSG_CHECKING([where to store configuration])
   if test "x$CURDIR" = "x$SRC_ROOT" || test "x$CURDIR" = "x$SRC_ROOT/common" \
       || test "x$CURDIR" = "x$SRC_ROOT/common/autoconf" \
       || test "x$CURDIR" = "x$SRC_ROOT/make" ; then
     # We are running configure from the src root.
     # Create a default ./build/target-variant-debuglevel output root.
+    # 创建构建的输出目录, 如果
+    # 1. 没有传入的CONF_NAME参数.则使用默认的目录名称. 操作系统类别_目标CPU_JDK类型_JVM类型_调试级别
+    # 2. 如果传入了CONF_NAME , 直接使用传入的配置输出目录.
     if test "x${CONF_NAME}" = x; then
       AC_MSG_RESULT([in default location])
       CONF_NAME="${OPENJDK_TARGET_OS}-${OPENJDK_TARGET_CPU}-${JDK_VARIANT}-${ANDED_JVM_VARIANTS}-${DEBUG_LEVEL}"
@@ -610,6 +616,7 @@ AC_DEFUN_ONCE([BASIC_SETUP_OUTPUT_DIR],
       AC_MSG_RESULT([in build directory with custom name])
     fi
     OUTPUT_ROOT="$SRC_ROOT/build/${CONF_NAME}"
+    # 创建输出build的目录
     $MKDIR -p "$OUTPUT_ROOT"
     if test ! -d "$OUTPUT_ROOT"; then
       AC_MSG_ERROR([Could not create build directory $OUTPUT_ROOT])
@@ -657,6 +664,7 @@ AC_DEFUN_ONCE([BASIC_SETUP_OUTPUT_DIR],
 
   BASIC_FIXUP_PATH(OUTPUT_ROOT)
 
+  # 这里设置好了三个用于替换的变量. 用于后面的 *.in 文件的替换
   AC_SUBST(SPEC, $OUTPUT_ROOT/spec.gmk)
   AC_SUBST(CONF_NAME, $CONF_NAME)
   AC_SUBST(OUTPUT_ROOT, $OUTPUT_ROOT)

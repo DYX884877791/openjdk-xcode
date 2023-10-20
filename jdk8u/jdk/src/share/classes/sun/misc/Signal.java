@@ -145,6 +145,12 @@ public final class Signal {
     }
 
     /**
+     * 在java 中调用Signal的方法handle可以去注册一个信号的处理函数
+     * 比如常用的addShutdownHook钩子函数，在收到SHUTDOWN1_SIGNAL(SIGHUP)，SHUTDOWN2_SIGNAL(SIGINT)，SHUTDOWN3_SIGNAL(SIGTERM)信号的时候会运行该钩子函数
+     * 因为在Terminator.java里注册了SHUTDOWN1_SIGNAL(SIGHUP)，SHUTDOWN2_SIGNAL(SIGINT)，SHUTDOWN3_SIGNAL(SIGTERM)的信号处理函数Shutdown.exit ，
+     * 当线程接受到上述信号时，通过调用函数Shutdown.exit的sequence方法，运行hook的钩子函数。
+     * 当System.initializeSystemClass 的时候，进行了Terminator.setup()进行了信号的注册
+     *
      * Registers a signal handler.
      *
      * @param sig a signal
@@ -161,6 +167,8 @@ public final class Signal {
         throws IllegalArgumentException {
         long newH = (handler instanceof NativeSignalHandler) ?
                       ((NativeSignalHandler)handler).getHandler() : 2;
+        // 在native code handle0里并没有将handle的方法传进去，只是传了一个整型值。
+        // 在c++代码中handle0里调用了函数 JVM_RegisterSignal
         long oldH = handle0(sig.number, newH);
         if (oldH == -1) {
             throw new IllegalArgumentException

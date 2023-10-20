@@ -34,6 +34,8 @@ generate_configure_script() {
 EOT
   # Then replace "magic" variables in configure.ac and append the output
   # from autoconf. $2 is either cat (just a no-op) or a filter.
+  # 关键命令是这一句：简单解释就是使用 configure.ac 文件作为输入, 把文件内容传递给: AutoConf 进行宏展开. 然后把生成的内容输出到参数$1,
+  # 也就是上面调用此函数的参数: "$script_dir/generated-configure.sh", 也就是我们的generated-configure.sh 了.
   cat $script_dir/configure.ac | sed -e "s|@DATE_WHEN_GENERATED@|$TIMESTAMP|" | \
       eval $2 | ${AUTOCONF} -W all -I$script_dir - >> $1
   rm -rf autom4te.cache

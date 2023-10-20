@@ -221,6 +221,7 @@ oop Bytecode_loadconstant::resolve_constant(TRAPS) const {
   if (has_cache_index()) {
     return constants->resolve_cached_constant_at(index, THREAD);
   } else {
+      // 解析
     return constants->resolve_constant_at(index, THREAD);
   }
 }

@@ -1167,12 +1167,29 @@ class vmSymbols: AllStatic {
   enum SID {
     NO_SID = 0,
 
+     /**
+      * 学到了学到了，宏函数里面也可以调用宏函数
+      * 下面的这一段宏展开变为：
+      *
+      * java_lang_System_enum,
+      * java_lang_Object_enum,
+      * java_lang_Class_enum,
+      * java_lang_String_enum,
+      * ...
+      */
     #define VM_SYMBOL_ENUM(name, string) VM_SYMBOL_ENUM_NAME(name),
     VM_SYMBOLS_DO(VM_SYMBOL_ENUM, VM_ALIAS_IGNORE)
     #undef VM_SYMBOL_ENUM
 
     SID_LIMIT,
 
+      /**
+       * 下面的这一段宏展开变为：
+       * NOT_LP64(  intptr_signature_enum = int_signature_def,  )
+       * LP64_ONLY( intptr_signature_enum = long_signature_def, )
+       * register_method_signature_enum = object_void_signature_def,
+       * ...
+       */
     #define VM_ALIAS_ENUM(name, def) VM_SYMBOL_ENUM_NAME(name) = VM_SYMBOL_ENUM_NAME(def),
     VM_SYMBOLS_DO(VM_SYMBOL_IGNORE, VM_ALIAS_ENUM)
     #undef VM_ALIAS_ENUM
@@ -1185,6 +1202,7 @@ class vmSymbols: AllStatic {
 
  private:
   // The symbol array
+    // 哪里初始化这个变量的呢?
   static Symbol* _symbols[];
 
   // Field signatures indexed by BasicType.
@@ -1194,6 +1212,25 @@ class vmSymbols: AllStatic {
   // Initialization
   static void initialize(TRAPS);
   // Accessing
+    /**
+     * 下面的这一段宏展开变为：
+     * static Symbol* java_lang_System() {
+     *    return _symbols[java_lang_System_enum];
+     * }
+     *
+     * static Symbol* java_lang_Object() {
+     *    return _symbols[java_lang_Object_enum];
+     * }
+     *
+     * static Symbol* java_lang_Class() {
+     *    return _symbols[java_lang_Class_enum];
+     * }
+     *
+     * static Symbol* java_lang_String() {
+     *    return _symbols[java_lang_String_enum];
+     * }
+     * ...
+     */
   #define VM_SYMBOL_DECLARE(name, ignore)                 \
     static Symbol* name() {                               \
       return _symbols[VM_SYMBOL_ENUM_NAME(name)];         \
@@ -1246,6 +1283,17 @@ class vmIntrinsics: AllStatic {
 
     ID_LIMIT,
     LAST_COMPILER_INLINE = _prefetchWriteStatic,
+      /**
+       * _linkToInterface和_invokeGeneric都是上面的VM_INTRINSICS_DO宏产生的枚举，
+       * 这两个之前的其他枚举如下：
+       * do_intrinsic(_invokeGeneric,            java_lang_invoke_MethodHandle, invoke_name,           star_name, F_RN)        \
+       * do_intrinsic(_invokeBasic,              java_lang_invoke_MethodHandle, invokeBasic_name,      star_name, F_RN)        \
+       * do_intrinsic(_linkToVirtual,            java_lang_invoke_MethodHandle, linkToVirtual_name,    star_name, F_SN)        \
+       * do_intrinsic(_linkToStatic,             java_lang_invoke_MethodHandle, linkToStatic_name,     star_name, F_SN)        \
+       * do_intrinsic(_linkToSpecial,            java_lang_invoke_MethodHandle, linkToSpecial_name,    star_name, F_SN)        \
+       * do_intrinsic(_linkToInterface,          java_lang_invoke_MethodHandle, linkToInterface_name,  star_name, F_SN)        \
+       * _linkToInterface和_invokeGeneric中间的值其实都是MethodKind的合法枚举
+       */
     FIRST_MH_SIG_POLY    = _invokeGeneric,
     FIRST_MH_STATIC      = _linkToVirtual,
     LAST_MH_SIG_POLY     = _linkToInterface,

@@ -34,6 +34,7 @@
 #include "opto/escape.hpp"
 #include "opto/phaseX.hpp"
 #include "opto/rootnode.hpp"
+#include "utilities/slog.hpp"
 
 ConnectionGraph::ConnectionGraph(Compile * C, PhaseIterGVN *igvn) :
   _nodes(C->comp_arena(), C->unique(), C->unique(), NULL),
@@ -83,6 +84,7 @@ bool ConnectionGraph::has_candidates(Compile *C) {
 }
 
 void ConnectionGraph::do_analysis(Compile *C, PhaseIterGVN *igvn) {
+  slog_trace("进入hotspot/src/share/vm/opto/escape.cpp中的ConnectionGraph::do_analysis函数...");
   Compile::TracePhase t2("escapeAnalysis", &Phase::_t_escapeAnalysis, true);
   ResourceMark rm;
 
@@ -3388,6 +3390,7 @@ void PointsToNode::dump(bool print_state) const {
 }
 
 void ConnectionGraph::dump(GrowableArray<PointsToNode*>& ptnodes_worklist) {
+  slog_trace("进入hotspot/src/share/vm/opto/escape.cpp中的ConnectionGraph::dump函数...");
   bool first = true;
   int ptnodes_length = ptnodes_worklist.length();
   for (int i = 0; i < ptnodes_length; i++) {

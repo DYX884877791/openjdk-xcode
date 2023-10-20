@@ -219,6 +219,14 @@ AC_DEFUN([BOOTJDK_CHECK_TOOL_IN_BOOTJDK],
 AC_DEFUN_ONCE([BOOTJDK_SETUP_BOOT_JDK],
 [
   BOOT_JDK_FOUND=no
+  # 里面用到了一个宏: AC_ARG_WITH, 参考https://www.gnu.org/savannah-checkouts/gnu/autoconf/manual/autoconf-2.71/autoconf.html#External-Software
+  # 从上面的文档我们可以得知, --with-boot-jdk是一个扩展的选项,默认情况下configure 是不支持此参数的.
+  # 它正是用来扩展处理参数读取的. 其定义如下:
+  # AC_ARG_WITH (package, help-string, [action-if-given], [action-if-not-given])
+  # 这个宏里面只传递了前两个参数. 后面的两个可选参数是空的. 同时对于第二个参数的:help-string,这里使用了另外一个宏定义来处理.: AS_HELP_STRING
+  # AS_HELP_STRING (left-hand-side, right-hand-side [indent-column = ‘26’], [wrap-column = ‘79’])
+  # 这个宏在这里没有太多的作用. 只是定义了这个参数项的说明信息.
+  # 参考https://blog.csdn.net/z1026544682/article/details/107712272
   AC_ARG_WITH(boot-jdk, [AS_HELP_STRING([--with-boot-jdk],
       [path to Boot JDK (used to bootstrap build) @<:@probed@:>@])])
 

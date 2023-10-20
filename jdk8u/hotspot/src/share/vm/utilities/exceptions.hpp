@@ -289,6 +289,7 @@ class Exceptions {
 // call sites about which is statically known that the callee cannot throw an exception
 // even though it is declared with TRAPS.
 
+//用来检查某个方法是否抛出了异常，通常是在该方法的调用方中使用此宏，且已经明确目标方法不会抛出异常
 #define CATCH                              \
   THREAD); if (HAS_PENDING_EXCEPTION) {    \
     oop ex = PENDING_EXCEPTION;            \
@@ -319,6 +320,7 @@ class ExceptionMark {
 // which preserves pre-existing exceptions and does not allow new
 // exceptions.
 
+//用于检查当前线程是否存在待处理异常，具体实现见hotspot/src/share/vm/utilities/exceptions.cpp中的ExceptionMark类的构造函数
 #define EXCEPTION_MARK                           Thread* THREAD = NULL; ExceptionMark __em(THREAD);
 
 #endif // SHARE_VM_UTILITIES_EXCEPTIONS_HPP

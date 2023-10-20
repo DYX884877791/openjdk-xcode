@@ -28,6 +28,9 @@
 
 #define __ _masm->
 
+//  icache_x86.cpp中的实现的核心就是mfence指令和clflush指令
+// https://blog.csdn.net/u014800094/article/details/51150718
+// https://blog.csdn.net/admiral_j/article/details/8072855
 void ICacheStubGenerator::generate_icache_flush(ICache::flush_icache_stub_t* flush_icache_stub) {
   StubCodeMark mark(this, "ICache", "flush_icache_stub");
 

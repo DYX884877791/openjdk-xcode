@@ -37,6 +37,7 @@ import javax.lang.model.util.Types;
  * Represents a declared type, either a class type or an interface type.
  * This includes parameterized types such as {@code java.util.Set<String>}
  * as well as raw types.
+ * 代表声明类型–> 类或者接口类型. 它也可以拥有泛型参数,如 java.util.Set
  *
  * <p> While a {@code TypeElement} represents a class or interface
  * <i>element</i>, a {@code DeclaredType} represents a class
@@ -59,7 +60,7 @@ public interface DeclaredType extends ReferenceType {
 
     /**
      * Returns the element corresponding to this type.
-     *
+     * 返回该类型对应的element
      * @return the element corresponding to this type
      */
     Element asElement();
@@ -69,6 +70,8 @@ public interface DeclaredType extends ReferenceType {
      * {@code NoType} of kind {@code NONE} if there is no enclosing
      * instance.  Only types corresponding to inner classes have an
      * enclosing instance.
+     * 返回最内层包围实例的类型,如果没有包围实例则返回NoType和NONE对应的TypeMirror.
+     * 只有对应于内部类的类型才有包围实例
      *
      * @return a type mirror for the enclosing type
      * @jls 8.1.3 Inner Classes and Enclosing Instances
@@ -81,6 +84,7 @@ public interface DeclaredType extends ReferenceType {
      * For a type nested within a parameterized type
      * (such as {@code Outer<String>.Inner<Number>}), only the type
      * arguments of the innermost type are included.
+     * 返回该类型的泛型参数
      *
      * @return the actual type arguments of this type, or an empty list
      *           if none

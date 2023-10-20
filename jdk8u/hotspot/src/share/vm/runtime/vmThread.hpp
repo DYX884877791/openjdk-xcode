@@ -90,14 +90,20 @@ class VMOperationQueue : public CHeapObj<mtInternal> {
 // like scavenge, garbage_collect etc.
 //
 
+// 表示一个特殊的专门用来执行比较耗时的VM_Operation的原生线程
 class VMThread: public NamedThread {
  private:
+    // 线程的优先级
   static ThreadPriority _current_priority;
 
+    // 是否应该终止
   static bool _should_terminate;
+    // 是否终止
   static bool _terminated;
   static bool _gclog_reentry;
+    // 终止动作对应的锁
   static Monitor * _terminate_lock;
+    // 累计的执行VM_Operation的耗时
   static PerfCounter* _perf_accumulated_vm_operation_time;
 
   void evaluate_operation(VM_Operation* op);
@@ -140,15 +146,19 @@ class VMThread: public NamedThread {
   virtual void run();
 
   // Creations/Destructions
+  // 用来创建和销毁唯一的VMThread实例
   static void create();
   static void destroy();
 
  private:
   // VM_Operation support
+  // 当前执行的VM operation
   static VM_Operation*     _cur_vm_operation;   // Current VM operation
+    // 缓存待执行的VM operation 队列
   static VMOperationQueue* _vm_queue;           // Queue (w/ policy) of VM operations
 
   // Pointer to single-instance of VM thread
+  // 唯一的VMThread实例
   static VMThread*     _vm_thread;
 };
 

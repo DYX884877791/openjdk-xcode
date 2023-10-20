@@ -70,6 +70,7 @@ REGISTER_DECLARATION(XMMRegister, c_farg3, xmm3);
 
 #else
 
+// assembler_x86.hpp中还定义了特定于该CPU架构的寄存器枚举，Register其实是RegisterImpl*的别名
 REGISTER_DECLARATION(Register, c_rarg0, rdi);
 REGISTER_DECLARATION(Register, c_rarg1, rsi);
 REGISTER_DECLARATION(Register, c_rarg2, rdx);
@@ -152,6 +153,9 @@ REGISTER_DECLARATION(Register, rbp_mh_SP_save, noreg);
 // Note: A register location is represented via a Register, not
 //       via an address for efficiency & simplicity reasons.
 
+// assembler_x86.hpp中除定义了Assembler类以外，还定义了表示内存地址的多个不同Address类，如Address、AddressLiteral、RuntimeAddress等
+// 其中RuntimeAddress等是AddressLiteral的子类，如下图。AddressLiteral主要是为了应对部分特殊指令在32位和64位下处理不一样的情形，
+// 三个子类是特定于不同的地址类型的。
 class ArrayAddress;
 
 class Address VALUE_OBJ_CLASS_SPEC {
@@ -443,11 +447,14 @@ const int FPUStateSizeInWords = NOT_LP64(27) LP64_ONLY( 512 / wordSize);
 // level (e.g. mov rax, 0 is not translated into xor rax, rax!); i.e., what you write
 // is what you get. The Assembler is generating code into a CodeBuffer.
 
+// 注意 Assembler类生成的汇编代码并没有经过指令优化的，使用什么指令最终得到的就是什么指令。
 class Assembler : public AbstractAssembler  {
   friend class AbstractAssembler; // for the non-virtual hack
   friend class LIR_Assembler; // as_Address()
   friend class StubGenerator;
 
+    // Assembler类添加了特定于CPU架构的指令实现和指令操作相关的枚举
+    // 其中指令实现根据指令操作数类型和位数的差异，有多个不同的重载版本，如movb函数
  public:
   enum Condition {                     // The x86 condition codes used for conditional jumps/moves.
     zero          = 0x4,
@@ -1291,6 +1298,8 @@ private:
   void membar(Membar_mask_bits order_constraint) {
     if (os::is_MP()) {
       // We only have to handle StoreLoad
+        // x86平台只需要处理StoreLoad内存屏障
+        // 可以看到，在汇编层面，最终是调用了 lock addl $0, $0(%rsp) Lock前缀来实现和内存屏障一样的功能。
       if (order_constraint & StoreLoad) {
         // All usable chips support "locked" instructions which suffice
         // as barriers, and are much faster than the alternative of
@@ -1300,7 +1309,9 @@ private:
         // Any change to this code may need to revisit other places in
         // the code where this idiom is used, in particular the
         // orderAccess code.
+          // 下面这两句插入了一条lock前缀指令: lock addl $0, $0(%rsp)
         lock();
+          // lock前缀指令
         addl(Address(rsp, 0), 0);// Assert the lock# signal here
       }
     }

@@ -36,6 +36,10 @@ class GlobalTLABStats;
 //            It is thread-private at any time, but maybe multiplexed over
 //            time across multiple threads. The park()/unpark() pair is
 //            used to make it available for such multiplexing.
+// ThreadLocalAllocBuffer的定义位于hotspot/src/share/vm/memory/ThreadLocalAllocBuffer.hpp中，具体的实现在同目录的ThreadLocalAllocBuffer.inline.cpp
+// 和ThreadLocalAllocBuffer.cpp中，该类表示由线程私有的内存区域，简称TLAB，主要是为了解决在Eden区分配内存时锁竞争导致性能下降的问题。
+// 这块区域是线程私有的，这里的私有具体是指只能由该线程在这块内存区域中分配对象，但是已经分配的对象其他线程也可以正常访问。
+// 继承自CHeapObj
 class ThreadLocalAllocBuffer: public CHeapObj<mtThread> {
   friend class VMStructs;
 private:

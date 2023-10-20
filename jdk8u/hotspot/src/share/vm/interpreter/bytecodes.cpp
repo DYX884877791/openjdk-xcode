@@ -56,6 +56,7 @@
 
 
 bool            Bytecodes::_is_initialized = false;
+// Bytecodes::number_of_codes的值为234，足够存储所有的字节码指令了（包含虚拟机内部扩展的指令）。
 const char*     Bytecodes::_name          [Bytecodes::number_of_codes];
 BasicType       Bytecodes::_result_type   [Bytecodes::number_of_codes];
 s_char          Bytecodes::_depth         [Bytecodes::number_of_codes];
@@ -172,14 +173,20 @@ void Bytecodes::def(Code code, const char* name, const char* format, const char*
   assert(wide_format == NULL || format != NULL, "short form must exist if there's a wide form");
   int len  = (format      != NULL ? (int) strlen(format)      : 0);
   int wlen = (wide_format != NULL ? (int) strlen(wide_format) : 0);
+    // _name、_result_type等都是在Bytecodes类中定义的静态数组，其下标为Opcode值，而存储的值就是name、result_type等
   _name          [code] = name;
   _result_type   [code] = result_type;
   _depth         [code] = depth;
+    // 0xF的二进制值为1111
   _lengths       [code] = (wlen << 4) | (len & 0xF);
   _java_code     [code] = java_code;
   int bc_flags = 0;
+    // ldc、ldc_w、ldc2_w、_aload_0、iaload、iastore、idiv、ldiv、ireturn等
+    // 字节码指令都会含有_bc_can_trap
   if (can_trap)           bc_flags |= _bc_can_trap;
+    // 虚拟机内部定义的指令都会有_bc_can_rewrite
   if (java_code != code)  bc_flags |= _bc_can_rewrite;
+    // 在这里对_flags赋值操作
   _flags[(u1)code+0*(1<<BitsPerByte)] = compute_flags(format,      bc_flags);
   _flags[(u1)code+1*(1<<BitsPerByte)] = compute_flags(wide_format, bc_flags);
   assert(is_defined(code)      == (format != NULL),      "");
@@ -207,6 +214,8 @@ void Bytecodes::def(Code code, const char* name, const char* format, const char*
 //
 // Note: For bytecodes with variable length, the format string is the empty string.
 
+// 调用compute_flags()函数: 根据传入的wide_format和format来计算字节码的一些属性，然后存储到高8位和低8位中
+// 函数要根据wide_format和format来计算flags的值，通过flags中的值能够表示字节码的b、c、i、j、k、o、w（在之前介绍format时介绍过）和字节码操作数的大小（操作数是2字节还是4字节）。以_fmt开头的一些变量在枚举类中已经定义
 int Bytecodes::compute_flags(const char* format, int more_flags) {
   if (format == NULL)  return 0;  // not even more_flags
   int flags = more_flags;
@@ -266,7 +275,9 @@ int Bytecodes::compute_flags(const char* format, int more_flags) {
       this_size = 2;
       while (*++fp == fc)  this_size++;
       switch (this_size) {
+          // 如sipush、ldc_w、ldc2_w、wide iload等
       case 2: flags |= _fmt_has_u2; break;
+          // 如goto_w和invokedynamic指令
       case 4: flags |= _fmt_has_u4; break;
       default: guarantee(false, "bad rep count in format");
       }
@@ -279,6 +290,8 @@ int Bytecodes::compute_flags(const char* format, int more_flags) {
   }
 }
 
+// 字节码指令的定义。在Bytecodes::initialize()函数中会定义字节码指令的一些属性
+// 现在Java虚拟机规范定义的202个字节码指令都会在这里调用def()函数进行定义，我们需要重点关注调用def()函数时传递的参数bytecode name、format等
 void Bytecodes::initialize() {
   if (_is_initialized) return;
   assert(number_of_codes <= 256, "too many bytecodes");
@@ -293,6 +306,29 @@ void Bytecodes::initialize() {
   // Note 2: The result type is T_ILLEGAL for bytecodes where the top of stack
   //         type after execution is not only determined by the bytecode itself.
 
+  // bytecode name就是字节码名称；
+  // wide表示字节码前面是否可以加wide，如果可以，则值为"wbii"；
+  // result tp表示指令执行后的结果类型，如为T_ILLEGAL时，表示只参考当前字节码无法决定执行结果的类型，如_invokevirtual方法调用指令，结果类型应该为方法返回类型，但是此时只参考这个调用方法的字节码指令是无法决定的；
+  // stk表示对表达式栈深度的影响，如_nop指令不执行任何操作，所以对表达式栈的深度无影响，stk的值为0；当用_iconst_0向栈中压入0时，栈的深度增加1，所以stk的值为1。当为_lconst_0时，栈的深度会增加2；当为_lstore_0时，栈的深度会减少2；
+  // traps表示can_trap，这个比较重要，在后面会详细介绍。
+  // format，这个属性能表达2个意思，首先能表达字节码的格式，另外还能表示字节码的长度。
+  // 重点介绍一下format这个参数。format表示字节码的格式，当字符串中有一个字符时就是一个字节长度的字节码，当为2个字符时就是2个字节长度的字节码...，如_iconst_0就是一个字节宽度的字节码，_istore的format为"bi"，所以是2个字节宽度。format还可能为空字符串，当为空字符串时，表示当前的字节码不是Java虚拟机规范中定义的字节码，如为了提高解释执行效率的_fast_agetfield、_fast_bgetfield等字节码，这些字节码是虚拟机内部定义的。还能表达字节码的格式，其中的字符串中各个字符的含义如下：
+  //
+  //  b： 表示字节码指令是非可变长度的，所以对于tableswitch、lookupswitch这种可变长度的指令来说，format字符串中不会含有b字符；
+  //
+  //  c：操作数为有符号的常量，如bipush指令将byte带符号扩展为一个int类型的值，然后将这个值入栈到操作数栈中；
+  //
+  //  i：操作数为无符号的本地变量表索引值，如iload指令从局部变量表加载一个int类型的值到操作数栈中；
+  //
+  //  j：操作数为常量池缓存的索引，注意常量池缓存索引不同与常量池索引，关于常量池索引，在《深入剖析Java虚拟机：源码剖析与实例详解》基础卷中详细介绍过，这里不再介绍；
+  //
+  //  k：操作数为无符号的常量池索引，如ldc指令将从运行时常量池中提取数据并压入操作数栈，所以格式为"bk"；
+  //
+  //  o：操作数为分支偏移，如ifeq表示整数与零比较，如果整数为0，则比较结果为真，将操作数看为分支偏移量进行跳转，所以格式为”boo“；
+  //
+  //  _：可直接忽略
+  //
+  //  w：可用来扩展局部变量表索引的字节码，这些字节码有iload、fload等，所以wild的值为"wbii"；
   //  Java bytecodes
   //  bytecode               bytecode name           format   wide f.   result tp  stk traps
   def(_nop                 , "nop"                 , "b"    , NULL    , T_VOID   ,  0, false);
@@ -569,6 +605,7 @@ void Bytecodes::initialize() {
 }
 
 
+// 字节码的初始化,初始化jvm的字节码,也是vm层面的指令.
 void bytecodes_init() {
   Bytecodes::initialize();
 }

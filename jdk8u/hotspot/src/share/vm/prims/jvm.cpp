@@ -75,6 +75,7 @@
 #include "utilities/histogram.hpp"
 #include "utilities/top.hpp"
 #include "utilities/utf8.hpp"
+#include "utilities/slog.hpp"
 #ifdef TARGET_OS_FAMILY_linux
 # include "jvm_linux.h"
 #endif
@@ -348,13 +349,17 @@ static void set_property(Handle props, const char* key, const char* value, TRAPS
 
 
 JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
+    // JVM 函数的包装器
   JVMWrapper("JVM_InitProperties");
+    // 资源标记在调用析构函数时释放所有在构造后分配的资源。通常用作局部变量
+    // 里面大致是通过各种预定义的宏对应初始化 ResourceMark中的属性
   ResourceMark rm;
 
   Handle props(THREAD, JNIHandles::resolve_non_null(properties));
 
   // System property list includes both user set via -D option and
   // jvm system specific properties.
+    // 系统属性列表包括通过 -D 选项设置的用户和 jvm 系统特定的属性。
   for (SystemProperty* p = Arguments::system_properties(); p != NULL; p = p->next()) {
     PUTPROP(props, p->key(), p->value());
   }
@@ -363,6 +368,8 @@ JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
   // to the sun.nio.MaxDirectMemorySize property.
   // Do this after setting user properties to prevent people
   // from setting the value with a -D option, as requested.
+    // 将 -XX:MaxDirectMemorySize= 命令行标志转换为 sun.nio.MaxDirectMemorySize 属性。
+    //在设置用户属性后执行此操作，以防止人们按照要求使用 -D 选项设置值。
   {
     if (FLAG_IS_DEFAULT(MaxDirectMemorySize)) {
       PUTPROP(props, "sun.nio.MaxDirectMemorySize", "-1");
@@ -375,6 +382,7 @@ JVM_ENTRY(jobject, JVM_InitProperties(JNIEnv *env, jobject properties))
 
   // JVM monitoring and management support
   // Add the sun.management.compiler property for the compiler's name
+    // JVM 监控和管理支持 添加 sun.management.compiler 属性作为编译器的名称
   {
 #undef CSIZE
 #if defined(_LP64) || defined(_WIN64)
@@ -560,6 +568,7 @@ JVM_END
 JVM_ENTRY(jint, JVM_IHashCode(JNIEnv* env, jobject handle))
   JVMWrapper("JVM_IHashCode");
   // as implemented in the classic virtual machine; return 0 if object is NULL
+    //resolve_non_null方法解析出对应的oop
   return handle == NULL ? 0 : ObjectSynchronizer::FastHashCode (THREAD, JNIHandles::resolve_non_null(handle)) ;
 JVM_END
 
@@ -569,6 +578,7 @@ JVM_ENTRY(void, JVM_MonitorWait(JNIEnv* env, jobject handle, jlong ms))
   Handle obj(THREAD, JNIHandles::resolve_non_null(handle));
   JavaThreadInObjectWaitState jtiows(thread, ms != 0);
   if (JvmtiExport::should_post_monitor_wait()) {
+      //发布JVMTI事件
     JvmtiExport::post_monitor_wait((JavaThread *)THREAD, (oop)obj(), ms);
 
     // The current thread already owns the monitor and it has not yet
@@ -602,6 +612,7 @@ static void fixup_cloned_reference(ReferenceType ref_type, oop src, oop clone) {
   if (UseG1GC) {
     oop referent = java_lang_ref_Reference::referent(clone);
     if (referent != NULL) {
+        //如果是G1算法需要将非空的referent入队
       G1SATBCardTableModRefBS::enqueue(referent);
     }
   }
@@ -610,16 +621,20 @@ static void fixup_cloned_reference(ReferenceType ref_type, oop src, oop clone) {
       (java_lang_ref_Reference::queue(clone) == java_lang_ref_ReferenceQueue::ENQUEUED_queue())) {
     // If the source has been enqueued or is being enqueued, don't
     // register the clone with a queue.
+      // 如果clone属于非激活状态，将其queue置为ReferenceQueue.NULL，因为当前复制的实例实际未加入到ReferenceQueue中
     java_lang_ref_Reference::set_queue(clone, java_lang_ref_ReferenceQueue::NULL_queue());
   }
   // discovered and next are list links; the clone is not in those lists.
+    //将discovered和next属性置为NULL
   java_lang_ref_Reference::set_discovered(clone, NULL);
   java_lang_ref_Reference::set_next(clone, NULL);
 }
 
 JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
   JVMWrapper("JVM_Clone");
+    //获取待复制的对象oop
   Handle obj(THREAD, JNIHandles::resolve_non_null(handle));
+    //获取待复制的对象的klass
   const KlassHandle klass (THREAD, obj->klass());
   JvmtiVMObjectAllocEventCollector oam;
 
@@ -636,8 +651,10 @@ JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
 
   // Check if class of obj supports the Cloneable interface.
   // All arrays are considered to be cloneable (See JLS 20.1.5)
+    //判断这个类是否可以clone，数组对象默认都是可以clone的
   if (!klass->is_cloneable()) {
     ResourceMark rm(THREAD);
+      //如果不可以clone，抛出异常
     THROW_MSG_0(vmSymbols::java_lang_CloneNotSupportedException(), klass->external_name());
   }
 
@@ -645,11 +662,14 @@ JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
   ReferenceType ref_type = REF_NONE;
   const int size = obj->size();
   oop new_obj_oop = NULL;
+    //如果是数组
   if (obj->is_array()) {
     const int length = ((arrayOop)obj())->length();
+      //分配一个新的对象数组
     new_obj_oop = CollectedHeap::array_allocate(klass, size, length, CHECK_NULL);
   } else {
     ref_type = InstanceKlass::cast(klass())->reference_type();
+      //两个条件要么都为true，要么都为false，即要么是普通Java对象，要么是Reference及其子类
     assert((ref_type == REF_NONE) ==
            !klass->is_subclass_of(SystemDictionary::Reference_klass()),
            "invariant");
@@ -666,19 +686,24 @@ JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
   // The same is true of StubRoutines::object_copy and the various oop_copy
   // variants, and of the code generated by the inline_native_clone intrinsic.
   assert(MinObjAlignmentInBytes >= BytesPerLong, "objects misaligned");
+    //原子的复制对象数据，底层是使用汇编指令fildll，fistpll实现的，因为此时其他某个线程可能在修改对象属性
+    //转换成jlong数组复制是为了保证32位系统下也能够原子的复制8字节的数据，32位系统下一次最多复制4字节数据
   Copy::conjoint_jlongs_atomic((jlong*)obj(), (jlong*)new_obj_oop,
                                (size_t)align_object_size(size) / HeapWordsPerLong);
   // Clear the header
+    //设置对象头
   new_obj_oop->init_mark();
 
   // Store check (mark entire object and let gc sort it out)
   BarrierSet* bs = Universe::heap()->barrier_set();
   assert(bs->has_write_region_opt(), "Barrier set does not have write_region");
+    //将卡表对应的区域标记为脏的
   bs->write_region(MemRegion((HeapWord*)new_obj_oop, size));
 
   // If cloning a Reference, set Reference fields to a safe state.
   // Fixup must be completed before any safepoint.
   if (ref_type != REF_NONE) {
+      //如果是Reference及其子类则对其相关属性做特殊处理
     fixup_cloned_reference(ref_type, obj(), new_obj_oop);
   }
 
@@ -687,6 +712,7 @@ JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
   // must be registered so that RedefineClasses can fix metadata contained in them.
   if (java_lang_invoke_MemberName::is_instance(new_obj()) &&
       java_lang_invoke_MemberName::is_method(new_obj())) {
+      //如果clone对象是java_lang_invoke_MemberName实例，该类只能在invoke包类访问
     Method* method = (Method*)java_lang_invoke_MemberName::vmtarget(new_obj());
     // MemberName may be unresolved, so doesn't need registration until resolved.
     if (method != NULL) {
@@ -701,11 +727,14 @@ JVM_ENTRY(jobject, JVM_Clone(JNIEnv* env, jobject handle))
   // Caution: this involves a java upcall, so the clone should be
   // "gc-robust" by this stage.
   if (klass->has_finalizer()) {
+      //如果该类改写了Object的finalize方法
     assert(obj->is_instance(), "should be instanceOop");
+      //给该实例分配一个关联的Finalizer实例，register_finalizer方法返回的实际上还是new_obj,底层调用的Finalizer.register方法是void
     new_obj_oop = InstanceKlass::register_finalizer(instanceOop(new_obj()), CHECK_NULL);
     new_obj = Handle(THREAD, new_obj_oop);
   }
 
+    //返回一个本地JNI引用
   return JNIHandles::make_local(env, new_obj());
 JVM_END
 
@@ -847,20 +876,26 @@ JVM_LEAF(void, JVM_CopySwapMemory(JNIEnv *env, jobject srcObj, jlong srcOffset,
 // Misc. class handling ///////////////////////////////////////////////////////////
 
 
+// 返回调用者
 JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
   JVMWrapper("JVM_GetCallerClass");
 
   // Pre-JDK 8 and early builds of JDK 8 don't have a CallerSensitive annotation; or
   // sun.reflect.Reflection.getCallerClass with a depth parameter is provided
   // temporarily for existing code to use until a replacement API is defined.
+    //JDK 8 之前的版本和 JDK 8 的早期版本没有 CallerSensitive 注释；
+    // 或带有深度参数的 sun.reflect.Reflection.getCallerClass 临时提供给现有代码使用，直到定义替换 API。
   if (SystemDictionary::reflect_CallerSensitive_klass() == NULL || depth != JVM_CALLER_DEPTH) {
+      // 返回“深度”的方法 java 或栈中的原生帧 用于安全检查
     Klass* k = thread->security_get_caller_class(depth);
     return (k == NULL) ? NULL : (jclass) JNIHandles::make_local(env, k->java_mirror());
   }
 
   // Getting the class of the caller frame.
+  // 获取调用者帧的类
   //
   // The call stack at this point looks something like this:
+  // 此时的调用堆栈如下所示：
   //
   // [0] [ @CallerSensitive public sun.reflect.Reflection.getCallerClass ]
   // [1] [ @CallerSensitive API.method                                   ]
@@ -874,12 +909,14 @@ JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
     switch (n) {
     case 0:
       // This must only be called from Reflection.getCallerClass
+        // 这只能从 Reflection.getCallerClass 调用
       if (m->intrinsic_id() != vmIntrinsics::_getCallerClass) {
         THROW_MSG_NULL(vmSymbols::java_lang_InternalError(), "JVM_GetCallerClass must only be called from Reflection.getCallerClass");
       }
       // fall-through
     case 1:
       // Frame 0 and 1 must be caller sensitive.
+        // Frame 0 和 1 必须是调用者sensitive.
       if (!m->caller_sensitive()) {
         THROW_MSG_NULL(vmSymbols::java_lang_InternalError(), err_msg("CallerSensitive annotation expected at frame %d", n));
       }
@@ -887,6 +924,7 @@ JVM_ENTRY(jclass, JVM_GetCallerClass(JNIEnv* env, int depth))
     default:
       if (!m->is_ignored_by_security_stack_walk()) {
         // We have reached the desired frame; return the holder class.
+          // 我们已经达到了预期的帧；返回持有者类。
         return (jclass) JNIHandles::make_local(env, m->method_holder()->java_mirror());
       }
       break;
@@ -971,12 +1009,14 @@ JVM_ENTRY(jclass, JVM_FindClassFromBootLoader(JNIEnv* env,
   JVMWrapper2("JVM_FindClassFromBootLoader %s", name);
 
   // Java libraries should ensure that name is never null...
+    //检查类名是否合法
   if (name == NULL || (int)strlen(name) > Symbol::max_length()) {
     // It's impossible to create this class;  the name cannot fit
     // into the constant pool.
     return NULL;
   }
 
+    //调用SystemDictionary解析目标类，如果未找到返回null
   TempNewSymbol h_name = SymbolTable::new_symbol(name, CHECK_NULL);
   Klass* k = SystemDictionary::resolve_or_null(h_name, CHECK_NULL);
   if (k == NULL) {
@@ -986,6 +1026,7 @@ JVM_ENTRY(jclass, JVM_FindClassFromBootLoader(JNIEnv* env,
   if (TraceClassResolution) {
     trace_class_resolution(k);
   }
+    //将Klass转换成java中Class
   return (jclass) JNIHandles::make_local(env, k->java_mirror());
 JVM_END
 
@@ -1108,10 +1149,16 @@ static void is_lock_held_by_thread(Handle loader, PerfCounter* counter, TRAPS) {
 
 // common code for JVM_DefineClass() and JVM_DefineClassWithSource()
 // and JVM_DefineClassWithSourceCond()
+/**
+ * 这段逻辑主要就是利用 ClassFileStream 将要加载的class文件转成文件流，然后调用SystemDictionary::resolve_from_stream（），
+ * 生成 Class 在 JVM 中的代表：Klass。对于Klass，大家可能不太熟悉，但是在这里必须得了解下。
+ * 说白了，它就是JVM 用来定义一个Java Class 的数据结构。不过Klass只是一个基类，Java Class 真正的数据结构定义在 InstanceKlass中。
+ */
 static jclass jvm_define_class_common(JNIEnv *env, const char *name,
                                       jobject loader, const jbyte *buf,
                                       jsize len, jobject pd, const char *source,
                                       jboolean verify, TRAPS) {
+  slog_trace("进入hotspot/src/share/vm/prims/jvm.cpp中的jvm_define_class_common函数...");
   if (source == NULL)  source = "__JVM_DefineClass__";
 
   assert(THREAD->is_Java_thread(), "must be a JavaThread");
@@ -1133,23 +1180,35 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
   TempNewSymbol class_name = NULL;
   if (name != NULL) {
     const int str_len = (int)strlen(name);
+      //检查类名的长度是否合法
     if (str_len > Symbol::max_length()) {
       // It's impossible to create this class;  the name cannot fit
       // into the constant pool.
       THROW_MSG_0(vmSymbols::java_lang_NoClassDefFoundError(), name);
     }
+      //创建一个新的Symbol实例
     class_name = SymbolTable::new_symbol(name, str_len, CHECK_NULL);
   }
 
   ResourceMark rm(THREAD);
+    //根据字节数组和文件名构建ClassFileStream实例
   ClassFileStream st((u1*) buf, len, (char *)source);
+    //构建Java类加载器实例对应的Handle
   Handle class_loader (THREAD, JNIHandles::resolve(loader));
   if (UsePerfData) {
     is_lock_held_by_thread(class_loader,
                            ClassLoader::sync_JVMDefineClassLockFreeCounter(),
                            THREAD);
   }
+    //构建ProtectionDomain对应的Handle
   Handle protection_domain (THREAD, JNIHandles::resolve(pd));
+  slog_trace("即将调用SystemDictionary::resolve_from_stream函数(进行字节数组的解析并创建出Klass实例)...");
+    /**
+     * 完成字节数组的解析并创建一个Klass实例
+     *
+     * 实际上是一个 InstanceKlass实例
+     * InstanceKlass 中记录了一个 Java 类的所有属性，包括注解、方法、字段、内部类、常量池等信息。这些信息本来被记录在Class文件中，所以说，InstanceKlass就是一个Java Class 文件被加载到内存后的形式。
+     */
   Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                      protection_domain, &st,
                                                      verify != 0,
@@ -1159,6 +1218,8 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
     trace_class_resolution(k);
   }
 
+    //将Klass实例转换成Java 的Class
+    // 为class实例创建本地引用，防止class对象无GCROOT引用被gc掉
   return (jclass) JNIHandles::make_local(env, k->java_mirror());
 }
 
@@ -1171,6 +1232,7 @@ JVM_END
 
 
 JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
+  slog_trace("进入hotspot/src/share/vm/prims/jvm.cpp中的JVM_DefineClassWithSource函数...");
   JVMWrapper2("JVM_DefineClassWithSource %s", name);
 
   return jvm_define_class_common(env, name, loader, buf, len, pd, source, true, THREAD);
@@ -1185,28 +1247,37 @@ JVM_ENTRY(jclass, JVM_DefineClassWithSourceCond(JNIEnv *env, const char *name,
   return jvm_define_class_common(env, name, loader, buf, len, pd, source, verify, THREAD);
 JVM_END
 
+/**
+ * JVM_ENTRY是宏定义，用于处理JNI调用的预处理，如获取当前线程的JavaThread指针
+ */
 JVM_ENTRY(jclass, JVM_FindLoadedClass(JNIEnv *env, jobject loader, jstring name))
   JVMWrapper("JVM_FindLoadedClass");
+    //THREAD表示当前线程
   ResourceMark rm(THREAD);
 
   Handle h_name (THREAD, JNIHandles::resolve_non_null(name));
+    //获取类名对应的Handle
   Handle string = java_lang_String::internalize_classname(h_name, CHECK_NULL);
 
+    //检查是否为空
   const char* str   = java_lang_String::as_utf8_string(string());
   // Sanity check, don't expect null
   if (str == NULL) return NULL;
 
+    //判断类名是否超长
   const int str_len = (int)strlen(str);
   if (str_len > Symbol::max_length()) {
     // It's impossible to create this class;  the name cannot fit
     // into the constant pool.
     return NULL;
   }
+    //创建一个临时的Symbol
   TempNewSymbol klass_name = SymbolTable::new_symbol(str, str_len, CHECK_NULL);
 
   // Security Note:
   //   The Java level wrapper will perform the necessary security check allowing
   //   us to pass the NULL as the initiating class loader.
+    //获取类加载器对应的Handle
   Handle h_loader(THREAD, JNIHandles::resolve(loader));
   if (UsePerfData) {
     is_lock_held_by_thread(h_loader,
@@ -1214,6 +1285,7 @@ JVM_ENTRY(jclass, JVM_FindLoadedClass(JNIEnv *env, jobject loader, jstring name)
                            THREAD);
   }
 
+    //查找目标类是否存在
   Klass* k = SystemDictionary::find_instance_or_array_klass(klass_name,
                                                               h_loader,
                                                               Handle(),
@@ -1227,6 +1299,7 @@ JVM_ENTRY(jclass, JVM_FindLoadedClass(JNIEnv *env, jobject loader, jstring name)
     k = ik();
   }
 #endif
+    //将Klass转换成Java中的Class
   return (k == NULL) ? NULL :
             (jclass) JNIHandles::make_local(env, k->java_mirror());
 JVM_END
@@ -3084,10 +3157,15 @@ void jio_print(const char* s) {
 // instance), and are very unlikely.  Because IsAlive needs to be fast and its
 // implementation is local to this file, we always lock Threads_lock for that one.
 
+// 这个方法会被JVM_StartThread方法中调用：即创建操作系统线程，然后执行  thread_entry这个 函数
 static void thread_entry(JavaThread* thread, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/prims/jvm.cpp中的thread_entry函数...");
   HandleMark hm(THREAD);
   Handle obj(THREAD, thread->threadObj());
   JavaValue result(T_VOID);
+    // JavaCalls::call_virtual是用来调用Java方法的，参数值也比较好懂，就是调用哪个对象，那个类、方法、方法签名。
+    // 跟踪一下这里vmSymbols::run_method_name()位于文件vmSymbols中，template(run_method_name, "run")
+    // 就是调用到了run方法。这也就是为什么线程被start之后，会自己去执行run方法的原因了。
   JavaCalls::call_virtual(&result,
                           obj,
                           KlassHandle(THREAD, SystemDictionary::Thread_klass()),
@@ -3098,6 +3176,7 @@ static void thread_entry(JavaThread* thread, TRAPS) {
 
 
 JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
+  slog_debug("进入hotspot/src/share/vm/prims/jvm.cpp中的JVM_StartThread函数...");
   JVMWrapper("JVM_StartThread");
   JavaThread *native_thread = NULL;
 
@@ -3111,6 +3190,8 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
   {
     // Ensure that the C++ Thread and OSThread structures aren't freed before
     // we operate.
+      //获取锁
+      //对Threads_lock加锁，确保C++对象和操作系统线程结构不被清除。解锁，是在方法结束出栈后MutexLocker析构函数中进行的。
     MutexLocker mu(Threads_lock);
 
     // Since JDK 5 the java.lang.Thread threadStatus is used to prevent
@@ -3119,12 +3200,18 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
     // there is a small window between the Thread object being created
     // (with its JavaThread set) and the update to its threadStatus, so we
     // have to check for this
+      //如果关联的JavaThread不为空，说明该线程已经启动过，需要抛出异常
+      // 1. 判断 Java 线程是否启动，如果已经启动，抛出异常
+      //jthread对象如果是非空的，则证明线程已启动
     if (java_lang_Thread::thread(JNIHandles::resolve_non_null(jthread)) != NULL) {
       throw_illegal_thread_state = true;
     } else {
       // We could also check the stillborn flag to see if this thread was already stopped, but
       // for historical reasons we let the thread detect that itself when it starts running
 
+        //获取stackSize属性，1.4以上不是从Thread实例中读取，直接返回0
+        //取线程栈大小，注意在java/lang/Thread.java源码中，调用init方法时这个参数被设置成0，也就是OpenJDK（包括HotSpot）不支持传递线程栈大小！
+        // 2. 如果没有创建，则会创建线程
       jlong size =
              java_lang_Thread::stackSize(JNIHandles::resolve_non_null(jthread));
       // Allocate the C++ Thread structure and create the native thread.  The
@@ -3132,6 +3219,10 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
       // size_t (an unsigned type), so avoid passing negative values which would
       // result in really large stacks.
       size_t sz = size > 0 ? (size_t) size : 0;
+        // 虚拟机创建 JavaThread(C++层面的线程)， 该类内部会创建操作系统线程，然后关联 Java 线程
+        //创建JavaThread和关联的OSThread
+        // 这里实际上传入的是&thread_entry，而thread_entry的定义在本JVM_StartThread方法的上面
+      slog_debug("在JVM_StartThread函数中创建一个新的(C++层面的)JavaThread对象，线程执行函数thread_entry的入口地址为%p", &thread_entry);
       native_thread = new JavaThread(&thread_entry, sz);
 
       // At this point it may be possible that no osthread was created for the
@@ -3142,17 +3233,23 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
       // JavaThread constructor.
       if (native_thread->osthread() != NULL) {
         // Note: the current thread is not being used within "prepare".
+          //osthread不为空，prepare方法会建立Java Thread实例同JavaThread之间的关联关系
+          //并将Java线程的优先级映射成原生线程的优先级并设置
         native_thread->prepare(jthread);
       }
     }
   }
 
+    // 状态异常直接抛出
   if (throw_illegal_thread_state) {
+      //关联的JavaThread不为空，抛出异常
     THROW(vmSymbols::java_lang_IllegalThreadStateException());
   }
 
   assert(native_thread != NULL, "Starting null thread?");
 
+    //操作系统线程对象为空，无法启动线程了，清理资源并抛出异常
+    //创建osthread失败，抛出异常
   if (native_thread->osthread() == NULL) {
     // No one should hold a reference to the 'native_thread'.
     delete native_thread;
@@ -3174,6 +3271,8 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
   }
 #endif
 
+    //启动线程开始执行
+    // 设置线程状态为 Runnable
   Thread::start(native_thread);
 
 JVM_END
@@ -3221,6 +3320,7 @@ JVM_END
 JVM_ENTRY(jboolean, JVM_IsThreadAlive(JNIEnv* env, jobject jthread))
   JVMWrapper("JVM_IsThreadAlive");
 
+    //从JNI引用中解析出对应的Thread实例oop
   oop thread_oop = JNIHandles::resolve_non_null(jthread);
   return java_lang_Thread::is_alive(thread_oop);
 JVM_END
@@ -3282,11 +3382,16 @@ JVM_END
 JVM_ENTRY(void, JVM_SetThreadPriority(JNIEnv* env, jobject jthread, jint prio))
   JVMWrapper("JVM_SetThreadPriority");
   // Ensure that the C++ Thread and OSThread structures aren't freed before we operate
+    //获取Threads_lock锁
   MutexLocker ml(Threads_lock);
+    //获取关联的Thread实例oop
   oop java_thread = JNIHandles::resolve_non_null(jthread);
+    //设置Thread实例的priority属性
   java_lang_Thread::set_priority(java_thread, (ThreadPriority)prio);
+    //获取关联的JavaThread实例
   JavaThread* thr = java_lang_Thread::thread(java_thread);
   if (thr != NULL) {                  // Thread not yet started; priority pushed down when it is
+      //设置优先级
     Thread::set_priority(thr, (ThreadPriority)prio);
   }
 JVM_END
@@ -3294,6 +3399,7 @@ JVM_END
 
 JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
   JVMWrapper("JVM_Yield");
+    //如果操作系统不支持yeild则返回
   if (os::dont_yield()) return;
 #ifndef USDT2
   HS_DTRACE_PROBE0(hotspot, thread__yield);
@@ -3302,6 +3408,7 @@ JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
 #endif /* USDT2 */
   // When ConvertYieldToSleep is off (default), this matches the classic VM use of yield.
   // Critical for similar threading behaviour
+    //ConvertYieldToSleep默认为false
   if (ConvertYieldToSleep) {
     os::sleep(thread, MinSleepInterval, false);
   } else {
@@ -3320,15 +3427,18 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
   JVMWrapper("JVM_Sleep");
 
   if (millis < 0) {
+      //参数异常
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
   }
 
   if (Thread::is_interrupted (THREAD, true) && !HAS_PENDING_EXCEPTION) {
+      //如果已经被中断则抛出异常
     THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");
   }
 
   // Save current thread state and restore it at the end of this block.
   // And set new thread state to SLEEPING.
+    //增加线程sleep的次数，并启动计入sleep耗时的计时器
   JavaThreadSleepState jtss(thread);
 
 #ifndef USDT2
@@ -3345,10 +3455,12 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
     // JVM_Sleep. Critical for similar threading behaviour (Win32)
     // It appears that in certain GUI contexts, it may be beneficial to do a short sleep
     // for SOLARIS
+      //x86下ConvertSleepToYield为true
     if (ConvertSleepToYield) {
       os::yield();
     } else {
       ThreadState old_state = thread->osthread()->get_state();
+        //将osthread的状态置为SLEEPING
       thread->osthread()->set_state(SLEEPING);
       os::sleep(thread, MinSleepInterval, false);
       thread->osthread()->set_state(old_state);
@@ -3359,8 +3471,10 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
     if (os::sleep(thread, millis, true) == OS_INTRPT) {
       // An asynchronous exception (e.g., ThreadDeathException) could have been thrown on
       // us while we were sleeping. We do not overwrite those.
+        //sleep被中断了
       if (!HAS_PENDING_EXCEPTION) {
         if (event.should_commit()) {
+            //发布事件
           post_thread_sleep_event(&event, millis);
         }
 #ifndef USDT2
@@ -3371,9 +3485,11 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
 #endif /* USDT2 */
         // TODO-FIXME: THROW_MSG returns which means we will not call set_state()
         // to properly restore the thread state.  That's likely wrong.
+          //抛出异常
         THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");
       }
     }
+      //恢复原来的状态
     thread->osthread()->set_state(old_state);
   }
   if (event.should_commit()) {
@@ -3389,8 +3505,10 @@ JVM_END
 
 JVM_ENTRY(jobject, JVM_CurrentThread(JNIEnv* env, jclass threadClass))
   JVMWrapper("JVM_CurrentThread");
+    //thread是JVM_ENTRY中获取的，获取其关联的Thread实例oop
   oop jthread = thread->threadObj();
   assert (thread != NULL, "no current thread!");
+    //返回该实例oop，注意需要将其包裹成JNI本地引用
   return JNIHandles::make_local(env, jthread);
 JVM_END
 
@@ -3452,12 +3570,16 @@ JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
   JVMWrapper("JVM_Interrupt");
 
   // Ensure that the C++ Thread and OSThread structures aren't freed before we operate
+    //获取对应的Thread实例
   oop java_thread = JNIHandles::resolve_non_null(jthread);
+    //如果就是当前线程，则不需要获取锁，否则需要获取Threads_lock锁
   MutexLockerEx ml(thread->threadObj() == java_thread ? NULL : Threads_lock);
   // We need to re-resolve the java_thread, since a GC might have happened during the
   // acquire of the lock
+    //获取关联的JavaThread
   JavaThread* thr = java_lang_Thread::thread(JNIHandles::resolve_non_null(jthread));
   if (thr != NULL) {
+      // JVM_Interrupt对参数进行了校验，然后直接调用Thread::interrupt
     Thread::interrupt(thr);
   }
 JVM_END
@@ -3467,14 +3589,18 @@ JVM_QUICK_ENTRY(jboolean, JVM_IsInterrupted(JNIEnv* env, jobject jthread, jboole
   JVMWrapper("JVM_IsInterrupted");
 
   // Ensure that the C++ Thread and OSThread structures aren't freed before we operate
+    //获取对应的Thread实例
   oop java_thread = JNIHandles::resolve_non_null(jthread);
+    //如果就是当前线程，则不需要获取锁，否则需要获取Threads_lock锁
   MutexLockerEx ml(thread->threadObj() == java_thread ? NULL : Threads_lock);
   // We need to re-resolve the java_thread, since a GC might have happened during the
   // acquire of the lock
+    //获取关联的JavaThread
   JavaThread* thr = java_lang_Thread::thread(JNIHandles::resolve_non_null(jthread));
   if (thr == NULL) {
     return JNI_FALSE;
   } else {
+      //JavaThread不为空，判断其是否被中断，clear_interrupted默认为true，此处就是1
     return (jboolean) Thread::is_interrupted(thr, clear_interrupted != 0);
   }
 JVM_END
@@ -4263,11 +4389,14 @@ jclass find_class_from_class_loader(JNIEnv* env, Symbol* name, jboolean init,
   //   the checkPackageAccess relative to the initiating class loader via the
   //   protection_domain. The protection_domain is passed as NULL by the java code
   //   if there is no security manager in 3-arg Class.forName().
+    // 遵循双亲委派机制加载类，通常会创建或从Dictionary中查询已经加载的InstanceKlass实例，不涉及到对类的连接、初始化等操作。
+    // 通过forName()方法调用到此函数时，还会调用initialize()函数执行类的初始化操作
   Klass* klass = SystemDictionary::resolve_or_fail(name, loader, protection_domain, throwError != 0, CHECK_NULL);
 
   KlassHandle klass_handle(THREAD, klass);
   // Check if we should initialize the class
   if (init && klass_handle->oop_is_instance()) {
+      // init的值为true，则对类进行初始化操作
     klass_handle->initialize(CHECK_NULL);
   }
   return (jclass) JNIHandles::make_local(env, klass_handle->java_mirror());

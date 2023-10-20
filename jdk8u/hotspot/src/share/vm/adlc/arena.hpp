@@ -40,6 +40,8 @@
 // - AllStatic
 //
 
+// 发现CHeapObj有两个声明之处，第一处声明在hotspot\src\share\vm\memory目录下的allocation.hpp；第二处声明在hotspot\src\share\vm\adlc目录下的arena.hpp。
+// 这两个头文件的内容有些相似，这两处地方都声明了这个类，除了CHeapObj，还有些其他的类声明也是类似的。
 class CHeapObj {
  public:
   void* operator new(size_t size) throw();

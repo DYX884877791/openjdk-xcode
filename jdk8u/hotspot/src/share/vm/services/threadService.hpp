@@ -477,6 +477,7 @@ class JavaThreadInObjectWaitState : public JavaThreadStatusChanger {
 };
 
 // Change status to parked (timed or indefinite)
+// JavaThreadParkedState通过构造方法和析构方法来修改线程的状态，并记录锁等待的次数和耗时
 class JavaThreadParkedState : public JavaThreadStatusChanger {
  private:
   ThreadStatistics* _stat;
@@ -563,11 +564,13 @@ class JavaThreadBlockedOnMonitorEnterState : public JavaThreadStatusChanger {
 };
 
 // Change status to sleeping
+// JavaThreadSleepState通过构造和析构函数来统计线程休眠的次数和累计时间
 class JavaThreadSleepState : public JavaThreadStatusChanger {
  private:
   ThreadStatistics* _stat;
   bool _active;
  public:
+    // 构造函数
   JavaThreadSleepState(JavaThread *java_thread) :
     JavaThreadStatusChanger(java_thread, java_lang_Thread::SLEEPING) {
     if (is_alive()) {
@@ -582,6 +585,7 @@ class JavaThreadSleepState : public JavaThreadStatusChanger {
     }
   }
 
+    // 析构函数
   ~JavaThreadSleepState() {
     if (_active) {
       _stat->thread_sleep_end();

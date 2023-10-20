@@ -100,6 +100,9 @@ class ConstMethod;
 class InlineTableSizes;
 class KlassSizeStats;
 
+// native_function是只有本地方法的Method才有的属性，为了节省内存，没有单独定义属性，而是直接用Method对应内存下面的8个字节来表示，
+// 存储的就是本地方法对应的本地代码的调用地址，InterpreterGenerator::generate_native_entry方法就是通过call指令调用native_function保存的调用地址完成本地方法调用的。
+// 与之类似还有一个保存解析方法签名的handle的地址的signature_handler
 class Method : public Metadata {
  friend class VMStructs;
  private:
@@ -126,8 +129,25 @@ class Method : public Metadata {
   int               _compiled_invocation_count;  // Number of nmethod invocations so far (for perf. debugging)
 #endif
   // Entry point for calling both from and to the interpreter.
+    /**
+     * 总结下Method的三个属性_i2i_entry，_from_compiled_entry和_from_interpreted_entry的具体含义，
+     * 初始状态下_i2i_entry和_from_interpreted_entry在值是一样的，即正常的字节码解释执行的入口地址，
+     * _from_compiled_entry的值是adapter的c2i_entry，从本地代码中调用Java方法的入口地址，即从本地代码执行跳转到字节码解释执行。
+     *
+     * 当执行Method::set_code方法后，原来的Java方法变成了本地方法，这时_from_interpreted_entry变成了adaper的i2c_entry，
+     * 即其他Java方法调用该方法的入口地址从正常的_i2i_entry变成了adapter的i2c_entry，因为此时是从字节码执行切换到本地代码执行；
+     * _from_compiled_entry变成了nmethod中编译代码的起始地址，即其他本地方法调用该方法从c2i_entry变成了直接的起始地址，因为从本地代码中调用该方法的本地代码，
+     * 不涉及栈帧状态转换。
+     */
   address _i2i_entry;           // All-args-on-stack calling convention
   // Adapter blob (i2c/c2i) for this Method*. Set once when method is linked.
+    //  Method的_adapter属性就是一个AdapterHandlerEntry指针，该类表示一个栈帧转换的适配器，
+    //  因为解释器做字节码解释执行时的栈帧结构和寄存器的使用与编译后的本地代码执行时的栈帧结构不同，
+    //  需要在字节码解释执行和本地代码执行两者之间切换时对栈帧和寄存器等做必要的转换处理。
+    //  其切换有两个方向，从字节码解释执行切换到本地代码执行（即I2C）以及从本地代码执行切换到字节码解释执行（即C2I）。
+    //  AdapterHandlerEntry本身很简单，只是一个保存I2C和C2I适配器地址的容器而已
+
+    // Method的_adapter 属性是通过Method::make_adapters完成初始化的，在执行方法链接时就会调用该方法，见InstanceKlass::link_methods
   AdapterHandlerEntry* _adapter;
   // Entry point for calling from compiled code, to compiled code if it exists
   // or else the interpreter.
@@ -171,6 +191,21 @@ class Method : public Metadata {
 
   static address make_adapters(methodHandle mh, TRAPS);
   volatile address from_compiled_entry() const   { return (address)OrderAccess::load_ptr_acquire(&_from_compiled_entry); }
+    // _from_interpreted_entry只是Method类中定义的一个属性，如上方法直接返回了这个属性的值。那么这个属性是何时赋值的？
+    // 其实是在方法连接（也就是在类的生命周期中的类连接阶段会进行方法连接）时会设置。
+    // 方法连接时会调用如下方法：
+    // void Method::link_method(methodHandle h_method, TRAPS) {
+    // ...
+    //   address entry = Interpreter::entry_for_method(h_method);
+    //   // Sets both _i2i_entry and _from_interpreted_entry
+    //   set_interpreter_entry(entry);
+    //   // ...
+    // }
+    // 再调用set_interpreter_entry方法
+    // void set_interpreter_entry(address entry)      {
+    //    _i2i_entry = entry;
+    //    _from_interpreted_entry = entry;
+    // }
   volatile address from_interpreted_entry() const{ return (address)OrderAccess::load_ptr_acquire(&_from_interpreted_entry); }
 
   // access flag
@@ -488,6 +523,9 @@ class Method : public Metadata {
   // interpreter entry
   address interpreter_entry() const              { return _i2i_entry; }
   // Only used when first initialize so we can set _i2i_entry and _from_interpreted_entry
+  // 何时调用了method的这个set方法? 见 hotspot/src/share/vm/oops/method.cpp:link_method方法
+  // 根据注释都可以得知，当方法链接时，会去设置方法的entry_point，entry_point是由Interpreter::entry_for_method(h_method)得到的
+  //只在第一次Method初始化的时候调用
   void set_interpreter_entry(address entry)      { _i2i_entry = entry;  _from_interpreted_entry = entry; }
 
   // native function (used for native methods only)
@@ -499,6 +537,7 @@ class Method : public Metadata {
 
   // Must specify a real function (not NULL).
   // Use clear_native_function() to unregister.
+  // 重点关注set_native_function和clear_native_function方法的实现，critical_native_function是按照critical模式查找匹配的本地方法实现，has_native_function判断是否绑定了本地代码。
   void set_native_function(address function, bool post_event_flag);
   bool has_native_function() const;
   void clear_native_function();
@@ -650,7 +689,7 @@ class Method : public Metadata {
   void collect_statistics(KlassSizeStats *sz) const;
 #endif
 
-  // interpreter support
+  // interpreter support  宏byte_offset_of定义在hotspot/src/share/vm/utilities/sizes.hpp中
   static ByteSize const_offset()                 { return byte_offset_of(Method, _constMethod       ); }
   static ByteSize access_flags_offset()          { return byte_offset_of(Method, _access_flags      ); }
   static ByteSize from_compiled_offset()         { return byte_offset_of(Method, _from_compiled_entry); }
@@ -828,6 +867,7 @@ class Method : public Metadata {
   }
 
   nmethod* lookup_osr_nmethod_for(int bci, int level, bool match_level) {
+      //method_holder方法返回该方法所属的Klass
     return method_holder()->lookup_osr_nmethod(this, bci, level, match_level);
   }
 
@@ -922,6 +962,9 @@ class Method : public Metadata {
  private:
 
   // Inlined elements
+  // 获取native_function和signature_handler的地址的方法的实现
+  // 注意这里的this+1,因为this的类型是Method，所以加1并不是加一个字节而是增加一个Method对应的字节数，即获取Method对应内存区域的下一个字节的地址；
+  // 第二个native_function_addr() + 1，因为 native_function_addr()返回的就是一个指针类型的数据，所以这里的加1是增加指针对应的字节数，64位下是8字节。
   address* native_function_addr() const          { assert(is_native(), "must be native"); return (address*) (this+1); }
   address* signature_handler_addr() const        { return native_function_addr() + 1; }
 };

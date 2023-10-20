@@ -31,6 +31,7 @@
 // these inline functions are in a separate file to break an include cycle
 // between Thread and Handle
 
+// 这个构造函数结构oop类型参数,将其保存到当前线程在堆申请的handleArea表中.
 inline Handle::Handle(oop obj) {
   if (obj == NULL) {
     _handle = NULL;

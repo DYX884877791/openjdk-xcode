@@ -491,6 +491,19 @@ jclass
 FindBootStrapClass(JNIEnv *env, const char* classname)
 {
    if (findBootClass == NULL) {
+       /**
+        * dlsym函数的功能就是可以从共享库（动态库）中获取符号（全局变量与函数符号）地址，通常用于获取函数符号地址，这样可用于对共享库中函数的包装；下面是函数原型及需要包含的头文件。
+        * #include <dlfcn.h>
+        * void *dlsym(void *handle, const char *symbol);
+        * 其中handle可以是dlopen函数返回的handle值，也可以是RTLD_DEFAULT或RTLD_NEXT
+        *
+        * RTLD_DEFAULT表示按默认的顺序搜索共享库中符号symbol第一次出现的地址
+        * RTLD_NEXT表示在当前库以后按默认的顺序搜索共享库中符号symbol第一次出现的地址
+        * https://blog.csdn.net/xuedaon/article/details/123401531
+        *
+        * 获取jvm.cpp中的JVM_FindClassFromBootLoader函数
+        * 这里JVM_FindClassFromBootLoader函数位于，hotspot/src/share/vm/prims/jvm.cpp中
+        */
        findBootClass = (FindClassFromBootLoader_t *)dlsym(RTLD_DEFAULT,
           "JVM_FindClassFromBootLoader");
        if (findBootClass == NULL) {

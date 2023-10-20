@@ -45,10 +45,15 @@
  *
  */
 
+// Parker 继承自 os::PlatformParker，也就是说，由各个平台具体实现。比如：hotspot/src/os/linux/vm/os_linux.hpp->PlatformParker
+// 注意Parker是JavaThread的一个实例属性，Unsafe中park和unpark方法都是针对当前线程，即不存在两个不同的线程访问同一个Parker实例的情形，但是存在同一个Parker的park/unpark方法在同一个线程内被多次调用。
 class Parker : public os::PlatformParker {
 private:
+    // 重要变量，通过 0/1 表示是否持有许可，决定是否阻塞，用来表示Parker的状态，park方法执行完成为0，unpark方法执行完成为1，其中等于1说是一个非常短暂的状态，一旦线程被环境又会将其置为0
   volatile int _counter ;
+    // 下一个空闲的Parker
   Parker * FreeNext ;
+    // 当前关联的 JavaThread 关联的线程
   JavaThread * AssociatedWith ; // Current association
 
 public:
@@ -69,7 +74,9 @@ public:
   static Parker * Allocate (JavaThread * t) ;
   static void Release (Parker * e) ;
 private:
+    // 空闲的Parker链表
   static Parker * volatile FreeList ;
+    // 操作FreeList的锁
   static volatile int ListLock ;
 
 };
@@ -115,12 +122,17 @@ private:
 // We'll want to eventually merge these redundant facilities and use ParkEvent.
 
 
+// ParkEvent的定义也是在park.hpp中，继承自os::PlatformEvent
+//  ParkEvent在JavaThread中也是实例属性
 class ParkEvent : public os::PlatformEvent {
   private:
+    // 链表中下一个空闲的ParkEvent
     ParkEvent * FreeNext ;
 
     // Current association
+    // 关联的线程
     Thread * AssociatedWith ;
+    // 下面几个属性都是用来实现JVM自身使用的锁Monitor和Mutex
     intptr_t RawThreadIdentity ;        // LWPID etc
     volatile int Incarnation ;
 
@@ -139,7 +151,9 @@ class ParkEvent : public os::PlatformEvent {
 
 
   private:
+    // 空闲的ParkEvent链表
     static ParkEvent * volatile FreeList ;
+    // 操作FreeList 的锁
     static volatile int ListLock ;
 
     // It's prudent to mark the dtor as "private"

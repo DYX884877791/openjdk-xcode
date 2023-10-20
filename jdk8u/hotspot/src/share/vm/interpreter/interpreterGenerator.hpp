@@ -34,6 +34,10 @@
 // of the interpreter generator.
 
 
+// InterpreterGenerator的定义在同目录下的interpreterGenerator.hpp中，表示一个解释器生成器。
+// 其实现跟Interpreter类似，只是一个统一的门面而已，通过宏决定其继承的子类是CppInterpreterGenerator或者TemplateInterpreterGenerator
+// 默认是继承TemplateInterpreterGenerator
+// 跟平台相关的部分通过图中的宏定义引入，interpreterGenerator_x86.hpp中定义的都是私有方法
 class InterpreterGenerator: public CC_INTERP_ONLY(CppInterpreterGenerator)
                                    NOT_CC_INTERP(TemplateInterpreterGenerator) {
 

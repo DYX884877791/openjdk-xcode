@@ -29,6 +29,7 @@
 
 // ReferenceType is used to distinguish between java/lang/ref/Reference subclasses
 
+// 可以看到，所有的Reference及子类都会用InstanceRefKlass来表示。当无法判断到底是哪个子类时，会将Reference设置为REF_OTHER。　
 enum ReferenceType {
   REF_NONE,      // Regular class
   REF_OTHER,     // Subclass of java/lang/ref/Reference, but not subclass of one of the classes below

@@ -33,6 +33,11 @@ package javax.lang.model.type;
  *   ? extends Number
  *   ? super T
  * </tt></pre>
+ * 代表一个通配符类型.包括:
+ *  ?
+ *  ? extends Number
+ *  ? super T
+ *  通配符的上界可通过extends 语句来进行设置,下界可通过super 来进行设置.
  *
  * <p> A wildcard may have its upper bound explicitly set by an
  * {@code extends} clause, its lower bound explicitly set by a
@@ -49,7 +54,7 @@ public interface WildcardType extends TypeMirror {
      * Returns the upper bound of this wildcard.
      * If no upper bound is explicitly declared,
      * {@code null} is returned.
-     *
+     * 返回该类型的上界,如果没有的话,则返回null
      * @return the upper bound of this wildcard
      */
     TypeMirror getExtendsBound();
@@ -58,7 +63,7 @@ public interface WildcardType extends TypeMirror {
      * Returns the lower bound of this wildcard.
      * If no lower bound is explicitly declared,
      * {@code null} is returned.
-     *
+     * 返回该类型的下界,如果没有的话,则返回null
      * @return the lower bound of this wildcard
      */
     TypeMirror getSuperBound();

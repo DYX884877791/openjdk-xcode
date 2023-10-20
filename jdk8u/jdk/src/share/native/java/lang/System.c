@@ -191,6 +191,7 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     jobject ret = NULL;
     jstring jVMVal = NULL;
 
+    // 获取Java 配置环境 里面主要是通过 各种预定义的宏区分不同的操作系统，之后进行对应的编译，获取环境设置 java_props_t的属性
     sprops = GetJavaProperties(env);
     CHECK_NULL_RETURN(sprops, NULL);
 
@@ -393,6 +394,9 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     }
 
     /*
+     * 取消设置“user.language”、“user.script”、“user.country”和“user.variant”，以判断是否指定了命令行选项“-DXXXX=YYYY”。
+     * 它们将在下面的fillI18nProps() 中重置
+     *
      * unset "user.language", "user.script", "user.country", and "user.variant"
      * in order to tell whether the command line option "-DXXXX=YYYY" is
      * specified or not.  They will be reset in fillI18nProps() below.
@@ -403,9 +407,11 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     REMOVEPROP(props, "user.variant");
     REMOVEPROP(props, "file.encoding");
 
+    // jvm 初始化
     ret = JVM_InitProperties(env, props);
 
     /* Check the compatibility flag */
+    // 检查兼容性标志
     GETPROP(props, "sun.locale.formatasdefault", jVMVal);
     if (jVMVal) {
         const char * val = (*env)->GetStringUTFChars(env, jVMVal, 0);
@@ -462,6 +468,10 @@ Java_java_lang_System_setIn0(JNIEnv *env, jclass cla, jobject stream)
     (*env)->SetStaticObjectField(env,cla,fid,stream);
 }
 
+/**
+ * 首先获取了java.io.PrintStream类型的out静态成员，这个就是我们java.lang.System类的静态成员out：
+ * 然后将stream参数赋值给它，这个stream就是initializeSystemClass方法中通过newPrintStream方法创建的PrintStream 对象。
+ */
 JNIEXPORT void JNICALL
 Java_java_lang_System_setOut0(JNIEnv *env, jclass cla, jobject stream)
 {
@@ -494,22 +504,29 @@ JNIEXPORT jstring JNICALL
 Java_java_lang_System_mapLibraryName(JNIEnv *env, jclass ign, jstring libname)
 {
     int len;
+    // 前缀的长度，Linux下前缀后缀的定义在hotspot/src/os/linux/vm/jvm_linux.h中
     int prefix_len = (int) strlen(JNI_LIB_PREFIX);
+    // 后缀的长度
     int suffix_len = (int) strlen(JNI_LIB_SUFFIX);
 
     jchar chars[256];
     if (libname == NULL) {
+        // 非空校验
         JNU_ThrowNullPointerException(env, 0);
         return NULL;
     }
+    // 长度校验
     len = (*env)->GetStringLength(env, libname);
     if (len > 240) {
         JNU_ThrowIllegalArgumentException(env, "name too long");
         return NULL;
     }
+    // 将前缀复制到数组中
     cpchars(chars, JNI_LIB_PREFIX, prefix_len);
+    // 将libname复制到数组中前缀的后面
     (*env)->GetStringRegion(env, libname, 0, len, chars + prefix_len);
     len += prefix_len;
+    // 将后缀复制到数组中libname的后面，拼成一个新的字符串
     cpchars(chars + len, JNI_LIB_SUFFIX, suffix_len);
     len += suffix_len;
 

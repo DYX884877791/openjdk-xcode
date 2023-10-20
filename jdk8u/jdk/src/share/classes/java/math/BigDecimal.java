@@ -232,6 +232,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     private final BigInteger intVal;
 
     /**
+     * 比例-整数标度:（如果为零或正数，则标度是小数点后的位数。如果为负数，则将该数的非标度值乘以 10 的负scale 次幂）
      * The scale of this BigDecimal, as returned by {@link #scale}.
      *
      * @serial
@@ -241,6 +242,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
                               // calculations must be done in longs
 
     /**
+     * 值的有效位数，不包含正负符号
      * The number of decimal digits in this BigDecimal, or 0 if the
      * number of digits are not known (lookaside information).  If
      * nonzero, the value is guaranteed correct.  Use the precision()
@@ -252,6 +254,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     private transient int precision;
 
     /**
+     * 存对应的字符串
      * Used to store the canonical string representation, if computed.
      */
     private transient String stringCache;
@@ -265,6 +268,16 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     private static final BigInteger INFLATED_BIGINT = BigInteger.valueOf(INFLATED);
 
     /**
+     * 在 JDK 1.8 之前的版本中，BigDecimal 内部使用一个 int 数组来表示大整数。每个元素都代表了 BigDecimal 的一部分位数。
+     * 这种表示方式需要额外的内存空间，并且对于小数和较小的整数来说是不必要的。
+     *
+     *  为了优化性能和节省内存，JDK 1.8 引入了 intCompact 属性，它将 BigDecimal 内部的表示形式转换为一个long 值。
+     * 这个 long 值可以直接存储整数值，而对于较大的数字，则使用溢出（overflow）和膨胀（inflation）机制进行处理。
+     *
+     * 1. 如果数据不大(比Long.MAX_VALUE)小，那么它会直接把数字保存在intCompact里面  (intCompact其实是一个long类型的字段)。
+     * 2. 如果数据确实很大，超过了Long类型的范围, 它会使用BigInteger类型的 intVal 来保  存scale过后的值。
+     *      而BigInteger里面则是通过一个int字段的 signum 和 一个int数组: mag 来表达。
+     *
      * If the absolute value of the significand of this BigDecimal is
      * less than or equal to {@code Long.MAX_VALUE}, the value can be
      * compactly stored in this field and used in computations.
@@ -1301,6 +1314,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
      * @return {@code this + augend}
      */
     public BigDecimal add(BigDecimal augend) {
+        // intCompact都不等于INFLATED，传this.intCompact，否则传intVal
         if (this.intCompact != INFLATED) {
             if ((augend.intCompact != INFLATED)) {
                 return add(this.intCompact, this.scale, augend.intCompact, augend.scale);
@@ -2594,6 +2608,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     }
 
     /**
+     * 去除小数点后多余的0
      * Returns a {@code BigDecimal} which is numerically equal to
      * this one but with any trailing zeros removed from the
      * representation.  For example, stripping the trailing zeros from
@@ -2621,6 +2636,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
     // Comparison Operations
 
     /**
+     * 比较两个BigDecimal数据的大小，
      * Compares this {@code BigDecimal} with the specified
      * {@code BigDecimal}.  Two {@code BigDecimal} objects that are
      * equal in value but have a different scale (like 2.0 and 2.00)
@@ -2728,6 +2744,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
         BigDecimal xDec = (BigDecimal) x;
         if (x == this)
             return true;
+        // 这是比较两个数的精度长度是否相等，长度不一致直接返回false
         if (scale != xDec.scale)
             return false;
         long s = this.intCompact;
@@ -4497,6 +4514,7 @@ public class BigDecimal extends Number implements Comparable<BigDecimal> {
 
     private static BigDecimal add(final long xs, int scale1, final long ys, int scale2) {
         long sdiff = (long) scale1 - scale2;
+        // 取小数位数多的作为结果的小数位数
         if (sdiff == 0) {
             return add(xs, ys, scale1);
         } else if (sdiff < 0) {

@@ -30,6 +30,7 @@ package javax.lang.model.type;
  * Represents a primitive type.  These include
  * {@code boolean}, {@code byte}, {@code short}, {@code int},
  * {@code long}, {@code char}, {@code float}, and {@code double}.
+ * 代表原始类型,包括 boolean,byte,short,int,long,char.float,double
  *
  * @author Joseph D. Darcy
  * @author Scott Seligman

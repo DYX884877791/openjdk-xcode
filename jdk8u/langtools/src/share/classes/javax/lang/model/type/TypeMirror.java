@@ -50,6 +50,7 @@ import javax.lang.model.util.Types;
  * hierarchy since an implementation may choose to have a single
  * object implement multiple {@code TypeMirror} subinterfaces.
  *
+ * 代表了java编程语言中的类型,包括原生类型,声明类型(类和接口)，数组类型，类型变量,null类型.同时也包括通配符,可执行语句的签名和返回类型,包和void所对应的伪类型.
  * @author Joseph D. Darcy
  * @author Scott Seligman
  * @author Peter von der Ah&eacute;
@@ -61,7 +62,7 @@ public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
 
     /**
      * Returns the {@code kind} of this type.
-     *
+     * 返回该类所对应的TypeKind
      * @return the kind of this type
      */
     TypeKind getKind();
@@ -74,6 +75,8 @@ public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
      * {@link Types#isSameType(TypeMirror, TypeMirror)}.
      * The results of {@code t1.equals(t2)} and
      * {@code Types.isSameType(t1, t2)} may differ.
+     * 满足 Object#equals方法的语义,然而,本方法并不代表2个类型是同样的.语义上比较2个类型是否相同应该使用Types#isSameType(TypeMirror, TypeMirror)方法,
+     * 该方法的返回值可能和Types.isSameType(t1, t2)的返回值不一样.
      *
      * @param obj  the object to be compared with this type
      * @return {@code true} if the specified object is equal to this one
@@ -82,7 +85,7 @@ public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
 
     /**
      * Obeys the general contract of {@link Object#hashCode Object.hashCode}.
-     *
+     * 按照Object#hashCode的语义来实现
      * @see #equals
      */
     int hashCode();
@@ -92,7 +95,7 @@ public interface TypeMirror extends javax.lang.model.AnnotatedConstruct {
      * possible, the string should be of a form suitable for
      * representing this type in source code.  Any names embedded in
      * the result are qualified if possible.
-     *
+     * 返回此类型的字符串表示形式。如果可能的话，字符串应该是适合于在源代码中表示这种类型的形式。如果可能，嵌入在结果中的任何名称都是合格的。
      * @return a string representation of this type
      */
     String toString();

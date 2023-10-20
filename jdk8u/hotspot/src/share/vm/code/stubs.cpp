@@ -64,9 +64,12 @@
 
 StubQueue::StubQueue(StubInterface* stub_interface, int buffer_size,
                      Mutex* lock, const char* name) : _mutex(lock) {
+    //64位下BytesPerWord等于8，round_to方法将buffer_size取整，必须是后者的整数倍
   intptr_t size = round_to(buffer_size, 2*BytesPerWord);
+    //分配一个BufferBlob
   BufferBlob* blob = BufferBlob::create(name, size);
   if( blob == NULL) {
+      //分配Blob失败则抛出异常
     vm_exit_out_of_memory(size, OOM_MALLOC_ERROR, err_msg("CodeCache: no room for %s", name));
   }
   _stub_interface  = stub_interface;
@@ -76,6 +79,7 @@ StubQueue::StubQueue(StubInterface* stub_interface, int buffer_size,
   _queue_begin     = 0;
   _queue_end       = 0;
   _number_of_stubs = 0;
+    //将新创建的StubQueue保存到全局的StubQueue数组中
   register_queue(this);
 }
 
@@ -85,6 +89,7 @@ StubQueue::~StubQueue() {
   //       If we want to implement the destructor, we need to release the BufferBlob
   //       allocated in the constructor (i.e., we need to keep it around or look it
   //       up via CodeCache::find_blob(...).
+    // 当前实现下StubQueues永远不会自动销毁，因为它通过全局静态StubQueues数组和静态属性关联起来了
   Unimplemented();
 }
 
@@ -109,39 +114,53 @@ Stub* StubQueue::request_committed(int code_size) {
 
 Stub* StubQueue::request(int requested_code_size) {
   assert(requested_code_size > 0, "requested_code_size must be > 0");
+    //获取锁
   if (_mutex != NULL) _mutex->lock();
+    //current_stub返回最后一个Stub
   Stub* s = current_stub();
+    //requested_size取整
   int requested_size = round_to(stub_code_size_to_size(requested_code_size), CodeEntryAlignment);
+    //如果可用空间充足
   if (requested_size <= available_space()) {
+      //如果是连续状态，即所有Stub在一个Blob中分配
     if (is_contiguous()) {
       // Queue: |...|XXXXXXX|.............|
       //        ^0  ^begin  ^end          ^size = limit
+        //校验其是连续状态
       assert(_buffer_limit == _buffer_size, "buffer must be fully usable");
+        //校验可用空间是否充足
       if (_queue_end + requested_size <= _buffer_size) {
         // code fits in at the end => nothing to do
         CodeStrings strings;
+          //Stub的初始化
         stub_initialize(s, requested_size, strings);
         return s;
       } else {
         // stub doesn't fit in at the queue end
         // => reduce buffer limit & wrap around
+          //校验是否非空
         assert(!is_empty(), "just checkin'");
+          //将_buffer_limit置为_queue_end，_queue_end置0，即将连续状态变成非连续状态
         _buffer_limit = _queue_end;
         _queue_end = 0;
       }
     }
   }
   if (requested_size <= available_space()) {
+      //校验其是非连续状态
     assert(!is_contiguous(), "just checkin'");
     assert(_buffer_limit <= _buffer_size, "queue invariant broken");
     // Queue: |XXX|.......|XXXXXXX|.......|
     //        ^0  ^end    ^begin  ^limit  ^size
+      //获取当前的Stub
     s = current_stub();
     CodeStrings strings;
+      //初始化
     stub_initialize(s, requested_size, strings);
     return s;
   }
   // Not enough space left
+    //没有足够的剩余空间，解锁
   if (_mutex != NULL) _mutex->unlock();
   return NULL;
 }
@@ -149,48 +168,63 @@ Stub* StubQueue::request(int requested_code_size) {
 
 void StubQueue::commit(int committed_code_size, CodeStrings& strings) {
   assert(committed_code_size > 0, "committed_code_size must be > 0");
+    //committed_code_size取整
   int committed_size = round_to(stub_code_size_to_size(committed_code_size), CodeEntryAlignment);
   Stub* s = current_stub();
+    //校验committed_size必须小于等于s的大小
   assert(committed_size <= stub_size(s), "committed size must not exceed requested size");
+    //初始化
   stub_initialize(s, committed_size, strings);
+    //_queue_end增加，_number_of_stubs增加
   _queue_end += committed_size;
   _number_of_stubs++;
+    //解锁
   if (_mutex != NULL) _mutex->unlock();
   debug_only(stub_verify(s);)
 }
 
 
 void StubQueue::remove_first() {
+    //StubQueue为空
   if (number_of_stubs() == 0) return;
+    //获取_queue_begin对应的Stub
   Stub* s = first();
   debug_only(stub_verify(s);)
   stub_finalize(s);
+    //_queue_begin往前移动
   _queue_begin += stub_size(s);
+    //校验_queue_begin必须小于_buffer_limit
   assert(_queue_begin <= _buffer_limit, "sanity check");
   if (_queue_begin == _queue_end) {
     // buffer empty
     // => reset queue indices
+      //StubQueue清空了，将其重置，此时队列处于连续状态下
     _queue_begin  = 0;
     _queue_end    = 0;
     _buffer_limit = _buffer_size;
   } else if (_queue_begin == _buffer_limit) {
     // buffer limit reached
     // => reset buffer limit & wrap around
+      // 此时队列处于非连续状态下，即begin到_buffer_limit之间的部分被清空了，重置恢复到连续状态
     _buffer_limit = _buffer_size;
     _queue_begin = 0;
   }
+    //将个数减一
   _number_of_stubs--;
 }
 
 
 void StubQueue::remove_first(int n) {
+    //取出stubs数量和n的最小值
   int i = MIN2(n, number_of_stubs());
+    //不断遍历，移除第一个stub
   while (i-- > 0) remove_first();
 }
 
 
 void StubQueue::remove_all(){
   debug_only(verify();)
+    //将所有的stub都删除
   remove_first(number_of_stubs());
   assert(number_of_stubs() == 0, "sanity check");
 }
@@ -201,6 +235,7 @@ static StubQueue* registered_stub_queues[StubQueueLimit];
 
 void StubQueue::register_queue(StubQueue* sq) {
   for (int i = 0; i < StubQueueLimit; i++) {
+      //找一个空的数组元素保存sq
     if (registered_stub_queues[i] == NULL) {
       registered_stub_queues[i] = sq;
       return;
@@ -210,7 +245,9 @@ void StubQueue::register_queue(StubQueue* sq) {
 }
 
 
+// 让所有的StubQueue执行某个函数
 void StubQueue::queues_do(void f(StubQueue* sq)) {
+    //遍历全局的registered_stub_queues数组
   for (int i = 0; i < StubQueueLimit; i++) {
     if (registered_stub_queues[i] != NULL) {
       f(registered_stub_queues[i]);
@@ -219,9 +256,12 @@ void StubQueue::queues_do(void f(StubQueue* sq)) {
 }
 
 
+// 让所有的Stub执行某个函数
 void StubQueue::stubs_do(void f(Stub* s)) {
   debug_only(verify();)
+    //获取锁
   MutexLockerEx lock(_mutex);
+    //逐一遍历所有的Stub
   for (Stub* s = first(); s != NULL; s = next(s)) f(s);
 }
 

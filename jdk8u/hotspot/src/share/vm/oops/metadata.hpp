@@ -30,6 +30,8 @@
 #include "utilities/ostream.hpp"
 
 // This is the base class for an internal Class related metadata
+// Metadata是内部表示类相关元数据的一个基类，注意Metadata定义了多个虚函数
+// Metadata是元数据类的基础类型，除了Klass会直接继承外，表示方法的Method与表示常量池的ConstantPool也会继承
 class Metadata : public MetaspaceObj {
   // Debugging hook to check that the metadata has not been deleted.
   NOT_PRODUCT(int _valid;)
@@ -37,6 +39,8 @@ class Metadata : public MetaspaceObj {
   NOT_PRODUCT(Metadata()     { _valid = 0; })
   NOT_PRODUCT(bool is_valid() const volatile { return _valid == 0; })
 
+    // 其中identity_hash()方法返回的实际是该对象的内存地址
+    // c++中的this指针就表示该对象的内存地址，uintptr_t是C中定义的无符号int类型的别名，这里将内存地址转为无符号整数作为对象的hash码
   int identity_hash()                { return (int)(uintptr_t)this; }
 
   // Rehashing support for tables containing pointers to this

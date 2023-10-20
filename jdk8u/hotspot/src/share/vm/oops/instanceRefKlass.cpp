@@ -480,6 +480,7 @@ void InstanceRefKlass::update_nonstatic_oop_maps(Klass* k) {
            "just checking");
 
     // Update map to (3,1) - point to offset of 3 (words) with 1 map entry.
+      // 下面的两行是最重要的地方。
     map->set_offset(java_lang_ref_Reference::queue_offset);
     map->set_count(1);
   }

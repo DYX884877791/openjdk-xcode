@@ -51,6 +51,10 @@ elapsedTimer       CompilationPolicy::_accumulated_time;
 bool               CompilationPolicy::_in_vm_startup;
 
 // Determine compilation policy based on command line argument
+/**
+ * 其中COMPILER2表示启用C2编译器，TIERED表示启用分级编译，这两个都是x86_64下默认添加的宏。CompilationPolicyChoice表示编译策略选择，server模式下默认是3，
+ * 可通过jinfo -flag CompilationPolicyChoice 31957查看，其中31957是进程ID。所以server模式下默认是选择AdvancedThresholdPolicy编译策略。
+ */
 void compilationPolicy_init() {
   CompilationPolicy::set_in_vm_startup(DelayCompilationDuringStartup);
 
@@ -112,7 +116,9 @@ bool CompilationPolicy::can_be_compiled(methodHandle m, int comp_level) {
   // allow any levels for WhiteBox
   assert(WhiteBoxAPI || comp_level == CompLevel_all || is_compile(comp_level), "illegal compilation level");
 
+    //抽象方法或者方法过大则不编译
   if (m->is_abstract()) return false;
+    //DontCompileHugeMethods表示方法超过一个阈值不编译，阈值通过HugeMethodLimit指定，默认值8000
   if (DontCompileHugeMethods && m->code_size() > HugeMethodLimit) return false;
 
   // Math intrinsics should never be compiled as this can lead to
@@ -121,12 +127,14 @@ bool CompilationPolicy::can_be_compiled(methodHandle m, int comp_level) {
   // production because the invocation counter can't be incremented
   // but we shouldn't expose the system to this problem in testing
   // modes.
+    //部分通过汇编实现的方法如数学sin计算等相关方法不需要编译，他们没有计数器也不会触发编译，返回false
   if (!AbstractInterpreter::can_be_compiled(m)) {
     return false;
   }
   if (comp_level == CompLevel_all) {
     if (TieredCompilation) {
       // enough to be compilable at any level for tiered
+        //如果目标方法是CompLevel_simple或者CompLevel_full_optimization编译的
       return !m->is_not_compilable(CompLevel_simple) || !m->is_not_compilable(CompLevel_full_optimization);
     } else {
       // must be compilable at available level for non-tiered

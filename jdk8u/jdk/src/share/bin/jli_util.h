@@ -31,12 +31,16 @@
 #include <stdio.h>
 #include <jni.h>
 #define JLDEBUG_ENV_ENTRY "_JAVA_LAUNCHER_DEBUG"
+#define TO_STRING(x)  #x
 
 void *JLI_MemAlloc(size_t size);
 void *JLI_MemRealloc(void *ptr, size_t size);
 char *JLI_StringDup(const char *s1);
 void  JLI_MemFree(void *ptr);
+// 正序比较字符串s1是否以字符串s2开头...
 int   JLI_StrCCmp(const char *s1, const char* s2);
+// 逆序比较字符串s1是否以字符串s2结尾...
+int   JLI_StrRCCmp(const char *s1, const char* s2);
 
 typedef struct {
     char *arg;
@@ -48,15 +52,22 @@ int     JLI_GetStdArgc();
 
 #define JLI_StrLen(p1)          strlen((p1))
 #define JLI_StrChr(p1, p2)      strchr((p1), (p2))
+// strrchr 函数在字符串 s 中是从后到前（或者称为从右向左）查找字符 c，即搜索最后一次出现字符 c 的位置
 #define JLI_StrRChr(p1, p2)     strrchr((p1), (p2))
 #define JLI_StrCmp(p1, p2)      strcmp((p1), (p2))
 #define JLI_StrNCmp(p1, p2, p3) strncmp((p1), (p2), (p3))
 #define JLI_StrCat(p1, p2)      strcat((p1), (p2))
 #define JLI_StrCpy(p1, p2)      strcpy((p1), (p2))
 #define JLI_StrNCpy(p1, p2, p3) strncpy((p1), (p2), (p3))
+// 该函数用于找到子串（p2）在一个字符串（p1）中第一次出现的位置
 #define JLI_StrStr(p1, p2)      strstr((p1), (p2))
+// 从参数p1 字符串的开头计算连续的字符，这些字符都是参数p2 所指字符串中的字符。
+// 返回字符串p1开头连续包含字符串p2内的字符数目。 若strspn()返回的数值为n，则代表字符串p1 开头连续有n 个字符都是属于字符串p2内的字符。
 #define JLI_StrSpn(p1, p2)      strspn((p1), (p2))
+// 从参数s1 字符串的开头计算连续的字符，这些字符都不在参数s2 所指的字符串中。
+// 返回字符串s 开头连续不含字符串reject 内的字符数目。若strcspn()返回的数值为n，则代表字符串s 开头连续有n 个字符都不含字符串reject 内的字符。
 #define JLI_StrCSpn(p1, p2)     strcspn((p1), (p2))
+// 该函数在源字符串（p1）中按从前到后顺序找出最先含有搜索字符串（p2）中任一字符的位置并返回位置指针(char*)，若找不到则返回空指针NULL。
 #define JLI_StrPBrk(p1, p2)     strpbrk((p1), (p2))
 
 /* On Windows lseek() is in io.h rather than the location dictated by POSIX. */
@@ -100,5 +111,185 @@ void JLI_CmdToArgs(char *cmdline);
 void     JLI_TraceLauncher(const char* fmt, ...);
 void     JLI_SetTraceLauncher();
 jboolean JLI_IsTraceLauncher();
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <inttypes.h>
+#include <pthread.h>
+#include <stdint.h>
+
+/* SLog version information */
+#define SLOG_VERSION_MAJOR      1
+#define SLOG_VERSION_MINOR      8
+#define SLOG_BUILD_NUM          31
+
+/* Supported colors */
+#define SLOG_COLOR_NORMAL       "\x1B[0m"
+#define SLOG_COLOR_RED          "\x1B[31m"
+#define SLOG_COLOR_GREEN        "\x1B[32m"
+#define SLOG_COLOR_YELLOW       "\x1B[33m"
+#define SLOG_COLOR_BLUE         "\x1B[34m"
+#define SLOG_COLOR_MAGENTA      "\x1B[35m"
+#define SLOG_COLOR_CYAN         "\x1B[36m"
+#define SLOG_COLOR_WHITE        "\x1B[37m"
+#define SLOG_COLOR_RESET        "\033[0m"
+
+/**
+ * 该声明主要功能定义输出日志的头包含打印日志所在文件、所在函数、所在行数。同时为了便于查看加入终端实时输出时日志的颜色区分，以及从行首覆盖输出的设置。
+ *
+ * #include <string.h> //strrchr()函数所需头文件
+ * 函数原型：char *strrchr(const char *s, int c);
+ * 函数功能：The strrchr() function returns a pointer to the last occurrence of the character 【c】 in the string 【s】.
+ * 函数返回一个指向最后一次出现在字符串s中的字符c的位置指针，如果c不在s中，返回NULL。
+ * PS：linux中提供了相应的函数：basename(s)，用来获取不带路径的文件名。
+ */
+#define get_filename(x) strrchr(x, '/') ? strrchr(x, '/') + 1 : x
+
+/* Trace source location helpers */
+#define SLOG_TRACE_LVL1(LINE) #LINE
+#define SLOG_TRACE_LVL2(LINE) SLOG_TRACE_LVL1(LINE)
+#define FILE_LINE_FUNCTION_PLACEHOLDER "[%s:%s]-%s=>"
+
+/* SLog limits (To be safe while avoiding dynamic allocations) */
+#define SLOG_MESSAGE_MAX        8196
+#define SLOG_VERSION_MAX        128
+#define SLOG_PATH_MAX           2048
+#define SLOG_INFO_MAX           512
+#define SLOG_NAME_MAX           256
+#define SLOG_DATE_MAX           64
+#define SLOG_TAG_MAX            128
+#define SLOG_COLOR_MAX          16
+
+#define SLOG_FLAGS_CHECK(g, f) ((g) >= (f))
+
+#define SLOG_NAME_DEFAULT       "slog"
+#define SLOG_NEWLINE            "\n"
+#define SLOG_INDENT             "       "
+#define SLOG_SPACE              " "
+#define SLOG_EMPTY              ""
+#define SLOG_NUL                '\0'
+
+typedef struct SLogDate {
+    uint16_t nYear;
+    uint8_t nMonth;
+    uint8_t nDay;
+    uint8_t nHour;
+    uint8_t nMin;
+    uint8_t nSec;
+    uint16_t nUsec;
+} slog_date_t;
+
+uint16_t slog_get_usec();
+
+void slog_get_date(slog_date_t *pDate);
+
+/* Log level flags */
+typedef enum {
+    SLOG_ALL = 255, // 所有级别
+    SLOG_TRACE = (1 << 5), // 跟踪级别
+    SLOG_DEBUG = (1 << 4), // 调试级别
+    SLOG_INFO = (1 << 3),  // 普通级别
+    SLOG_WARN = (1 << 2),  // 警告级别
+    SLOG_ERROR = (1 << 1), // 错误级别
+    SLOG_FATAL = (1 << 0), // 严重错误级别
+    SLOG_NONE = 0, // 关闭所有
+    SLOG_UNKNOWN = -1 // 未知级别
+} slog_flag_t;
+
+#define CHECK_FLAG(SLOG_FLAG_T, flags) if (JLI_StrRCCmp(TO_STRING(SLOG_FLAG_T), flags) == 0) return SLOG_FLAG_T
+
+typedef int(*slog_cb_t)(const char *pLog, size_t nLength, slog_flag_t eFlag, void *pCtx);
+
+/* Output coloring control flags */
+typedef enum {
+    SLOG_COLORING_DISABLE = 0,
+    SLOG_COLORING_TAG,
+    SLOG_COLORING_FULL
+} slog_coloring_t;
+
+typedef enum {
+    SLOG_TIME_DISABLE = 0,
+    SLOG_TIME_ONLY,
+    SLOG_DATE_FULL
+} slog_date_ctrl_t;
+
+#define slog(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_note(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_info(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_warn(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_debug(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_error(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_trace(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_fatal(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, __FILE__ , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+
+/* slog short location */
+#define slog_s(eFlag, format, ...) slog_display(eFlag, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_note_s(format, ...) slog_display(SLOG_NOTE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_info_s(format, ...) slog_display(SLOG_INFO, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_warn_s(format, ...) slog_display(SLOG_WARN, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_debug_s(format, ...) slog_display(SLOG_DEBUG, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_error_s(format, ...) slog_display(SLOG_ERROR, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_trace_s(format, ...) slog_display(SLOG_TRACE, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+#define slog_fatal_s(format, ...) slog_display(SLOG_FATAL, FILE_LINE_FUNCTION_PLACEHOLDER format, get_filename(__FILE__) , SLOG_TRACE_LVL2(__LINE__), __FUNCTION__, ##__VA_ARGS__)
+
+
+typedef struct SLogConfig {
+    slog_date_ctrl_t eDateControl;      // Display output with date format
+    slog_coloring_t eColorFormat;       // Output color format control
+    slog_cb_t logCallback;              // Log callback to collect logs
+    void* pCallbackCtx;                 // Data pointer passed to log callback
+
+    uint8_t nTraceTid;                // Trace thread ID and display in output
+    uint8_t nToScreen;                // Enable screen logging
+    uint8_t nNewLine;                 // Enable new line ending
+    uint8_t nUseHeap;                 // Use dynamic allocation
+    uint8_t nToFile;                  // Enable file logging
+    uint8_t nIndent;                  // Enable indentations
+    uint8_t nFlush;                   // Flush stdout after screen log
+    uint16_t nFlags;                  // Allowed log level flags
+
+    char sSeparator[SLOG_NAME_MAX];     // Separator between info and log
+    char sFileName[SLOG_NAME_MAX];      // Output file name for logs
+    char sFilePath[SLOG_PATH_MAX];      // Output file path for logs
+} slog_config_t;
+
+size_t slog_version(char *pDest, size_t nSize, uint8_t nMin);
+slog_config_t * slog_config_get();
+void slog_config_set(slog_config_t * pCfg);
+
+slog_flag_t slog_parse_flag(const char *flag);
+
+const char * slog_get_all_levels();
+
+void slog_separator_set(const char *pFormat, ...);
+void slog_callback_set(slog_cb_t callback, void *pContext);
+void slog_new_line(uint8_t nEnable);
+void slog_indent(uint8_t nEnable);
+
+void slog_flag_set(slog_flag_t eFlag);
+
+void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe);
+/*
+ *    https://zhuanlan.zhihu.com/p/55768933
+ *    __attribute__ format(printf, 1,2)的具体含义:
+ *    这句主要作用是提示编译器，对这个函数的调用需要像printf一样，用对应的format字符串来check可变参数的数据类型。
+ *
+ *    例如:
+ *    extern int my_printf (void *my_object, const char *my_format, ...)
+ *        __attribute__ ((format (printf, 2, 3)));
+ *
+ *    format (printf, 2, 3)告诉编译器，my_format相当于printf的format，而可变参数是从my_printf的第3个参数开始。
+ *
+ *    这样编译器就会在编译时用和printf一样的check法则来确认可变参数是否正确了。
+ */
+
+void __attribute__((format(printf, 2, 3))) slog_display(slog_flag_t eFlag, const char *pFormat, ...);
+void slog_destroy(); // Required only if the slog_init() called with nTdSafe > 0
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* _JLI_UTIL_H */

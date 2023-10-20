@@ -79,6 +79,9 @@ InlineTree::InlineTree(Compile* c,
  */
 static bool is_init_with_ea(ciMethod* callee_method,
                             ciMethod* caller_method, Compile* C) {
+    // do_escape_analysis逃逸分析：
+    // EliminateAllocations: 标量替换，
+    //
   if (!C->do_escape_analysis() || !EliminateAllocations) {
     return false; // EA is off
   }

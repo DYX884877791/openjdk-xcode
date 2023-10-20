@@ -40,6 +40,7 @@
 #include "utilities/dtrace.hpp"
 #include "utilities/events.hpp"
 #include "utilities/xmlstream.hpp"
+#include "utilities/slog.hpp"
 
 #ifndef USDT2
 HS_DTRACE_PROBE_DECL3(hotspot, vmops__request, char *, uintptr_t, int);
@@ -219,7 +220,11 @@ VMOperationQueue* VMThread::_vm_queue           = NULL;
 PerfCounter*      VMThread::_perf_accumulated_vm_operation_time = NULL;
 
 
+/**
+ * 重要的两个方法,一个是new VMThread,一个是new VMOperationQueue
+ */
 void VMThread::create() {
+  slog_debug("进入hotspot/src/share/vm/runtime/vmThread.cpp中的VMThread::create函数...");
   assert(vm_thread() == NULL, "we can only allocate one VMThread");
   _vm_thread = new VMThread();
 
@@ -231,6 +236,7 @@ void VMThread::create() {
 
   if (UsePerfData) {
     // jvmstat performance counters
+      //如果开启UsePerfData
     Thread* THREAD = Thread::current();
     _perf_accumulated_vm_operation_time =
                  PerfDataManager::create_counter(SUN_THREADS, "vmOperationTime",
@@ -239,6 +245,9 @@ void VMThread::create() {
 }
 
 
+/**
+ * 关键是其继承了NamedThread类,进入其定义文件,可知其继承了Thread类,不是java线程
+ */
 VMThread::VMThread() : NamedThread() {
   set_name("VM Thread");
 }
@@ -250,38 +259,53 @@ void VMThread::destroy() {
   }
 }
 
+// 该线程启动后执行的具体逻辑
 void VMThread::run() {
+  slog_debug("进入hotspot/src/share/vm/runtime/vmThread.cpp中的VMThread::run函数，该函数是vmThread线程的具体运行逻辑...");
   assert(this == vm_thread(), "check");
 
+    //初始化当前线程的ThreadLocalStorage
   this->initialize_thread_local_storage();
+    //设置对应的原生线程的线程名
   this->initialize_named_thread();
+    //记录当前线程的栈帧的基地址和栈帧的最大深度等，并初始化原生线程
   this->record_stack_base_and_size();
   // Notify_lock wait checks on active_handles() to rewait in
   // case of spurious wakeup, it should wait on the last
   // value set prior to the notify
+    //设置active_handles，并唤醒在Notify_lock等待的线程，通知其VMThread已启动
+    //在这之后Notify_lock会被Threads::create_vm()方法销毁
+  slog_debug("设置当前vmThread对象的active_handles成员变量...");
   this->set_active_handles(JNIHandleBlock::allocate_block());
 
   {
     MutexLocker ml(Notify_lock);
+    slog_debug("即将唤醒在Notify_lock等待的线程，通知vmThread已启动...");
     Notify_lock->notify();
   }
   // Notify_lock is destroyed by Threads::create_vm()
 
+    //VMThreadPriority表示VMThread运行的优先级，默认是-1，如果是默认值则采用NearMaxPriority，优先级是9，正常的是5
   int prio = (VMThreadPriority == -1)
     ? os::java_to_os_priority[NearMaxPriority]
     : VMThreadPriority;
   // Note that I cannot call os::set_priority because it expects Java
   // priorities and I am *explicitly* using OS priorities so that it's
   // possible to set the VM thread priority higher than any Java thread.
+    //设置线程优先级
   os::set_native_priority( this, prio );
 
   // Wait for VM_Operations until termination
+    // 执行队列传输事件。
+    //不断的循环执行loop方法，该方法会不断从_vm_queue队列中获取待执行的VM Operation
   this->loop();
 
   // Note the intention to exit before safepointing.
   // 6295565  This has the effect of waiting for any large tty
   // outputs to finish.
+    //循环退出，准备线程销毁
   if (xtty != NULL) {
+      //打印日志
     ttyLocker ttyl;
     xtty->begin_elem("destroy_vm");
     xtty->stamp();
@@ -290,8 +314,10 @@ void VMThread::run() {
   }
 
   // 4526887 let VM thread exit at Safepoint
+    //VMThread退出必须在安全点上
   SafepointSynchronize::begin();
 
+    //VerifyBeforeExit表示在退出前校验系统，默认为false
   if (VerifyBeforeExit) {
     HandleMark hm(VMThread::vm_thread());
     // Among other things, this ensures that Eden top is correct.
@@ -302,10 +328,12 @@ void VMThread::run() {
     Universe::verify(!(PrintGCDetails || Verbose) || VerifySilently);
   }
 
+    //通知CompileBroker停止编译
   CompileBroker::set_should_block();
 
   // wait for threads (compiler threads or daemon threads) in the
   // _thread_in_native state to block.
+    //等待所有本地线程如编译线程退出
   VM_Exit::wait_for_threads_in_native_to_block();
 
   // signal other threads that VM process is gone
@@ -420,6 +448,7 @@ void VMThread::evaluate_operation(VM_Operation* op) {
 void VMThread::loop() {
   assert(_cur_vm_operation == NULL, "no current one should be executing");
 
+    // 死循环处理队列来的任务
   while(true) {
     VM_Operation* safepoint_ops = NULL;
     //
@@ -502,7 +531,9 @@ void VMThread::loop() {
 
         _vm_queue->set_drain_list(safepoint_ops); // ensure ops can be scanned
 
+          // 进入线程安全点，准备做事。
         SafepointSynchronize::begin();
+          // 执行任务
         evaluate_operation(_cur_vm_operation);
         // now process all queued safepoint ops, iteratively draining
         // the queue until there are none left
@@ -515,6 +546,7 @@ void VMThread::loop() {
               // to grab the next op now
               VM_Operation* next = _cur_vm_operation->next();
               _vm_queue->set_drain_list(next);
+                // 执行任务
               evaluate_operation(_cur_vm_operation);
               _cur_vm_operation = next;
               if (PrintSafepointStatistics) {

@@ -33,6 +33,7 @@
 // It is placed in the oop hierarchy for historical reasons.
 //
 // Bit-format of an object header (most significant first, big endian layout below):
+// markOop的存储结构在32位和64位系统中有所差异，但是具体存储的信息是一样的，这里介绍它在32位系统中的存储结构。在32位系统中，markOop一共占32位：
 //
 //  32 bits:
 //  --------
@@ -108,13 +109,13 @@ class markOopDesc: public oopDesc {
 
  public:
   // Constants
-  enum { age_bits                 = 4,
-         lock_bits                = 2,
-         biased_lock_bits         = 1,
-         max_hash_bits            = BitsPerWord - age_bits - lock_bits - biased_lock_bits,
-         hash_bits                = max_hash_bits > 31 ? 31 : max_hash_bits,
+  enum { age_bits                 = 4,  //分代年龄
+         lock_bits                = 2,  //锁标识
+         biased_lock_bits         = 1,  //是否是偏向锁
+         max_hash_bits            = BitsPerWord - age_bits - lock_bits - biased_lock_bits,  //最大哈希标志位
+         hash_bits                = max_hash_bits > 31 ? 31 : max_hash_bits,    //对象哈希标注位
          cms_bits                 = LP64_ONLY(1) NOT_LP64(0),
-         epoch_bits               = 2
+         epoch_bits               = 2   //偏向锁时间戳
   };
 
   // The biased locking code currently requires that the age bits be
@@ -147,11 +148,11 @@ class markOopDesc: public oopDesc {
   enum { biased_lock_alignment    = 2 << (epoch_shift + epoch_bits)
   };
 
-  enum { locked_value             = 0,
-         unlocked_value           = 1,
-         monitor_value            = 2,
-         marked_value             = 3,
-         biased_lock_pattern      = 5
+  enum { locked_value             = 0,  // 轻量级锁状态值，mark word 最后2位为00，转为10进制为0。
+         unlocked_value           = 1,  // 无锁状态值，mark word 最后3位为001，转为10进制为1。
+         monitor_value            = 2,  // 重量级锁状态值，mark word 最后2位为10，转为10进制为2。
+         marked_value             = 3,  // mark word 最后2位为11，转为10进制为3。作用比较复杂，1：当锁升级为重量级锁的过程中，会将markword设置为这个值。2：当对象GC时也要使用这个值。
+         biased_lock_pattern      = 5   // 偏向锁状态值，mark word 最后3位为101，转为10进制为5。
   };
 
   enum { no_hash                  = 0 };  // no hash value assigned
@@ -203,19 +204,24 @@ class markOopDesc: public oopDesc {
   }
 
   // lock accessors (note that these assume lock_shift == 0)
+  // 用以判断当前markword处于哪种锁状态：
+  // 轻量级锁
   bool is_locked()   const {
     return (mask_bits(value(), lock_mask_in_place) != unlocked_value);
   }
+    // 偏向锁
   bool is_unlocked() const {
     return (mask_bits(value(), biased_lock_mask_in_place) == unlocked_value);
   }
   bool is_marked()   const {
     return (mask_bits(value(), lock_mask_in_place) == marked_value);
   }
+    // 无锁
   bool is_neutral()  const { return (mask_bits(value(), biased_lock_mask_in_place) == unlocked_value); }
 
   // Special temporary state of the markOop while being inflated.
   // Code that looks at mark outside a lock need to take this into account.
+  // 膨胀时 markOop 的特殊临时状态。 在锁外查看标记的代码需要考虑到这一点。
   bool is_being_inflated() const { return (value() == 0); }
 
   // Distinguished markword value - used when inflating over
@@ -224,6 +230,7 @@ class markOopDesc: public oopDesc {
   // check for and avoid overwriting a 0 value installed by some
   // other thread.  (They should spin or block instead.  The 0 value
   // is transient and *should* be short-lived).
+  // 锁对象处于升级为重量级锁的过程中
   static markOop INFLATING() { return (markOop) 0; }    // inflate-in-progress
 
   // Should this header be preserved during GC?
@@ -298,6 +305,7 @@ class markOopDesc: public oopDesc {
   }
   // it is only used to be stored into BasicLock as the
   // indicator that the lock is using heavyweight monitor
+  // 仅用于存储到Lock Record中，用来表示锁正在使用重量级监视器（轻量级锁膨胀为重量级锁之前会这么做）
   static markOop unused_mark() {
     return (markOop) marked_value;
   }

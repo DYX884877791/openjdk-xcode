@@ -25,6 +25,7 @@
 #ifndef CPU_X86_VM_INTERPRETER_X86_HPP
 #define CPU_X86_VM_INTERPRETER_X86_HPP
 
+    // Interpreter没有添加新的属性，只添加了public static方法，如codelet_containing，local_index_at等
  public:
   static Address::ScaleFactor stackElementScale() {
     return NOT_LP64(Address::times_4) LP64_ONLY(Address::times_8);

@@ -508,8 +508,10 @@ address NativeLookup::lookup_base(methodHandle method, bool& in_base_library, TR
 
 
 address NativeLookup::lookup(methodHandle method, bool& in_base_library, TRAPS) {
+    // 调用has_native_function
   if (!method->has_native_function()) {
     address entry = lookup_base(method, in_base_library, CHECK_NULL);
+      // 调用set_native_function
     method->set_native_function(entry,
       Method::native_bind_event_is_interesting);
     // -verbose:jni printing

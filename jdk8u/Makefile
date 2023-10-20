@@ -49,10 +49,17 @@ endif
 root_dir:=$(dir $(makefile_path))
 
 # ... and then we can include our helper functions
+# 一些不依赖于make入口的全局的辅助性函数. ,这里从分析主流程的原因看.
+# 这里包含这个文件,主要有两个目的.
+# 1. 下面的call调用: ParseConfAndSpec ,主要是解析我查找 SPEC变量的值.
+# 2. 为后面的各种脚本调用提供全局的一些辅助函数. 比如异常退出.
 include $(root_dir)/make/MakeHelpers.gmk
 
 $(eval $(call ParseLogLevel))
-$(eval $(call ParseConfAndSpec))
+# ParseConfAndSpec 的核心目标是找出:spec.gmk文件. 此文件是./configure 命令从:common/autoconf/spec.gmk.in 模板填充变量后得到的.
+# 位于目录: build/macosx-x86_64-normal-server-slowdebug/spec.gmk ,里面存储了各种各位的变量与配置. 以供下面所有的makefile编译时使用.
+#在 MakeHelpers.gmk文件中定义了如下变量: ParseConfAndSpec
+$(eval $(call ParseConfAndSpec)) # 主流程会解析出SPEC变量的值.也就是SPEC文件的路径
 
 # Now determine if we have zero, one or several configurations to build.
 ifeq ($(SPEC),)
@@ -60,6 +67,8 @@ ifeq ($(SPEC),)
 else
   ifeq ($(words $(SPEC)),1)
     # We are building a single configuration. This is the normal case. Execute the Main.gmk file.
+    # 主流程会走这里 , 因为一般只会加载一个spec说明文件.
+    # /path/to/jdk8u/build/macosx-x86_64-normal-server-slowdebug/spec.gmk
     include $(root_dir)/make/Main.gmk
   else
     # We are building multiple configurations.

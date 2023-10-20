@@ -82,14 +82,17 @@ TypeArrayKlass* TypeArrayKlass::allocate(ClassLoaderData* loader_data, BasicType
 
   int size = ArrayKlass::static_size(TypeArrayKlass::header_size());
 
+    // 调用的构造函数在下面
   return new (loader_data, size, THREAD) TypeArrayKlass(type, name);
 }
 
+// 非常类似于InstanceKlass等对象的创建，首先获取需要内存的大小size，然后通过重载new运算符完成对象内存分配后，调用TypeArrayKlass初始化一些属性
 TypeArrayKlass::TypeArrayKlass(BasicType type, Symbol* name) : ArrayKlass(name) {
   set_layout_helper(array_layout_helper(type));
   assert(oop_is_array(), "sanity");
   assert(oop_is_typeArray(), "sanity");
 
+    // 设置数组的最大长度
   set_max_length(arrayOopDesc::max_array_length(type));
   assert(size() >= TypeArrayKlass::header_size(), "bad size");
 

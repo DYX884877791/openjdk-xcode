@@ -35,6 +35,10 @@
 // Instructions for which a 'better' code sequence exists depending
 // on arguments should also go in here.
 
+// MacroAssembler扩展自Assembler，主要是添加了一些常用的汇编指令支持，用来生成汇编代码即Stub的
+// MacroAssembler的实现也是跟CPU架构相关的，特定架构的实现通过同目录下的macroAssembler.hpp的宏定义引入
+// MacroAssembler在Assembler的基础上增加了一些频繁使用的宏指令，即一组特定功能的汇编代码，具体实现上MacroAssembler是对Assembler的进一步封装，
+// 提供更高级更实用的方法，如将寄存器的值加上某个值的incrementq方法的实现:incrementq
 class MacroAssembler: public Assembler {
   friend class LIR_Assembler;
   friend class Runtime1;      // as_Address()

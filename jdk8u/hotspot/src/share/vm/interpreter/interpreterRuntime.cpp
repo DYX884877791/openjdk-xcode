@@ -133,6 +133,7 @@ IRT_ENTRY(void, InterpreterRuntime::resolve_ldc(JavaThread* thread, Bytecodes::C
   ResourceMark rm(thread);
   methodHandle m (thread, method(thread));
   Bytecode_loadconstant ldc(m, bci(thread));
+    // 解析
   oop result = ldc.resolve_constant(CHECK);
 #ifdef ASSERT
   {
@@ -150,14 +151,30 @@ IRT_END
 //------------------------------------------------------------------------------------------------------------------------
 // Allocation
 
+/**
+ * Java程序通过new操作符来创建一个对象，该函数就是HotSpot中new操作符的实现函数
+ *
+ * 在Hotspot中使用二分模型Klass / oop 来表示类和对象，而类是对象的模板。比如，在main方法中 new A对象，所以需要确保类A已经被加载、解析完毕，生成好对应的Klass。
+ * 而生成好Klass类对象后，需要对类做初始化过程，也即链接类中所有的方法和调用父类以及本身的<clinit>方法（也即A类的static块）。
+ *
+ * 当类加载、解析、初始化完毕后，会调用klass->allocate_instance 方法尝试在Java堆内存中开辟对象。
+ *
+ */
 IRT_ENTRY(void, InterpreterRuntime::_new(JavaThread* thread, ConstantPool* pool, int index))
+    // 确保类已经加载并且解析
+    // 如果没有加载和解析，那么就去加载和解析类，得到最终的Klass对象
+    // 获取常量池中索引为index的Klass指针
   Klass* k_oop = pool->klass_at(index, CHECK);
   instanceKlassHandle klass (THREAD, k_oop);
 
   // Make sure we are not instantiating an abstract klass
+    // 确保不是实例化的一个抽象类
+    // 校验Klass是否是抽象类，接口或者java.lang.Class,如果是则抛出异常
   klass->check_valid_for_instantiation(true, CHECK);
 
   // Make sure klass is initialized
+    // 确保类已经完成初始化工作
+    // 检查Klass是否已经完成初始化，如果未完成则执行初始化
   klass->initialize(CHECK);
 
   // At this point the class may not be fully initialized
@@ -174,7 +191,11 @@ IRT_ENTRY(void, InterpreterRuntime::_new(JavaThread* thread, ConstantPool* pool,
   //       Java).
   //       If we have a breakpoint, then we don't rewrite
   //       because the _breakpoint bytecode would be lost.
+    // 在Java堆内存中开辟对象
+    //创建对象，对象分配的核心逻辑都在InstanceKlass::allocate_instance方法中，该方法的实现在hotspot/src/share/vm/oops/instanceKlass.cpp中
   oop obj = klass->allocate_instance(CHECK);
+    // 使用线程变量完成 值的传递
+    //将结果放到当前线程的_vm_result属性中，该属性专门用来传递解释器执行方法调用的结果
   thread->set_vm_result(obj);
 IRT_END
 
@@ -617,16 +638,34 @@ IRT_END
 //%note synchronization_3
 
 //%note monitor_1
+// 这里描述的都是在解释器下的执行逻辑，那么编译器编译后的执行逻辑呢？
+// 其中Runtime1就是C1编译器，即client编译器的运行时支持，OptoRuntime就是C2编译器即server编译器的运行时支持，SharkRuntime是OpenJDK特有的Shark编译器的运行时支持，这三个的实现逻辑基本一致
+// 分别对应
+// 1. hotspot/src/share/vm/c1/c1_Runtime1.cpp
+// 2. hotspot/src/share/vm/opto/runtime.cpp
+// 3. hotspot/src/share/vm/shark/sharkRuntime.cpp
+//
+// 其直接调用在Runtime1::generate_code_for方法中，用于生成特定方法的执行Stub...
+//
+//
+// InterpreterRuntime::monitorenter用于获取轻量级锁或者重量级锁，获取轻量级锁成功后会将目标对象的对象头改成BasicLock指针，
+// 获取重量级锁成功后会将目标对象的对象头改成ObjectMonitor指针，BasicLock和ObjectMonitor本身会保存目标对象原来的无锁状态下的对象头
+//
+// 对比lock_obj方法可知，两者获取轻量级锁或者处理锁嵌套情形时的代码是一样的，monitorenter方法增加了一步撤销偏向锁和轻量级锁膨胀成重量级锁的逻辑，
+// 这是为了兼容UseHeavyMonitors参数为true或者UseBiasedLocking为false时的处理逻辑。
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, BasicObjectLock* elem))
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
 #endif
   if (PrintBiasedLockingStatistics) {
+      //增加计数器
     Atomic::inc(BiasedLocking::slow_path_entry_count_addr());
   }
+    //获取关联的对象
   Handle h_obj(thread, elem->obj());
   assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
          "must be NULL or an object");
+    //如果使用偏向锁，走快速enter
   if (UseBiasedLocking) {
     // Retry fast entry if bias is revoked to avoid unnecessary inflation
     ObjectSynchronizer::fast_enter(h_obj, elem->lock(), true, CHECK);
@@ -642,6 +681,8 @@ IRT_END
 
 
 //%note monitor_1
+// monitorexit用于轻量级锁和重量级锁的释放，锁释放就是目标对象的对象头恢复成无锁状态
+// 对比unlock_obj方法的实现，两者轻量级锁解锁和锁嵌套情形下解锁的逻辑是一样的， monitorexit方法增加了重量级锁解锁的处理逻辑
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
@@ -649,12 +690,14 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, Bas
   Handle h_obj(thread, elem->obj());
   assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
          "must be NULL or an object");
+    //如果BasicObjectLock为空或者目标对象没有持有锁则抛出异常
   if (elem == NULL || h_obj()->is_unlocked()) {
     THROW(vmSymbols::java_lang_IllegalMonitorStateException());
   }
   ObjectSynchronizer::slow_exit(h_obj(), elem->lock(), thread);
   // Free entry. This must be done here, since a pending exception might be installed on
   // exit. If it is not cleared, the exception handling code will try to unlock the monitor again.
+    //将obj置为NULL
   elem->set_obj(NULL);
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
@@ -858,7 +901,9 @@ IRT_END
 // Miscellaneous
 
 
+// 热点代码编译实际上是通过该函数来完成的，该方法实际通过CompilationPolicy:event触发方法编译，如果是需要栈上替换的方法则event方法返回包含编译代码的nmethod实例，否则返回NULL。
 nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, address branch_bcp) {
+    //非OSR，即非栈上替换方法，永远返回null，即不会立即执行编译，而是提交任务给后台编译线程编译
   nmethod* nm = frequency_counter_overflow_inner(thread, branch_bcp);
   assert(branch_bcp != NULL || nm == NULL, "always returns null for non OSR requests");
   if (branch_bcp != NULL && nm != NULL) {
@@ -867,6 +912,7 @@ nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, addr
     // nm could have been unloaded so look it up again.  It's unsafe
     // to examine nm directly since it might have been freed and used
     // for something else.
+      //目标方法是一个需要栈上替换的方法，因为frequency_counter_overflow_inner返回的nm没有加载，所以需要再次查找
     frame fr = thread->last_frame();
     Method* method =  fr.interpreter_frame_method();
     int bci = method->bci_from(fr.interpreter_frame_bcp());
@@ -883,6 +929,7 @@ nmethod* InterpreterRuntime::frequency_counter_overflow(JavaThread* thread, addr
   return nm;
 }
 
+//branch_bcp表示调用计数超过阈值时循环跳转的地址
 IRT_ENTRY(nmethod*,
           InterpreterRuntime::frequency_counter_overflow_inner(JavaThread* thread, address branch_bcp))
   // use UnlockFlagSaver to clear and restore the _do_not_unlock_if_synchronized
@@ -890,12 +937,17 @@ IRT_ENTRY(nmethod*,
   UnlockFlagSaver fs(thread);
 
   frame fr = thread->last_frame();
+    //验证当前方法是解释执行方法
   assert(fr.is_interpreted_frame(), "must come from interpreter");
+    //获取当前解释执行的方法
   methodHandle method(thread, fr.interpreter_frame_method());
+    //branch_bcp非空则获取其相对于方法字节码起始地址code_base的偏移，否则等于InvocationEntryBci，InvocationEntryBci表明这是非栈上替换的方法编译
   const int branch_bci = branch_bcp != NULL ? method->bci_from(branch_bcp) : InvocationEntryBci;
   const int bci = branch_bcp != NULL ? method->bci_from(fr.interpreter_frame_bcp()) : InvocationEntryBci;
 
+    //校验是否发生异常
   assert(!HAS_PENDING_EXCEPTION, "Should not have any exceptions pending");
+    //如果要求栈上替换则返回该方法对应的nmethod，否则返回空，然后提交一个方法编译的任务给后台编译线程
   nmethod* osr_nm = CompilationPolicy::policy()->event(method, method, branch_bci, bci, CompLevel_none, NULL, thread);
   assert(!HAS_PENDING_EXCEPTION, "Event handler should not throw any exceptions");
 
@@ -906,6 +958,7 @@ IRT_ENTRY(nmethod*,
     // unbiasing of all monitors in the activation now (even though
     // the OSR nmethod might be invalidated) because we don't have a
     // safepoint opportunity later once the migration begins.
+      //如果使用偏向锁，则将当前栈帧持有的所有偏向锁都释放调用，因为这些偏向锁在栈上替换的时候需要迁移
     if (UseBiasedLocking) {
       ResourceMark rm;
       GrowableArray<Handle>* objects_to_revoke = new GrowableArray<Handle>();
@@ -1276,18 +1329,22 @@ address                  SignatureHandlerLibrary::_buffer       = NULL;
 
 IRT_ENTRY(void, InterpreterRuntime::prepare_native_call(JavaThread* thread, Method* method))
   methodHandle m(thread, method);
+    //校验是本地方法
   assert(m->is_native(), "sanity check");
   // lookup native function entry point if it doesn't exist
   bool in_base_library;
+    //如果尚未绑定，则完成方法绑定
   if (!m->has_native_function()) {
     NativeLookup::lookup(m, in_base_library, CHECK);
   }
   // make sure signature handler is installed
+    //安装方法签名解析代码（signature handler）
   SignatureHandlerLibrary::add(m);
   // The interpreter entry point checks the signature handler first,
   // before trying to fetch the native entry point and klass mirror.
   // We must set the signature handler last, so that multiple processors
   // preparing the same method will be sure to see non-null entry & mirror.
+    //解释器调用本地方法前会先检查signature handle是否存在，因此应该最后处理，多处理器下可以看到非null的signature handler
 IRT_END
 
 #if defined(IA32) || defined(AMD64) || defined(ARM) || defined(AARCH64)

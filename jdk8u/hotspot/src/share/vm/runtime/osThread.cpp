@@ -41,7 +41,9 @@ OSThread::~OSThread() {
 
 // Printing
 void OSThread::print_on(outputStream *st) const {
+    // 打印与之对应的 pthread 线程的 线程号
   st->print("nid=0x%lx ", thread_id());
+    // 根据当前线程的 _state 变量来输出
   switch (_state) {
     case ALLOCATED:               st->print("allocated ");                 break;
     case INITIALIZED:             st->print("initialized ");               break;

@@ -89,6 +89,22 @@ WinMain(HINSTANCE inst, HINSTANCE previnst, LPSTR cmdline, int cmdshow)
     __initenv = _environ;
 
 #else /* JAVAW */
+/*
+ * main()函数是Windows、UNIX、Linux以及Mac 操作系统中C/C++的入口函数，而Windows的入口函数和其它的不太一样。为了尽可能重用代码，这里使用#ifdef条件编译
+ *
+ * HotSpot通常会通过JAVA_HOME目录下的bin/java或bin/javaw来调用/jdk/src/share/bin/main.c文件中的main()函数来启动虚拟机
+ * main.c的main()函数负责创建运行环境，以及启动一个全新的线程去执行JVM的初始化和调用Java程序的main()方法。main()函数最终会阻塞当前线程，同时用另外一个线程去调用JavaMain()函数。
+ *
+ * main()函数的调用栈如下：
+ * main()                     main.c
+ * JLI_Launch()               java.c
+ * JVMInit()                  java_md_solinux.c
+ * ContinueInNewThread()      java.c
+ * ContinueInNewThread0()     java_md_solinux.c
+ * pthread_join()             pthread_join.c
+ *
+ * 执行main()函数的线程最终会调用pthread_join()函数，这个函数会创建一个新的线程，而当前的线程阻塞在pthread_join()函数上，直到新线程执行结束
+ */
 int
 main(int argc, char **argv)
 {
@@ -119,6 +135,11 @@ main(int argc, char **argv)
         margv[i] = NULL;
     }
 #else /* *NIXES */
+    /**
+     * main()函数的第一个参数argc是int类型，用来统计程序运行时发送给main函数的命令行参数的个数；
+     * 第二个参数argv是char**类型，可以看作字符串数组，用来存放指向字符串参数的指针数组，数组中的每一个元素指向一个参数。
+     * 这里的FULL_VERSION不是一个变量. 实际是一个宏定义，是使用autoconf工具生成Makefile脚本时传入的，具体位置在common/autoconf/spec.gmk.in文件中
+     */
     margc = argc;
     margv = argv;
 #endif /* WIN32 */

@@ -79,6 +79,17 @@ jmmOptionalSupport Management::_optional_support = {0};
 TimeStamp Management::_stamp;
 
 void management_init() {
+    /**
+     * 通常我们是默认打开java.lang.management的api的,所以这里假定是使用了INCLUDE_MANAGEMENT,那么就有四个初始化方法,分别是Management::init,ThreadService::init,RuntimeService::init和ClassLoadingService::init.
+     * 1 Management::init
+     * 该初始化方法记录了各种vm相关的时间,同时还注册了一些有关系统内在vm中用到的一些调用参数指令,比如显示vm的gc等相关信息.
+     * 2 ThreadService::init
+     * 这个主要与thread相关的信息,比如线程数量,挂起的线程等.
+     * 3 RuntimeService::init
+     * 运行时相关的一些信息,比如运行时长等.
+     * 4 ClassLoadingService::init
+     * 类加载的一些相关信息,比如类加载的数量,加载的方法的大小等.
+     */
 #if INCLUDE_MANAGEMENT
   Management::init();
   ThreadService::init();

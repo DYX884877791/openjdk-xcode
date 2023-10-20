@@ -305,11 +305,14 @@ bool enqueue_discovered_ref_helper(ReferenceProcessor* ref,
                                    AbstractRefProcTaskExecutor* task_executor) {
 
   // Remember old value of pending references list
+    // pending_list_addr是Reference的私有静态(类)成员pending链表的首元素的地址，gc阶段当引用对象的可达状态变化时，会将引用加入到pending链表中，
+    // 而Reference的私有静态(类)成员ReferenceHandler将不断地从pending链表中取出引用加入ReferenceQueue。
   T* pending_list_addr = (T*)java_lang_ref_Reference::pending_list_addr();
   T old_pending_list_value = *pending_list_addr;
 
   // Enqueue references that are not made active again, and
   // clear the decks for the next collection (cycle).
+    // enqueue_discovered_reflists()根据是否使用多线程有着不同的处理方式，若采用多线程则会创建一个RefProcEnqueueTask交由AbstractRefProcTaskExecutor进行处理
   ref->enqueue_discovered_reflists((HeapWord*)pending_list_addr, task_executor);
   // Do the post-barrier on pending_list_addr missed in
   // enqueue_discovered_reflist.
@@ -459,7 +462,9 @@ void ReferenceProcessor::enqueue_discovered_reflists(HeapWord* pending_list_addr
     task_executor->execute(tsk);
   } else {
     // Serial code: call the parent class's implementation
+      // 分析单线程的串行处理情况：
     for (uint i = 0; i < _max_num_q * number_of_subclasses_of_ref(); i++) {
+        // DiscoveredList数组_discoveredSoftRefs保存了最多_max_num_q*subclasses_of_ref个软引用的链表。在将引用链表处理后会将引用链表的起始引用置为哨兵引用，并设置引用链长度为0，表示该列表为空。
       enqueue_discovered_reflist(_discovered_refs[i], pending_list_addr);
       _discovered_refs[i].set_head(NULL);
       _discovered_refs[i].set_length(0);

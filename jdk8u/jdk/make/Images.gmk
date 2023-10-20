@@ -45,7 +45,9 @@ include Profiles.gmk
 
 # Note: This double-colon rule is intentional, to support
 # custom make file integration.
-images:: jre-image jdk-image
+# 原来的images需要jre-image，现取消掉...
+#images:: jre-image jdk-image
+images:: jdk-image
 
 overlay-images: jre-overlay-image jdk-overlay-image
 

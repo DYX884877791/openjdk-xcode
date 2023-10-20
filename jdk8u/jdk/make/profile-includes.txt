@@ -73,6 +73,7 @@ define expand-debuginfo
 endef
 
 # Common executable files
+# 公共执行文件...
 PROFILE_1_JRE_BIN_FILES := \
     java$(EXE_SUFFIX) \
     keytool$(EXE_SUFFIX)

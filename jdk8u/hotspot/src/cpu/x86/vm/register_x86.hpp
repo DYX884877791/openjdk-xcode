@@ -41,6 +41,8 @@ inline Register as_Register(int encoding) {
   return (Register)(intptr_t) encoding;
 }
 
+// RegisterImpl类用来表示通用寄存器
+// RegisterImpl的类继承自AbstractRegisterImpl类，其中AbstractRegisterImpl的定义位于同目录下的register.hpp中，
 class RegisterImpl: public AbstractRegisterImpl {
  public:
   enum {
@@ -70,6 +72,7 @@ class RegisterImpl: public AbstractRegisterImpl {
 
 // The integer registers of the ia32/amd64 architecture
 
+// 在register_x86.hpp中定义了x86下的寄存器的常量和枚举
 CONSTANT_REGISTER_DECLARATION(Register, noreg, (-1));
 
 
@@ -101,6 +104,10 @@ inline FloatRegister as_FloatRegister(int encoding) {
 }
 
 // The implementation of floating point registers for the ia32 architecture
+// 使用FloatRegisterImpl来表示浮点寄存器
+// 浮点寄存器有8个，分别是st0~st7，这是8个80位寄存器。
+//
+// 这里需要注意的是，还有一种寄存器MMX，MMX并非一种新的寄存器，而是借用了80位浮点寄存器的低64位，也就是说，使用MMX指令集，会影响浮点运算！
 class FloatRegisterImpl: public AbstractRegisterImpl {
  public:
   enum {
@@ -123,6 +130,8 @@ class FloatRegisterImpl: public AbstractRegisterImpl {
 };
 
 // Use XMMRegister as shortcut
+// MMX 为一种 SIMD 技术，即可通过一条指令执行多个数据运算，共有8个64位寄存器（借用了80位浮点寄存器的低64位），分别为mm0 – mm7，他与其他普通64位寄存器的区别在于通过它的指令进行运算，可以同时计算2个32位数据，或者4个16位数据等等，可以应用为图像处理过程中图形 颜色的计算。
+// 定义在hotspot/src/cpu/x86/vm/register_definitions_x86.cpp中
 class XMMRegisterImpl;
 typedef XMMRegisterImpl* XMMRegister;
 
@@ -139,6 +148,7 @@ inline MMXRegister as_MMXRegister(int encoding) {
 }
 
 // The implementation of XMM registers for the IA32 architecture
+// XMM寄存器是SSE指令用的寄存器。Pentium iii以及之后的CPU中提供了xmm0到xmm7共8个128位宽的XMM寄存器。另外还有个mxcsr寄存器，这个寄存器用来表示SSE指令的运算状态的寄存器。在HotSpot VM中，通过XMMRegisterImpl类来表示寄存器。
 class XMMRegisterImpl: public AbstractRegisterImpl {
  public:
   enum {
@@ -190,6 +200,30 @@ CONSTANT_REGISTER_DECLARATION(XMMRegister, xmm15,    (15));
 // were deopt might wan't to see them).
 
 // The MMX registers, for P3 and up chips
+/**
+ * 宏扩展后如下：
+ *
+ * extern const MMXRegister  mnoreg;
+ * enum { mnoreg_MMXRegisterEnumValue = ((-1)) }
+ * extern const MMXRegister  mmx0;
+ * enum { mmx0_MMXRegisterEnumValue = (( 0)) }
+ * extern const MMXRegister  mmx1;
+ * enum { mmx1_MMXRegisterEnumValue = (( 1)) }
+ * extern const MMXRegister  mmx2;
+ * enum { mmx2_MMXRegisterEnumValue = (( 2)) }
+ * extern const MMXRegister  mmx3;
+ * enum { mmx3_MMXRegisterEnumValue = (( 3)) }
+ * extern const MMXRegister  mmx4;
+ * enum { mmx4_MMXRegisterEnumValue = (( 4)) }
+ * extern const MMXRegister  mmx5;
+ * enum { mmx5_MMXRegisterEnumValue = (( 5)) }
+ * extern const MMXRegister  mmx6;
+ * enum { mmx6_MMXRegisterEnumValue = (( 6)) }
+ * extern const MMXRegister  mmx7;
+ * enum { mmx7_MMXRegisterEnumValue = (( 7)) }
+ *
+ * MMX Pentium以及Pentium II之后的CPU中有从mm0到mm7共8个64位寄存器。但实际上MMX寄存器和浮点数寄存器是共用的，即无法同时使用浮点数寄存器和MMX寄存器。
+ */
 CONSTANT_REGISTER_DECLARATION(MMXRegister, mnoreg , (-1));
 CONSTANT_REGISTER_DECLARATION(MMXRegister, mmx0 , ( 0));
 CONSTANT_REGISTER_DECLARATION(MMXRegister, mmx1 , ( 1));

@@ -77,6 +77,8 @@ static const char *_fVersion;
 static const char *_dVersion;
 static jboolean _wc_enabled = JNI_FALSE;
 static jint _ergo_policy = DEFAULT_POLICY;
+// 默认级别为NONE
+static int default_slog_level = SLOG_NONE;
 
 /*
  * Entries for splash screen environment variables.
@@ -168,7 +170,56 @@ static jlong threadStackSize    = 0;  /* stack size of the new thread */
 static jlong maxHeapSize        = 0;  /* max heap size */
 static jlong initialHeapSize    = 0;  /* inital heap size */
 
+void greet()
+{
+    /* Get and print slog version */
+    char sVersion[128];
+    slog_version(sVersion, sizeof(sVersion), 0);
+
+    printf("=========================================\n");
+    printf("SLog Version: %s\n", sVersion);
+    printf("=========================================\n");
+}
+
+static slog_flag_t ParseSlogLevel(int *pargc, char ***pargv) {
+    int argc = *pargc;
+    char **argv = *pargv;
+
+    char *arg;
+    while ((arg = *argv) != 0) {
+        argv++;
+        --argc;
+        if(JLI_StrCCmp(arg, "-Dslog.level=") == 0) { // 自己添加的日志级别...
+            // get what follows this parameter, include "="
+            size_t pnlen = JLI_StrLen("-Dslog.level=");
+            if (JLI_StrLen(arg) > pnlen) {
+                char *value = arg + pnlen;
+                return slog_parse_flag(value);
+            }
+            return SLOG_UNKNOWN;
+        }
+    }
+    return default_slog_level;
+}
+
 /*
+ * JLI_Launch作为启动器，创建了一个新线程执行JavaMain函数，JLI_Launch所在的线程称为启动线程，执行JavaMain函数的称之为Main线程。JavaMain函数的主要流程如下：
+ *
+ * 1. InitializeJVM 初始化JVM，给JavaVM和JNIEnv对象正确赋值，通过调用InvocationFunctions结构体下的CreateJavaVM方法指针实现，该指针在LoadJavaVM方法中指向libjvm动态链接库中JNI_CreateJavaVM函数。
+ * 2. LoadMainClass 获取应用程序的MainClass，即包含java程序启动入口main方法的类，
+ * 3. GetApplicationClass  JavaFX没有MainClass而是通过ApplicationClass启动的，这里获取ApplicationClass
+ * 4. PostJVMInit  将ApplicationClass作为应用名传给JavaFX本身，比如作为主菜单
+ * 5. (*env)->GetStaticMethodID  获取main方法的方法ID
+ * 6. CreateApplicationArgs  解析main方法的参数
+ * 7. (*env)->CallStaticVoidMethod  执行main方法
+ * 8. LEAVE main方法执行完毕，JVM退出，包含两步，(*vm)->DetachCurrentThread，让当前Main线程同启动线程断联，然后创建一个新的名为DestroyJavaVM的线程，让该线程等待所有的非后台进程退出，并在最后执行(*vm)->DestroyJavaVM方法。
+ *
+ * JLI_Launch()函数进行了一系列必要的操作，如libjvm.so的加载、参数解析、Classpath的获取和设置、系统属性的设置、JVM 初始化等。
+ * libjvm.so就是具体的虚拟机实现，只不过被编译为了动态链接库而已。函数会调用LoadJavaVM()加载libjvm.so并初始化相关参数
+ *
+ * 调用语句如下：LoadJavaVM(jvmpath, &ifn) 以Linux为例，jvmpath为一个动态链接库.so文件
+ * 其中jvmpath就是"/{源码项目根目录路径}/build/linux-x86_64-normal-server-slowdebug/jdk/lib/amd64/server/libjvm.so"，
+ * 也就是libjvm.so的存储路径，而ifn是InvocationFunctions类型变量
  * Entry point.
  */
 int
@@ -196,6 +247,9 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     char jrepath[MAXPATHLEN];
     char jvmcfg[MAXPATHLEN];
 
+    /*
+     * 将参数保存到全局变量，如版本号、文件名、是否定义了java参数（即JAVA_ARGS宏是否定义）等；
+     */
     _fVersion = fullversion;
     _dVersion = dotversion;
     _launcher_name = lname;
@@ -204,6 +258,19 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     _wc_enabled = cpwildcard;
     _ergo_policy = ergo;
 
+    slog_flag_t eFlag = ParseSlogLevel(&argc, &argv);
+
+    if (eFlag == SLOG_UNKNOWN) {
+        JLI_ReportMessage("sloglevel support one of following levels: \"%s\"",  slog_get_all_levels());
+        return(1);
+    }
+
+    slog_init("java", eFlag, 0);
+    slog_debug("进入jdk/src/share/bin/java.c中的JLI_Launch函数...");
+
+    /*
+     * InitLauncher函数设置调试开关，如果环境变量_JAVA_LAUNCHER_DEBUG有定义则开启Launcher的调试模式，后续调用JLI_IsTraceLauncher函数会返回真（即值1）；
+     */
     InitLauncher(javaw);
     DumpState();
     if (JLI_IsTraceLauncher()) {
@@ -216,6 +283,9 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     }
 
     /*
+     * SelectVersion函数解析-version:release、-jre-restrict-search、-no-jre-restrict-search和-splash:imgname 选项，
+     * 确保运行适当版本的JRE（注意不要将JRE的版本与JVM的数据模型搞混）。需要的JRE版本既可以从命令行选项-version:release指定，也可以在jar包的META-INF/MANIFEST.MF文件中用JRE-Version键指定；
+     *
      * Make sure the specified version of the JRE is running.
      *
      * There are three things to note about the SelectVersion() routine:
@@ -234,6 +304,11 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      */
     SelectVersion(argc, argv, &main_class);
 
+    /*
+     * 创建执行环境
+     * CreateExecutionEnvironment函数为后续创建虚拟机选择了数据模型，去除-d32、-J-d32、-d64和-J-d64选项；
+     * 以Linux为例，该方法定义在jdk/src/solaris/bin/java_md_solinux.c文件中
+     */
     CreateExecutionEnvironment(&argc, &argv,
                                jrepath, sizeof(jrepath),
                                jvmpath, sizeof(jvmpath),
@@ -250,24 +325,47 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
         start = CounterGet();
     }
 
+    /*
+     * LoadJavaVM函数从JVM动态库获取函数指针；
+     * LoadJavaVM函数从CreateExecutionEnvironment函数返回的JVM动态库中使用dlopen和dlsym库函数查找JNI_CreateJavaVM、
+     * JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针并保存到InvocationFunctions结构体中。
+     */
+    slog_debug("即将调用LoadJavaVM函数...");
     if (!LoadJavaVM(jvmpath, &ifn)) {
+        slog_destroy();
         return(6);
     }
 
-    if (JLI_IsTraceLauncher()) {
-        end   = CounterGet();
-    }
+//    if (JLI_IsTraceLauncher()) {
+//        end   = CounterGet();
+//    }
 
+    end = CounterGet();
+    slog_debug("执行LoadJavaVM结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
     JLI_TraceLauncher("%ld micro seconds to LoadJavaVM\n",
              (long)(jint)Counter2Micros(end-start));
 
+    // 下面开始解析其他命令行选项
+    // 第一行++argv跳过了可执行文件名，开始处理其他命令行选项。
     ++argv;
     --argc;
 
+    /*
+     * IsJavaArgs()函数返回JAVA_ARGS宏是否被定义，因此如果JAVA_ARGS宏有定义，那么首先处理宏里面的选项。
+     * 还是以javac命令为例，编译javac命令的部分Makefile如下：
+     *
+     *  $(eval $(call SetupLauncher,javac, \
+     *      -DEXPAND_CLASSPATH_WILDCARDS \
+     *      -DNEVER_ACT_AS_SERVER_CLASS_MACHINE \
+     *      -DJAVA_ARGS='{ "-J-ms8m"$(COMMA) "com.sun.tools.javac.Main"$(COMMA) }'))
+     *  javac命令运行时main函数的argc、argv是正常的命令行参数，即javac的选项和参数，main函数调用JLI_Launch时，margc和margv分别是argc和argv，而const_jargs就是JAVA_ARGS宏{ "-J-ms8m", "com.sun.tools.javac.Main", }
+     *
+     */
     if (IsJavaArgs()) {
         /* Preprocess wrapper arguments */
         TranslateApplicationArgs(jargc, jargv, &argc, &argv);
         if (!AddApplicationOptions(appclassc, appclassv)) {
+            slog_destroy();
             return(1);
         }
     } else {
@@ -276,6 +374,12 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
         if (cpath == NULL) {
             cpath = ".";
         }
+        /*
+         * 上面分析完了if分支，这里分析else分支。如果不是Launcher（即JAVA_ARGS宏没有定义），那么检查环境变量CLASSPATH，如果没有设置则默认CLASSPATH是当前目录。
+         * 如果环境变量CLASSPATH没有通配符那么SetClassPath函数添加新的虚拟机启动参数：-Denv.class.path=变量值；
+         * 如果有通配符那么SetClassPath函数将变量值进行通配符展开（与TranslateApplicationArgs函数中的相同），
+         * 添加新的虚拟机启动参数：-Denv.class.path=展开后的各文件/目录路径组成的以分号分隔的字符串。
+         */
         SetClassPath(cpath);
     }
 
@@ -284,23 +388,44 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
      */
     if (!ParseArguments(&argc, &argv, &mode, &what, &ret, jrepath))
     {
+        slog_destroy();
         return(ret);
     }
 
+    // -- 设置额外的虚拟机启动选项；
     /* Override class path if -jar flag was specified */
     if (mode == LM_JAR) {
         SetClassPath(what);     /* Override class path */
     }
 
-    /* set the -Dsun.java.command pseudo property */
+    // 设置伪参数
+    /*
+     * set the -Dsun.java.command pseudo property
+     * SetJavaCommandLineProp函数添加新的虚拟机启动参数：-Dsun.java.command=<第一个操作数> <传给操作数的参数列表>；
+     */
     SetJavaCommandLineProp(what, argc, argv);
 
-    /* Set the -Dsun.java.launcher pseudo property */
+    /*
+     * Set the -Dsun.java.launcher pseudo property
+     * SetJavaLauncherProp函数添加新的虚拟机启动参数：-Dsun.java.launcher=SUN_STANDARD；
+     */
     SetJavaLauncherProp();
 
-    /* set the -Dsun.java.launcher.* platform properties */
+    /*
+     * set the -Dsun.java.launcher.* platform properties
+     * SetJavaLauncherPlatformProps函数添加新的虚拟机启动参数：-Dsun.java.launcher.pid=进程标识符。
+     */
     SetJavaLauncherPlatformProps();
 
+    // 初始化JVM。
+    /**
+     * 命令行参数被解析后，虚拟机启动选项已经构造完毕，JLI_Launch函数最后调用JVMInit函数在新的线程中初始化虚拟机，在新线程做的原因详见
+     * https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6316197。
+     * JVMInit函数定义在文件jdk/src/solaris/bin/java_md_solinux.c中
+     *
+     * ifn结构体保存了先前用LoadJavaVM函数在JVM动态库中查找到的JNI_CreateJavaVM、JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针。
+     */
+    slog_debug("即将调用JVMInit函数进行JVM的初始化...");
     return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
 }
 /*
@@ -324,6 +449,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
             ret = 1; \
         } \
         if (JNI_TRUE) { \
+            slog_debug("will DestroyJavaVM..."); \
             (*vm)->DestroyJavaVM(vm); \
             return ret; \
         } \
@@ -353,11 +479,13 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 int JNICALL
 JavaMain(void * _args)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的JavaMain函数...");
     JavaMainArgs *args = (JavaMainArgs *)_args;
     int argc = args->argc;
     char **argv = args->argv;
     int mode = args->mode;
     char *what = args->what;
+    // ifn结构体保存了先前用LoadJavaVM函数在JVM动态库中查找到的JNI_CreateJavaVM、JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针。
     InvocationFunctions ifn = args->ifn;
 
     JavaVM *vm = 0;
@@ -369,12 +497,16 @@ JavaMain(void * _args)
     int ret = 0;
     jlong start = 0, end = 0;
 
+    // 可以看到macos的实现有一特殊的调用. 而在windows等其它平台均是一个空函数. macos的实现里面调用了objc_registerThreadWithCollector; 这个函数是干嘛用的呢.
     RegisterThread();
 
     /* Initialize the virtual machine */
     start = CounterGet();
+    slog_debug("即将调用InitializeJVM函数...");
+    // InitializeJVM函数进一步初始化JVM，它会调用之前初始化的 ifn 数据结构中的 CreateJavaVM 函数.
     if (!InitializeJVM(&vm, &env, &ifn)) {
         JLI_ReportErrorMessage(JVM_ERROR1);
+        slog_destroy();
         exit(1);
     }
 
@@ -400,8 +532,9 @@ JavaMain(void * _args)
 
     FreeKnownVMs();  /* after last possible PrintUsage() */
 
+    end = CounterGet();
+    slog_debug("执行InitializeJVM结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
     if (JLI_IsTraceLauncher()) {
-        end = CounterGet();
         JLI_TraceLauncher("%ld micro seconds to InitializeJVM\n",
                (long)(jint)Counter2Micros(end-start));
     }
@@ -419,6 +552,22 @@ JavaMain(void * _args)
     ret = 1;
 
     /*
+     * 加载java类中main函数所在的类。
+     * 加载Java程序的main方法，如果没找到则退出
+     *
+     * 获取应用程序的主类. 它还检查main方法是否存在
+     * 请参见 bugid 5030265。已经从 manifest 中解析了 Main-Class 名称，但是没有为UTF-8支持对其进行正确解析。
+     * 因此，此处的代码将忽略先前提取的值，并使用预先存在的代码重新提取该值。
+     * 这可能是发布周期权宜之计。
+     * 但是，还发现在环境中传递某些字符集在Windows的某些变体中具有“奇怪”的行为。
+     * 因此，也许永远都不应增强启动器本地的清单解析代码。
+     *
+     * 因此，未来的工作应：
+     *     1)   更正本地解析代码,并验证Main-Class属性是否已正确通过所有环境,
+     *     2)   删除通过环境维护 main_class 的方法（并删除这些注释）.
+     *
+     * 此方法还可以正确处理启动可能具有或不具有Main-Class清单条目的现有JavaFX应用程序.
+     *
      * Get the application's main class.
      *
      * See bugid 5030265.  The Main-Class name has already been parsed
@@ -441,9 +590,13 @@ JavaMain(void * _args)
      * This method also correctly handles launching existing JavaFX
      * applications that may or may not have a Main-Class manifest entry.
      */
+    slog_debug("即将调用LoadMainClass函数,加载MainClass[%s]...", what);
     mainClass = LoadMainClass(env, mode, what);
     CHECK_EXCEPTION_NULL_LEAVE(mainClass);
     /*
+     * 在某些情况下，当启动 需要帮助程序的 应用程序（例如，没有main方法的JavaFX应用程序）时，
+     * mainClass将不是应用程序自己的主类，而是帮助程序类。为了使UI中的内容保持一致，我们需要跟踪和报告应用程序主类。
+     *
      * In some cases when launching an application that needs a helper, e.g., a
      * JavaFX application with no main method, the mainClass will not be the
      * applications own main class but rather a helper class. To keep things
@@ -452,6 +605,10 @@ JavaMain(void * _args)
     appClass = GetApplicationClass(env);
     NULL_CHECK_RETURN_VALUE(appClass, -1);
     /*
+     * PostJVMInit 使用类名称作为用于GUI的应用程序名称
+     * 例如, 在 OSX 上, 这会在菜单栏中为SWT和JavaFX设置应用程序名称.
+     * 因此, 我们将在此处传递实际的应用程序类而不是mainClass, 因为这可能是启动器或帮助程序类, 而不是应用程序类.
+     *
      * PostJVMInit uses the class name as the application name for GUI purposes,
      * for example, on OSX this sets the application name in the menu bar for
      * both SWT and JavaFX. So we'll pass the actual application class here
@@ -461,6 +618,12 @@ JavaMain(void * _args)
     PostJVMInit(env, appClass, vm);
     CHECK_EXCEPTION_LEAVE(1);
     /*
+     * 获取main方法ID
+     * 在JavaMainClass类里找到名为"main"的方法，签名为"([Ljava/lang/String;)V"，修饰符是public的静态方法
+     *
+     * LoadMainClass不仅加载主类,还将确保主方法的签名正确,这样就不需要再进一步检查了.
+     * 这里调用main方法，以便无关的Java堆栈不在应用程序stack trace中.
+     *
      * The LoadMainClass not only loads the main class, it will also ensure
      * that the main method's signature is correct, therefore further checking
      * is not required. The main method is invoked here so that extraneous java
@@ -470,18 +633,29 @@ JavaMain(void * _args)
                                        "([Ljava/lang/String;)V");
     CHECK_EXCEPTION_NULL_LEAVE(mainID);
 
-    /* Build platform specific argument array */
+    /*
+     * Build platform specific argument array
+     * 构建平台特定的参数数组(构建main方法的参数列表)
+     */
     mainArgs = CreateApplicationArgs(env, argv, argc);
     CHECK_EXCEPTION_NULL_LEAVE(mainArgs);
 
-    /* Invoke main method. */
+    /*
+     * Invoke main method.
+     * 调用main方法.
+     * 最终位置是在hotspot/src/share/vm/prims/jni.cpp中的jni_CallStaticVoidMethod函数中
+     */
+    slog_debug("即将调用JNIEnv结构体中的CallStaticVoidMethod(位于hotspot/src/share/vm/prims/jni.cpp中jni_CallStaticVoidMethod)函数...");
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
 
     /*
+     * 如果main抛出异常，则启动程序的退出码（在没有对System.exit的调用的情况下）将为非零。
+     *
      * The launcher's exit code (in the absence of calls to
      * System.exit) will be non-zero if main threw an exception.
      */
     ret = (*env)->ExceptionOccurred(env) == NULL ? 0 : 1;
+    slog_debug("will LEAVE...");
     LEAVE();
 }
 
@@ -763,6 +937,9 @@ parse_size(const char *s, jlong *result) {
 }
 
 /*
+ * AddOption核心就是对-Xss参数进行特殊处理，并设置threadStackSize，因为参数格式比较特殊，其它是key/value键值对，它是-Xss512的格式。
+ * 后续Arguments类会对JavaVMOption数据进行再次处理，并验证参数的合理性。
+ *
  * Adds a new VM option with the given given name and value.
  */
 void
@@ -837,6 +1014,8 @@ SetClassPath(const char *s)
 }
 
 /*
+ * 从jar包中manifest文件或者命令行读取用户使用的JDK版本，判断当前版本是否合适
+ *
  * The SelectVersion() routine ensures that an appropriate version of
  * the JRE is running.  The specification for the appropriate version
  * is obtained from either the manifest of a jar file (preferred) or
@@ -1078,6 +1257,23 @@ SelectVersion(int argc, char **argv, char **main_class)
 }
 
 /*
+ * ParseArguments函数解析新的命令行参数列表，如果不符合要求则报错，否则调用AddOption函数添加到虚拟机的启动选项中
+ * 装载完JVM环境之后，需要对启动参数进行解析，其实在装载JVM环境的过程中已经解析了部分参数，该过程通过ParseArguments方法实现，并调用AddOption方法将解析完成的参数保存到JavaVMOption中
+ *
+ * 1. 对一些参数做了校验，比如-classpath、-cp和-jar选项后面还需要有参数；
+ * 2. AddOption函数将选项添加到虚拟机的启动选项中，如-D指定的属性、-X系列参数和-XX系列参数。它特殊处理了-Xss、-Xmx和-Xms这三个选项，不会把它们加到启动选项中，
+ * 而是会将后面的值分别保存到全局变量threadStackSize、maxHeapSize和initialHeapSize供后续启动虚拟机使用；
+ * 3. 将一些参数转换成新的形式后再调用AddOption函数，比如-ms、-mx选项会分别被转换成-Xms和-Xmx，而-noverify会被转换成-Xverify:none；
+ * 4. pwhat指向了命令选项之后的第一个操作数（比如java命令的主类或者-jar选项后跟的jar包），如果没有是不会报错的；
+ * 5. pmode表示启动模式，LM_CLASS或LM_JAR；
+ * 6. 由于参数pargc和pargv都是指针，因此返回到JLI_Launch函数后argv就只剩操作数后面传递给操作数（或者叫做应用）的参数了。
+ *
+ *
+ * 注意：ParseArguments函数的重点在while循环，循环条件决定了只处理以连字符开头的选项，如果命令形如java -jar xxx.jar -version -Xmx64m，那么遇到xxx.jar时就会跳出循环，
+ * 导致后面的两个选项不会被处理而被当成运行jar时传给jar的命令行参数。因此使用相关命令时各个选项的顺序很重要。
+ * 另外需要注意JAVA_ARGS宏的影响，以javac为例，对javac -g Test.java来说，第一个操作数就是com.sun.tools.javac.Main（还是得注意while循环的退出条件），
+ * 在函数返回后argv是-g Test.java，在这点上JDK工具与一般的情况不同。
+ *
  * Parses command line arguments.  Returns JNI_FALSE if launcher
  * should exit without starting vm, returns JNI_TRUE if vm needs
  * to be started to process given options.  *pret (the launcher
@@ -1112,12 +1308,12 @@ ParseArguments(int *pargc, char ***pargv,
             return JNI_TRUE;
         } else if (JLI_StrCmp(arg, "-version") == 0) {
             printVersion = JNI_TRUE;
-            return JNI_TRUE;
+//            return JNI_TRUE;
         } else if (JLI_StrCmp(arg, "-showversion") == 0) {
             showVersion = JNI_TRUE;
         } else if (JLI_StrCmp(arg, "-X") == 0) {
             printXUsage = JNI_TRUE;
-            return JNI_TRUE;
+//            return JNI_TRUE;
 /*
  * The following case checks for -XshowSettings OR -XshowSetting:SUBOPT.
  * In the latter case, any SUBOPT value not recognized will default to "all"
@@ -1216,6 +1412,8 @@ ParseArguments(int *pargc, char ***pargv,
 static jboolean
 InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的InitializeJVM函数...");
+    // args结构体表示JVM启动选项，全局变量options指向先前TranslateApplicationArgs函数和ParseArguments函数添加或解析的JVM启动选项，另一个全局变量numOptions则保存了选项个数；
     JavaVMInitArgs args;
     jint r;
 
@@ -1237,6 +1435,8 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
                    i, args.options[i].optionString);
     }
 
+    slog_debug("即将调用定义在文件hotspot/src/share/vm/prims/jni.cpp中的JNI_CreateJavaVM函数...");
+    //ifn结构体的CreateJavaVM函数指针即指向JVM动态库中的JNI_CreateJavaVM函数。JNI_CreateJavaVM函数定义在文件hotspot/src/share/vm/prims/jni.cpp中
     r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
     JLI_MemFree(options);
     return r == JNI_OK;
@@ -1247,6 +1447,7 @@ static jclass helperClass = NULL;
 jclass
 GetLauncherHelperClass(JNIEnv *env)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的GetLauncherHelperClass函数...");
     if (helperClass == NULL) {
         NULL_CHECK0(helperClass = FindBootStrapClass(env,
                 "sun/launcher/LauncherHelper"));
@@ -1317,6 +1518,7 @@ NewPlatformStringArray(JNIEnv *env, char **strv, int strc)
 static jclass
 LoadMainClass(JNIEnv *env, int mode, char *name)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的LoadMainClass函数...");
     jmethodID mid;
     jstring str;
     jobject result;
@@ -1334,6 +1536,7 @@ LoadMainClass(JNIEnv *env, int mode, char *name)
     CHECK_JNI_RETURN_0(
         result = (*env)->CallStaticObjectMethod(
             env, cls, mid, USE_STDERR, mode, str));
+    slog_debug("执行LoadMainClass结束,耗费的微秒数为%ld...", (long)(jint)Counter2Micros(end-start));
 
     if (JLI_IsTraceLauncher()) {
         end = CounterGet();
@@ -1360,6 +1563,15 @@ GetApplicationClass(JNIEnv *env)
 }
 
 /*
+ * 将命令行参数和JAVA_ARGS合并成新的命令行参数
+ *
+ * 构造一个新的命令行参数列表：
+ * 首先处理JAVA_ARGS中以-J开头的选项，去掉-J并添加到新的参数列表中；
+ * 然后处理原命令行参数中以-J开头的选项，去掉-J并添加到新的参数列表中；
+ * 接着处理JAVA_ARGS中其他不以-J开头的选项，添加到新的参数列表中；
+ * 最后添加原命令行参数中其他不以-J开头的选项，其中对-cp或-classpath后跟的路径做了特殊处理：如果路径含有通配符，那么该路径会被展开一层（非递归），用展开后的各文件/目录路径组成以分号分隔的新字符串替换原路径参数。
+ * 注意参数pargc和pargv都是指针，所以该函数返回后JLI_Launch函数里的argc和argv分别是新的参数个数和列表了，并且第一个参数已经不再是可执行文件名。
+ *
  * For tools, convert command line args thus:
  *   javac -cp foo:foo/"*" -J-ms32m ...
  *   java -ms32m -cp JLI_WildcardExpandClasspath(foo:foo/"*") ...
@@ -1425,6 +1637,13 @@ TranslateApplicationArgs(int jargc, const char **jargv, int *pargc, char ***parg
 }
 
 /*
+ * AddApplicationOptions函数为JVM启动添加了应用选项：
+ * 如果CLASSPATH环境变量被设置，如果没有通配符则添加新的虚拟机启动选项：-Denv.class.path=变量值；如果有通配符则将变量值进行通配符展开（与TranslateApplicationArgs函数中的相同），
+ * 添加新的虚拟机启动选项：-Denv.class.path=展开后的各文件/目录路径组成的以分号分隔的字符串；
+ * 添加新的虚拟机启动选项：-Dapplication.home=可执行文件的应用目录（见GetApplicationHome函数）；
+ * 添加新的虚拟机启动选项：-Djava.class.path=可执行文件的应用目录内的某些子目录/文件路径组成以分号分隔的字符串， 具体哪些子目录/文件的路径需要被添加由APP_CLASSPATH宏定义。
+ *
+ *
  * For our tools, we try to add 3 VM options:
  *      -Denv.class.path=<envcp>
  *      -Dapplication.home=<apphome>
@@ -1486,6 +1705,8 @@ AddApplicationOptions(int cpathc, const char **cpathv)
 }
 
 /*
+ * 解析形如-Dsun.java.command=的命令行参数
+ *
  * inject the -Dsun.java.command pseudo property into the args structure
  * this pseudo property is used in the HotSpot VM to expose the
  * Java class name and arguments to the main method to the VM. The
@@ -1541,6 +1762,8 @@ SetJavaCommandLineProp(char *what, int argc, char **argv)
 }
 
 /*
+ * 解析形如-Dsun.java.launcher.*的命令行参数
+ *
  * JVM would like to know if it's created by a standard Sun launcher, or by
  * user native application, the following property indicates the former.
  */
@@ -1670,6 +1893,8 @@ PrintUsage(JNIEnv* env, jboolean doXUsage)
 }
 
 /*
+ * ReadKnownVms()读取JRE路径\lib\ARCH(CPU构架)\JVM.cfg文件，其中ARCH(CPU构架)通过GetArch方法获取，在window下有三种情况：amd64、ia64和i386；
+ *
  * Read the jvm.cfg file and fill the knownJVMs[] array.
  *
  * The functionality of the jvm.cfg file is subject to change without
@@ -1999,13 +2224,26 @@ IsWildCardEnabled()
     return _wc_enabled;
 }
 
+/*
+ * ContinueInNewThread函数的参数分别是：
+ * ifn保存了JVM动态库的函数指针；
+ * argc和argv分别是传递给第一个操作数的参数个数和参数列表；
+ * mode是启动模式，从类启动还是从jar启动；
+ * what是第一个操作数。
+ */
 int
 ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
                     int argc, char **argv,
                     int mode, char *what, int ret)
 {
+    slog_debug("进入jdk/src/share/bin/java.c中的ContinueInNewThread函数...");
 
     /*
+     * 设置线程栈大小
+     *
+     * 如果启动参数未设置-Xss，即threadStackSize为0，则调用InvocationFunctions的GetDefaultJavaVMInitArgs方法获取JavaVM的初始化参数，
+     * 即调用(如Windows平台中的JVM.dll)函数JNI_GetDefaultJavaVMInitArgs，定义在share\vm\prims\jni.cpp
+     *
      * If user doesn't specify stack size, check if VM has a preference.
      * Note that HotSpot no longer supports JNI_VERSION_1_1 but it will
      * return its default stack size through the init args structure.
@@ -2030,11 +2268,15 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
       args.what = what;
       args.ifn = *ifn;
 
+      /*
+       * 在新线程继续运行JavaMain函数的代码
+       */
       rslt = ContinueInNewThread0(JavaMain, threadStackSize, (void*)&args);
       /* If the caller has deemed there is an error we
        * simply return that, otherwise we return the value of
        * the callee
        */
+      slog_destroy();
       return (ret != 0) ? ret : rslt;
     }
 }

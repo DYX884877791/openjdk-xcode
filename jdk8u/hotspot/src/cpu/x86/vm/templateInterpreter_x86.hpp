@@ -26,6 +26,7 @@
 #define CPU_X86_VM_TEMPLATEINTERPRETER_X86_HPP
 
 
+    // templateInterpreter_x86.hpp也比较简单，主要添加了InterpreterCodeSize常量的定义
   protected:
 
   // Size of interpreter code.  Increase if too small.  Interpreter will

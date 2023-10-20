@@ -362,6 +362,7 @@ instanceOop InstanceMirrorKlass::allocate_instance(KlassHandle k, TRAPS) {
   // Query before forming handle.
   int size = instance_size(k);
   KlassHandle h_k(THREAD, this);
+    // 在堆中申请内存创建Class实例，这里也证明了class实例是在堆中的。同时为静态属性赋默认值
   instanceOop i = (instanceOop)CollectedHeap::obj_allocate(h_k, size, CHECK_NULL);
 
   // Since mirrors can be variable sized because of the static fields, store

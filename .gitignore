@@ -22,9 +22,5 @@ jdk8u/config.log
 jdk8u/configure.log
 jdk8u/build.log
 jdk8u/compile_commands.json
-!jdk8u/corba/**/build/
-!jdk8u/jdk/**/build/
-!jdk8u/hotspot/**/build/
-!jdk8u/jaxp/**/build/
-!jdk8u/jaxws/**/build/
-!jdk8u/langtools/**/build/
+!jdk8u/**/build/
+!jdk8u/**/tools/
