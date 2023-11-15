@@ -407,6 +407,9 @@ bool CardTableExtension::addr_is_marked_precise(void *addr) {
 // The method resize_covered_region_by_end() is analogous to
 // CardTableModRefBS::resize_covered_region() but
 // for regions that grow or shrink at the low end.
+// resize_covered_region方法用于调整MemRegion对应的_covered和_committed元素，当前实现下_committed元素会随着MemRegion扩容而扩容，
+// 因为安全问题不会随着MemRegion缩容而缩容，_covered元素无论扩容和缩容都跟原MemRegion保持一致。该方法假定MemRegion要么是新增的，
+// 要么就是起始地址不变，终止地址改变，要么就是终止地址不变，起始地址改变这三种情形，父类的实现只支持新增和起始地址不变两种，子类新增了终止地址不变的支持。
 void CardTableExtension::resize_covered_region(MemRegion new_region) {
 
   for (int i = 0; i < _cur_covered_regions; i++) {
@@ -414,6 +417,7 @@ void CardTableExtension::resize_covered_region(MemRegion new_region) {
       // Found a covered region with the same start as the
       // new region.  The region is growing or shrinking
       // from the start of the region.
+        //找到一个基地址相同的_covered元素，说明new_region是终止地址发生改变了，调用父类实现即可
       resize_covered_region_by_start(new_region);
       return;
     }
@@ -421,14 +425,17 @@ void CardTableExtension::resize_covered_region(MemRegion new_region) {
       break;
     }
   }
+    //没有找到一个基地址相同的_covered元素
 
   int changed_region = -1;
   for (int j = 0; j < _cur_covered_regions; j++) {
     if (_covered[j].end() == new_region.end()) {
+        //找到一个终止地址相同的_covered元素，即基地址在变化
       changed_region = j;
       // This is a case where the covered region is growing or shrinking
       // at the start of the region.
       assert(changed_region != -1, "Don't expect to add a covered region");
+        //校验两者的大小不一致
       assert(_covered[changed_region].byte_size() != new_region.byte_size(),
         "The sizes should be different here");
       resize_covered_region_by_end(changed_region, new_region);
@@ -437,11 +444,14 @@ void CardTableExtension::resize_covered_region(MemRegion new_region) {
   }
   // This should only be a new covered region (where no existing
   // covered region matches at the start or the end).
+    // 没有一个基地址或者终止地址相同的_covered元素，说明new_region是一个全新的，
+    //需要添加一个新的_covered元素，调用父类实现即可
   assert(_cur_covered_regions < _max_covered_regions,
     "An existing region should have been found");
   resize_covered_region_by_start(new_region);
 }
 
+//基地址不变，终止地址变了，通过父类的resize_covered_region修改
 void CardTableExtension::resize_covered_region_by_start(MemRegion new_region) {
   CardTableModRefBS::resize_covered_region(new_region);
   debug_only(verify_guard();)
@@ -449,6 +459,7 @@ void CardTableExtension::resize_covered_region_by_start(MemRegion new_region) {
 
 void CardTableExtension::resize_covered_region_by_end(int changed_region,
                                                       MemRegion new_region) {
+    //当前在安全点上，只有在GC的时候才能扩展
   assert(SafepointSynchronize::is_at_safepoint(),
     "Only expect an expansion at the low end at a GC");
   debug_only(verify_guard();)
@@ -462,17 +473,22 @@ void CardTableExtension::resize_covered_region_by_end(int changed_region,
 #endif
 
   // Commit new or uncommit old pages, if necessary.
+    //执行扩容或者缩容，返回true表示扩容
   if (resize_commit_uncommit(changed_region, new_region)) {
     // Set the new start of the committed region
+      //如果执行了扩容则更新对应commited元素
     resize_update_committed_table(changed_region, new_region);
   }
 
   // Update card table entries
+    //如果扩容了，将扩容内存对应的卡表项置为clean_card
   resize_update_card_table_entries(changed_region, new_region);
 
   // Update the covered region
+    //更新covered元素，重新排序
   resize_update_covered_table(changed_region, new_region);
 
+    //打印日志
   if (TraceCardTableModRefBS) {
     int ind = changed_region;
     gclog_or_tty->print_cr("CardTableModRefBS::resize_covered_region: ");
@@ -500,6 +516,8 @@ void CardTableExtension::resize_covered_region_by_end(int changed_region,
   debug_only(verify_guard();)
 }
 
+//判断是否缩容或者扩容，如果扩容则返回true，扩容只完成了内存commit而已，并未更新对应的covered和commited元素
+//当前实现缩容不安全，没有实际缩容
 bool CardTableExtension::resize_commit_uncommit(int changed_region,
                                                 MemRegion new_region) {
   bool result = false;
@@ -510,11 +528,13 @@ bool CardTableExtension::resize_commit_uncommit(int changed_region,
   // Extend the start of this _committed region to
   // to cover the start of any previous _committed region.
   // This forms overlapping regions, but never interior regions.
+    //如果changed_region之前的commit元素与该元素的内存区域有重叠则返回之前的commit元素的起始地址
   HeapWord* min_prev_start = lowest_prev_committed_start(changed_region);
   if (min_prev_start < cur_committed.start()) {
     // Only really need to set start of "cur_committed" to
     // the new start (min_prev_start) but assertion checking code
     // below use cur_committed.end() so make it correct.
+      //说明存在两个_committed元素的内存区域有重叠的情形，需要将这些重叠的合并
     MemRegion new_committed =
         MemRegion(min_prev_start, cur_committed.end());
     cur_committed = new_committed;
@@ -527,8 +547,10 @@ bool CardTableExtension::resize_commit_uncommit(int changed_region,
     "Starts should have proper alignment");
 #endif
 
+    //获取new_region起始地址对应的卡表项地址，并做内存对齐
   jbyte* new_start = byte_for(new_region.start());
   // Round down because this is for the start address
+    //获取终止地址，不能超过_guard_region
   HeapWord* new_start_aligned =
     (HeapWord*)align_size_down((uintptr_t)new_start, os::vm_page_size());
   // The guard page is always committed and should not be committed over.
@@ -561,9 +583,11 @@ bool CardTableExtension::resize_commit_uncommit(int changed_region,
     //                        |+ cur committed +++++++++++|
     //                  |+ new committed +++++++|
 
+      //获取终止地址，不能超过_guard_region
     HeapWord* new_end_for_commit =
       MIN2(cur_committed.end(), _guard_region.start());
     if(new_start_aligned < new_end_for_commit) {
+        //执行commit扩展内存
       MemRegion new_committed =
         MemRegion(new_start_aligned, new_end_for_commit);
       os::commit_memory_or_exit((char*)new_committed.start(),
@@ -589,6 +613,7 @@ bool CardTableExtension::resize_commit_uncommit(int changed_region,
       }
     }
 #else
+      // 需要执行uncommit缩容，因为上面执行了cur_committed的合并，所以缩容的区域有可能属于另外一个MemRegion，不安全
     assert(!result, "Should be false with current workaround");
 #endif
   }
@@ -597,6 +622,7 @@ bool CardTableExtension::resize_commit_uncommit(int changed_region,
   return result;
 }
 
+//根据new_region的起始地址修改changed_region对应的_committed元素
 void CardTableExtension::resize_update_committed_table(int changed_region,
                                                        MemRegion new_region) {
 
@@ -617,6 +643,7 @@ void CardTableExtension::resize_update_card_table_entries(int changed_region,
   MemRegion original_covered = _covered[changed_region];
   // Initialize the card entries.  Only consider the
   // region covered by the card table (_whole_heap)
+    //new_region的基地址不能超过堆内存的基地址
   jbyte* entry;
   if (new_region.start() < _whole_heap.start()) {
     entry = byte_for(_whole_heap.start());
@@ -626,17 +653,20 @@ void CardTableExtension::resize_update_card_table_entries(int changed_region,
   jbyte* end = byte_for(original_covered.start());
   // If _whole_heap starts at the original covered regions start,
   // this loop will not execute.
+    //如果扩容了则entry会小于end，将扩容内存对应卡表项置为clean_card
   while (entry < end) { *entry++ = clean_card; }
 }
 
 void CardTableExtension::resize_update_covered_table(int changed_region,
                                                      MemRegion new_region) {
   // Update the covered region
+    //更新_covered元素
   _covered[changed_region].set_start(new_region.start());
   _covered[changed_region].set_word_size(new_region.word_size());
 
   // reorder regions.  There should only be at most 1 out
   // of order.
+    // 将所有_covered元素按照起始地址升序的方式排序
   for (int i = _cur_covered_regions-1 ; i > 0; i--) {
     if (_covered[i].start() < _covered[i-1].start()) {
         MemRegion covered_mr = _covered[i-1];
@@ -689,6 +719,7 @@ HeapWord* CardTableExtension::lowest_prev_committed_start(int ind) const {
   HeapWord* min_start = _committed[ind].start();
   for (int j = 0; j < ind; j++) {
     HeapWord* this_start = _committed[j].start();
+      //如果两个有交集
     if ((this_start < min_start) &&
         !(_committed[j].intersection(_committed[ind])).is_empty()) {
        min_start = this_start;

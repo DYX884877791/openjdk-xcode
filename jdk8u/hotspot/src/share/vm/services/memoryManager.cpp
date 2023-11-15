@@ -100,33 +100,44 @@ GCMemoryManager* MemoryManager::get_g1OldGen_memory_manager() {
   return (GCMemoryManager*) new G1OldGenMemoryManager();
 }
 
+// get_memory_manager_instance的用法同MemoryPool的get_memory_pool_instance方法，返回一个属性_memory_mgr_obj，如果为空则创建一个与之关联的Java对象，
+// 对应的Java类是java.lang.management.MemoryManagerMXBean或者java.lang.management.GarbageCollectorMXBean
 instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
   // Must do an acquire so as to force ordering of subsequent
   // loads from anything _memory_mgr_obj points to or implies.
+    //获取属性_memory_mgr_obj的最新值
   instanceOop mgr_obj = (instanceOop)OrderAccess::load_ptr_acquire(&_memory_mgr_obj);
   if (mgr_obj == NULL) {
     // It's ok for more than one thread to execute the code up to the locked region.
     // Extra manager instances will just be gc'ed.
+      // 获取Java类sun_management_ManagementFactory
     Klass* k = Management::sun_management_ManagementFactory_klass(CHECK_0);
     instanceKlassHandle ik(THREAD, k);
 
+      //创建当前MemoryManager的名字对应的String
     Handle mgr_name = java_lang_String::create_from_str(name(), CHECK_0);
 
     JavaValue result(T_OBJECT);
     JavaCallArguments args;
+      //只有一个参数，MemoryManager的名字
     args.push_oop(mgr_name);    // Argument 1
 
     Symbol* method_name = NULL;
     Symbol* signature = NULL;
+      //如果是gc_memory_manager，GCMemoryManager及其子类返回true，其他的返回false
     if (is_gc_memory_manager()) {
+        //createGarbageCollector方法的方法名和方法签名
       method_name = vmSymbols::createGarbageCollector_name();
       signature = vmSymbols::createGarbageCollector_signature();
+        //放一个空对象
       args.push_oop(Handle());      // Argument 2 (for future extension)
     } else {
+        //createMemoryManager方法的方法名和签名
       method_name = vmSymbols::createMemoryManager_name();
       signature = vmSymbols::createMemoryManager_signature();
     }
 
+      //调用Java方法
     JavaCalls::call_static(&result,
                            ik,
                            method_name,
@@ -134,6 +145,7 @@ instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
                            &args,
                            CHECK_0);
 
+      //获取调用结果
     instanceOop m = (instanceOop) result.get_jobject();
     instanceHandle mgr(THREAD, m);
 
@@ -148,12 +160,14 @@ instanceOop MemoryManager::get_memory_manager_instance(TRAPS) {
       //
       // The lock has done an acquire, so the load can't float above it, but
       // we need to do a load_acquire as above.
+        //如果其他线程已经完成初始化
       mgr_obj = (instanceOop)OrderAccess::load_ptr_acquire(&_memory_mgr_obj);
       if (mgr_obj != NULL) {
          return mgr_obj;
       }
 
       // Get the address of the object we created via call_special.
+        //更新属性值
       mgr_obj = mgr();
 
       // Use store barrier to make sure the memory accesses associated
@@ -236,23 +250,29 @@ void GCMemoryManager::initialize_gc_stat_info() {
   // hold the publicly available "last (completed) gc" information.
 }
 
+// gc_begin方法用于在GC开始前记录MemoryPool的使用情况
 void GCMemoryManager::gc_begin(bool recordGCBeginTime, bool recordPreGCUsage,
                                bool recordAccumulatedGCTime) {
   assert(_last_gc_stat != NULL && _current_gc_stat != NULL, "Just checking");
+    //如果统计累计GC时间
   if (recordAccumulatedGCTime) {
     _accumulated_timer.start();
   }
   // _num_collections now increases in gc_end, to count completed collections
+    //如果记录GC开始时间
   if (recordGCBeginTime) {
     _current_gc_stat->set_index(_num_collections+1);
     _current_gc_stat->set_start_time(Management::timestamp());
   }
 
+    //如果在GC前记录内存使用情况
   if (recordPreGCUsage) {
     // Keep memory usage of all memory pools
+      //遍历所有的MemoryPool
     for (int i = 0; i < MemoryService::num_memory_pools(); i++) {
       MemoryPool* pool = MemoryService::get_memory_pool(i);
       MemoryUsage usage = pool->get_memory_usage();
+        //GC前的MemoryUsage
       _current_gc_stat->set_before_gc_usage(i, usage);
 #ifndef USDT2
       HS_DTRACE_PROBE8(hotspot, mem__pool__gc__begin,
@@ -261,6 +281,7 @@ void GCMemoryManager::gc_begin(bool recordGCBeginTime, bool recordPreGCUsage,
         usage.init_size(), usage.used(),
         usage.committed(), usage.max_size());
 #else /* USDT2 */
+        //打印日志
       HOTSPOT_MEM_POOL_GC_BEGIN(
         (char *) name(), strlen(name()),
         (char *) pool->name(), strlen(pool->name()),
@@ -274,14 +295,17 @@ void GCMemoryManager::gc_begin(bool recordGCBeginTime, bool recordPreGCUsage,
 // A collector MUST, even if it does not complete for some reason,
 // make a TraceMemoryManagerStats object where countCollection is true,
 // to ensure the current gc stat is placed in _last_gc_stat.
+// gc_end用于在GC结束后记录MemoryPool的使用情况，垃圾回收器因为某些原因终止了也要调用此方法
 void GCMemoryManager::gc_end(bool recordPostGCUsage,
                              bool recordAccumulatedGCTime,
                              bool recordGCEndTime, bool countCollection,
                              GCCause::Cause cause,
                              bool allMemoryPoolsAffected) {
+    //记录GC累计时间
   if (recordAccumulatedGCTime) {
     _accumulated_timer.stop();
   }
+    //记录GC结束时间
   if (recordGCEndTime) {
     _current_gc_stat->set_end_time(Management::timestamp());
   }
@@ -289,6 +313,7 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
   if (recordPostGCUsage) {
     int i;
     // keep the last gc statistics for all memory pools
+      //遍历所有MemoryPool
     for (i = 0; i < MemoryService::num_memory_pools(); i++) {
       MemoryPool* pool = MemoryService::get_memory_pool(i);
       MemoryUsage usage = pool->get_memory_usage();
@@ -300,6 +325,7 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
         usage.init_size(), usage.used(),
         usage.committed(), usage.max_size());
 #else /* USDT2 */
+        //打印日志
       HOTSPOT_MEM_POOL_GC_END(
         (char *) name(), strlen(name()),
         (char *) pool->name(), strlen(pool->name()),
@@ -307,10 +333,12 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
         usage.committed(), usage.max_size());
 #endif /* USDT2 */
 
+        //记录GC后的内存使用
       _current_gc_stat->set_after_gc_usage(i, usage);
     }
 
     // Set last collection usage of the memory pools managed by this collector
+      //遍历所有MemoryPool
     for (i = 0; i < num_memory_pools(); i++) {
       MemoryPool* pool = get_memory_pool(i);
       MemoryUsage usage = pool->get_memory_usage();
@@ -318,7 +346,9 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
       // Compare with GC usage threshold
       if (allMemoryPoolsAffected || pool_always_affected_by_gc(i)) {
         // Compare with GC usage threshold
+          //更新GC后的内存使用情况
         pool->set_last_collection_usage(usage);
+          //判断是否超过阈值，增加SensorInfo中的计数器
         LowMemoryDetector::detect_after_gc_memory(pool);
       }
     }
@@ -327,6 +357,7 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
   if (countCollection) {
     _num_collections++;
     // alternately update two objects making one public when complete
+      //重置_last_gc_stat和_current_gc_stat
     {
       MutexLockerEx ml(_last_gc_lock, Mutex::_no_safepoint_check_flag);
       GCStatInfo *tmp = _last_gc_stat;
@@ -338,6 +369,8 @@ void GCMemoryManager::gc_end(bool recordPostGCUsage,
 
     if (is_notification_enabled()) {
       bool isMajorGC = this == MemoryService::get_major_gc_manager();
+        //添加一个待发送的通知消息，该消息最终通过GCNotifier::sendNotificationInternal方法发送出去，
+        //该方法最终调用sun_management_GarbageCollectorImpl类的createGCNotification方法
       GCNotifier::pushNotification(this, isMajorGC ? "end of major GC" : "end of minor GC",
                                    GCCause::to_string(cause));
     }

@@ -254,8 +254,14 @@ void MutableSpace::object_iterate(ObjectClosure* cl) {
 
 void MutableSpace::print_short() const { print_short_on(tty); }
 void MutableSpace::print_short_on( outputStream* st) const {
-  st->print(" space " SIZE_FORMAT "K, %d%% used", capacity_in_bytes() / K,
-            (int) ((double) used_in_bytes() * 100 / capacity_in_bytes()));
+  if (Verbose) {
+    st->print(" space " SIZE_FORMAT ", %d%% used", capacity_in_bytes(),
+              (int) ((double) used_in_bytes() * 100 / capacity_in_bytes()));
+  } else {
+    st->print(" space " SIZE_FORMAT "K, %d%% used", capacity_in_bytes() / K,
+              (int) ((double) used_in_bytes() * 100 / capacity_in_bytes()));
+  }
+
 }
 
 void MutableSpace::print() const { print_on(tty); }

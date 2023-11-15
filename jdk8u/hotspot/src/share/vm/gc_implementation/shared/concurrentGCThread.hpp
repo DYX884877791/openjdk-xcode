@@ -29,13 +29,17 @@
 #include "gc_implementation/shared/suspendibleThreadSet.hpp"
 #include "runtime/thread.hpp"
 
+//  ConcurrentGCThread表示一个并行GC的线程，其定义在hotspot\src\share\vm\gc_implementation\shared\concurrentGCThread.hpp中
 class ConcurrentGCThread: public NamedThread {
   friend class VMStructs;
 
 protected:
+    //是否应该终止
   bool _should_terminate;
+    //是否已经终止
   bool _has_terminated;
 
+    // _CGC_flag的取值有一个专门的枚举， 初始值为CGC_nil
   enum CGC_flag_type {
     CGC_nil           = 0x0,
     CGC_dont_suspend  = 0x1,
@@ -43,6 +47,7 @@ protected:
     CGC_VM_safepoint  = 0x4
   };
 
+    //GC的标志
   static int _CGC_flag;
 
   static bool CGC_flag_is_set(int b)       { return (_CGC_flag & b) != 0; }
@@ -76,9 +81,11 @@ public:
 // The SurrogateLockerThread is used by concurrent GC threads for
 // manipulating Java monitors, in particular, currently for
 // manipulating the pending_list_lock. XXX
+// SurrogateLockerThread表示一个用来操作Java Monitor锁的线程，其定义也在concurrentGCThread.hpp中
 class SurrogateLockerThread: public JavaThread {
   friend class VMStructs;
  public:
+    // SLT_msg_type是一个枚举
   enum SLT_msg_type {
     empty = 0,           // no message
     acquirePLL,          // acquire pending list lock
@@ -86,8 +93,11 @@ class SurrogateLockerThread: public JavaThread {
   };
  private:
   // the following are shared with the CMSThread
+    // 执行的动作类型
   SLT_msg_type  _buffer;  // communication buffer
+    // 负责同步的锁
   Monitor       _monitor; // monitor controlling buffer
+    // 实际未使用
   BasicLock     _basicLock; // used for PLL locking
 
  public:

@@ -75,6 +75,8 @@ class TempNewSymbol : public StackObj {
   operator Symbol*()                             { return _temp; }
 };
 
+// SymbolTable和StringTable类的定义位于classfile/symbolTable.hpp中，对应于C/C++编译过程的符号表，用于保存管理所有的Symbol实例，StringTable就是Java特有的字符串常量池。
+// 实际是一个支持自动扩容的HashMap。
 // https://blog.csdn.net/qq_43799161/article/details/131529592
 // key为Symbol，Symbol可以理解为utf8编码的字符信息，
 // value为mtSymbol，这是一个枚举值，仅仅表示内存的解释，不起实际作用
@@ -82,15 +84,23 @@ class SymbolTable : public RehashableHashtable<Symbol*, mtSymbol> {
   friend class VMStructs;
   friend class ClassFileParser;
 
+  // SymbolTable定义的方法都是静态方法，主要有两大类：
+    //
+    //Symbol创建，释放和查找相关的，如allocate_symbol，new_symbols，new_symbol，release，lookup，probe等方法
+    //HashTable自身创建复制相关的，如create_table，copy_buckets，copy_table，rehash_table等。
 private:
   // The symbol table
+  // SymbolTable指针，即全局实际保存Symbol实例的地方
   static SymbolTable* _the_table;
 
   // Set if one bucket is out of balance due to hash algorithm deficiency
+  // bool变量，是否需要重新hash
   static bool _needs_rehashing;
 
   // For statistics
+  // int变量，已经被移除的Symbol的数量
   static int _symbols_removed;
+  // int变量，当前的Symbol的属性
   static int _symbols_counted;
 
   Symbol* allocate_symbol(const u1* name, int len, bool c_heap, TRAPS); // Assumes no characters larger than 0x7F
@@ -121,6 +131,7 @@ private:
                 number_of_entries) {}
 
   // Arena for permanent symbols (null class loader) that are never unloaded
+  // Arena类指针，表示从未被加载过的描述符
   static Arena*  _arena;
   static Arena* arena() { return _arena; }  // called for statistics
 
@@ -263,17 +274,21 @@ public:
 // key是oop，oop可以理解为Java对象地址（实际上存放的就是Java的String对象）
 //
 // value是mtSymbol，这是一个枚举值，仅仅表示内存的解释，不起实际作用
+// StringTable也重写了HashTable自身创建复制相关的方法，除此之外增加了用于往常量池添加字符串的intern方法，查找字符串的lookup方法。
 class StringTable : public RehashableHashtable<oop, mtSymbol> {
   friend class VMStructs;
 
 private:
   // The string table
+  // StringTable指针，全局实际保存字符串的地方
   static StringTable* _the_table;
 
   // Set if one bucket is out of balance due to hash algorithm deficiency
+  // bool变量，是否需要重新hash
   static bool _needs_rehashing;
 
   // Claimed high water mark for parallel chunked scanning
+  // volatile int变量，并发标记时使用
   static volatile int _parallel_claimed_idx;
 
   static oop intern(Handle string_or_null, jchar* chars, int length, TRAPS);

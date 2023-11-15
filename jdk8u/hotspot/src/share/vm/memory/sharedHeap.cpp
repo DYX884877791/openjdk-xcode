@@ -46,12 +46,14 @@ SharedHeap::SharedHeap(CollectorPolicy* policy_) :
   _strong_roots_parity(0),
   _workers(NULL)
 {
+    //初始化静态属性_sh
   _sh = this;  // ch is static, should be set only once.
   if ((UseParNewGC ||
       (UseConcMarkSweepGC && (CMSParallelInitialMarkEnabled ||
                               CMSParallelRemarkEnabled)) ||
        UseG1GC) &&
       ParallelGCThreads > 0) {
+      //初始化执行并行GC的线程池
     _workers = new FlexibleWorkGang("Parallel GC Threads", ParallelGCThreads,
                             /* are_GC_task_threads */true,
                             /* are_ConcurrentGC_threads */false);
@@ -85,6 +87,7 @@ void SharedHeap::change_strong_roots_parity() {
          "Not in range.");
 }
 
+// StrongRootsScope用来改变SharedHeap的_strong_roots_parity属性
 SharedHeap::StrongRootsScope::StrongRootsScope(SharedHeap* heap, bool activate)
   : MarkScope(activate), _sh(heap)
 {

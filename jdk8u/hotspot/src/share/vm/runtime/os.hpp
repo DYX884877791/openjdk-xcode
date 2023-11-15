@@ -30,6 +30,8 @@
 #include "runtime/extendedPC.hpp"
 #include "runtime/handles.hpp"
 #include "utilities/top.hpp"
+#include "utilities/slog.hpp"
+
 #ifdef TARGET_OS_FAMILY_linux
 # include "jvm_linux.h"
 # include <setjmp.h>
@@ -393,6 +395,9 @@ class os: AllStatic {
   static address get_polling_page()             { return _polling_page; }
   static void    set_polling_page(address page) { _polling_page = page; }
   static bool    is_poll_address(address addr)  { return addr >= _polling_page && addr < (_polling_page + os::vm_page_size()); }
+    // os::make_polling_page_unreadable / make_polling_page_readable
+    //      这两个方法都是用来给Java编译代码通知安全点的状态，make_polling_page_unreadable是进入安全点时调用的，让_polling_page变得不可访问，
+    //      make_polling_page_readable是退出安全点时调用的，_polling_page变得只读
   static void    make_polling_page_unreadable();
   static void    make_polling_page_readable();
 
@@ -405,6 +410,7 @@ class os: AllStatic {
   // amount to shift the thread* to make this offset unique to
   // each thread.
   static int     get_serialize_page_shift_count() {
+      //SerializePageShiftCount是一个常量，值为4
     return SerializePageShiftCount;
   }
 
@@ -419,6 +425,7 @@ class os: AllStatic {
   static void    set_memory_serialize_page(address page);
 
   static address get_memory_serialize_page() {
+      // _mem_serialize_page是通过set_memory_serialize_page方法初始化的
     return (address)_mem_serialize_page;
   }
 
@@ -426,6 +433,7 @@ class os: AllStatic {
     uintptr_t page_offset = ((uintptr_t)thread >>
                             get_serialize_page_shift_count()) &
                             get_serialize_page_mask();
+      //将指定位置的4字节数据修改为1，即最多支持1024个线程
     *(volatile int32_t *)((uintptr_t)_mem_serialize_page+page_offset) = 1;
   }
 
@@ -438,6 +446,7 @@ class os: AllStatic {
     // within the page.  This makes the thread argument unnecessary,
     // but we retain the NULL check to preserve existing behaviour.
     if (thread == NULL) return false;
+      //判断addr是否在_mem_serialize_page中
     address page = (address) _mem_serialize_page;
     return addr >= page && addr < (page + os::vm_page_size());
   }

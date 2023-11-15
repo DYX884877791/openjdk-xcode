@@ -197,6 +197,18 @@ class SymbolPropertyTable;
   /*end*/
 
 
+//  SystemDictionary类的定义在classfile/systemDictionary.hpp中，是一个系统字典类，用于保存所有已经加载完成的类，通过一个支持自动扩容的HashMap保存，
+//  key是表示类名Symbol指针和对应的类加载器oop指针，value是对应的Klass指针，当一个新的类加载完成后就会在SystemDictionary中添加一个新的键值对
+//
+// 其定义 的方法主要有以下几类：
+//
+//   属性操作的相关方法，如check_constraints，add_placeholder，add_klass，dictionary等
+//   根据类加载器和类名加载类的方法，如resolve_or_fail，resolve_or_null，resolve_super_or_fail
+//   根据class文件流，类加载器和类名加载类的方法，如parse_stream，resolve_from_stream
+//   根据类名和类加载器从已经加载的类中查找目标类，如find，find_instance_or_array_klass
+//   根据符号引用解析MethodHandle调用的方法，如find_method_handle_invoker，find_method_handle_type
+//
+//  可知SystemDictionary相当于类加载的一个统一入口，同时提供查找已加载的类和加载新的类的服务，实现逻辑比较复杂
 class SystemDictionary : AllStatic {
   friend class VMStructs;
   friend class SystemDictionaryHandles;
@@ -571,33 +583,42 @@ public:
 
   // hashtable sizes for system dictionary to allow growth
   // prime numbers for system dictionary size
+  // int变量，保存已加载类的HashMap的容量
   static int                     _sdgeneration;
   static const int               _primelist[_prime_array_size];
 
   // Hashtable holding loaded classes.
+  // Dictionary类指针，实际保存已加载类的HashMap
   static Dictionary*            _dictionary;
 
   // Hashtable holding placeholders for classes being loaded.
+  // PlaceholderTable类指针，当类加载的过程中临时存储键值对的地方，底层数据结构同Dictionary类
   static PlaceholderTable*       _placeholders;
 
   // Hashtable holding classes from the shared archive.
+  // Dictionary类指针，共享架构下用于保存已加载类的HashMap
   static Dictionary*             _shared_dictionary;
 
   // Monotonically increasing counter which grows with
   // _number_of_classes as well as hot-swapping and breakpoint setting
   // and removal.
+  // int变量，发生修改的次数，类加载或者删除都会增加该计数器
   static int                     _number_of_modifications;
 
   // Lock object for system class loader
+  // oop指针，系统类加载器的对象锁
   static oop                     _system_loader_lock_obj;
 
   // Constraints on class loaders
+  // LoaderConstraintTable类指针，保存类加载器加载约束的HashTable
   static LoaderConstraintTable*  _loader_constraints;
 
   // Resolution errors
+  // ResolutionErrorTable类指针，保存类解析错误的HashTable
   static ResolutionErrorTable*   _resolution_errors;
 
   // Invoke methods (JSR 292)
+  //SymbolPropertyTable类指针，保存MethodHandle调用的解析结果
   static SymbolPropertyTable*    _invoke_method_table;
 
 public:
@@ -706,6 +727,7 @@ protected:
   // table of box klasses (int_klass, etc.)
   static Klass* _box_klasses[T_VOID+1];
 
+  // oop指针，系统类加载器的引用
   static oop  _java_system_loader;
 
   static bool _has_loadClassInternal;

@@ -707,6 +707,7 @@ inline void oopDesc::set_displaced_mark(markOop m) {
 }
 
 // The following method needs to be MT safe.
+//从请求头中获取对象的年龄
 inline uint oopDesc::age() const {
   assert(!is_forwarded(), "Attempt to read age from forwarded mark");
   if (has_displaced_mark()) {

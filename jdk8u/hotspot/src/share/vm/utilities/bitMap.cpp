@@ -220,6 +220,8 @@ void BitMap::at_put(idx_t offset, bool value) {
 // funky parallel algorithm), we encourage callers
 // to do such verification, as and when appropriate.
 bool BitMap::par_at_put(idx_t bit, bool value) {
+    //par_set_bit与set_bit的区别在于使用cmpxchg_ptr改变指定地址的值，返回true表示修改成功，返回false表示其他线程完成了修改
+    //底层实现都是将bit映射至bitMap中对应的地址上，然后修改指定的位
   return value ? par_set_bit(bit) : par_clear_bit(bit);
 }
 
@@ -470,14 +472,22 @@ bool BitMap::iterate(BitMapClosure* blk, idx_t leftOffset, idx_t rightOffset) {
   for (idx_t index = startIndex, offset = leftOffset;
        offset < rightOffset && index < endIndex;
        offset = (++index) << LogBitsPerWord) {
+      //offset & (BitsPerWord - 1)就是将offset对64取余
+      //map(index)再右移相当于获取offset对应的bit
     idx_t rest = map(index) >> (offset & (BitsPerWord - 1));
+      //一直遍历直到rest等于0，即高位bit没有1了，即剩余的位对应的地址没有打标的
+      //然后开始遍历下一个index即下一个8字节64位上的bit
     for (; offset < rightOffset && rest != (bm_word_t)NoBits; offset++) {
+        //判断rest的最后一位是否是1，即是否打标
       if (rest & 1) {
+          //如果已打标则调用do_bit方法，如果该方法返回false，则终止处理
         if (!blk->do_bit(offset)) return false;
         //  resample at each closure application
         // (see, for instance, CMS bug 4525989)
+          //根据offset重新计算rest，此时offset的值并未改变，所以实际rest的值未变
         rest = map(index) >> (offset & (BitsPerWord -1));
       }
+        //rest右移一位，其结果等于把offset加1，按照map(index) >> (offset & (BitsPerWord - 1))计算
       rest = rest >> 1;
     }
   }

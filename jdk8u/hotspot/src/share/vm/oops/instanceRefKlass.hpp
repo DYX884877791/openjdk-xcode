@@ -45,6 +45,7 @@
 // and the pending list lock object in the same class is notified.
 
 
+// 描述java.lang.ref.Reference的子类，这部分的概念与强软弱虚引用、垃圾回收有关系
 class InstanceRefKlass: public InstanceKlass {
   friend class InstanceKlass;
 

@@ -49,6 +49,9 @@ class Generation;
 class DefNewGeneration;
 class ThresholdSupport;
 
+// MemoryPool代表一块由JVM管理的内存区域，可以在运行时由JVM创建或者移除。MemoryPool只有两种类型，Heap或者NonHeap，
+// 通过枚举PoolType表示，部分MemoryPool可能同时属于这两种类型。
+// MemoryPool的定义位于hotspot/src/shared/vm/service/memoryPool.hpp中
 class MemoryPool : public CHeapObj<mtInternal> {
   friend class MemoryManager;
  public:
@@ -64,22 +67,34 @@ class MemoryPool : public CHeapObj<mtInternal> {
 
   // We could make some of the following as performance counters
   // for external monitoring.
+    //名字
   const char*      _name;
+    //类型
   PoolType         _type;
+    //初始大小
   size_t           _initial_size;
+    //最大大小
   size_t           _max_size;
+    //能否分配内存，默认为true
   bool             _available_for_allocation; // Default is true
+    //该MemoryPool所属的MemoryManager数组，max_num_managers是一个枚举值，为5
   MemoryManager*   _managers[max_num_managers];
+    //该MemoryPool的MemoryManager的个数
   int              _num_managers;
+    // 用来记录MemoryUsage各指标的在GC前的历史最高值
   MemoryUsage      _peak_usage;               // Peak memory usage
+    // GC结束后的内存占用情况
   MemoryUsage      _after_gc_usage;           // After GC memory usage
 
   ThresholdSupport* _usage_threshold;
+    //触发GC的阈值
   ThresholdSupport* _gc_usage_threshold;
 
+    //达到阈值时触发的动作
   SensorInfo*      _usage_sensor;
   SensorInfo*      _gc_usage_sensor;
 
+    //该MemoryPool对应的Java对象实例
   volatile instanceOop _memory_pool_obj;
 
   void add_manager(MemoryManager* mgr);
@@ -146,6 +161,7 @@ class MemoryPool : public CHeapObj<mtInternal> {
   void oops_do(OopClosure* f);
 };
 
+// CollectedMemoryPool及其子类对应分配Java对象的堆内存
 class CollectedMemoryPool : public MemoryPool {
 public:
   CollectedMemoryPool(const char* name, PoolType type, size_t init_size, size_t max_size, bool support_usage_threshold) :
@@ -213,6 +229,7 @@ public:
   size_t used_in_bytes()                { return _gen->used(); }
 };
 
+// CodeHeapPool对应于CodeCache管理的内存
 class CodeHeapPool: public MemoryPool {
 private:
   CodeHeap* _codeHeap;
@@ -222,6 +239,10 @@ public:
   size_t used_in_bytes()            { return _codeHeap->allocated_capacity(); }
 };
 
+// MetaspacePool对应保存元数据的内存
+// 在universe_post_init方法中会调用MemoryService::add_metaspace_memory_pools方法给Metaspace创建一个对应的MemeryPool，
+// 但是该方法并没有像MemoryService::add_code_heap_memory_pool(CodeHeap* heap)一样把表示Metaspace的实例作为入参传给方法，
+// 那MetaspacePool是如何获取Metaspace的内存使用情况了？
 class MetaspacePool : public MemoryPool {
   size_t calculate_max_size() const;
  public:
@@ -230,6 +251,7 @@ class MetaspacePool : public MemoryPool {
   size_t used_in_bytes();
 };
 
+// CompressedKlassSpacePool对应于保存压缩的Klass信息的内存
 class CompressedKlassSpacePool : public MemoryPool {
  public:
   CompressedKlassSpacePool();

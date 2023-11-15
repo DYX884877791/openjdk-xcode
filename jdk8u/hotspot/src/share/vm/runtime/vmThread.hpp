@@ -90,7 +90,12 @@ class VMOperationQueue : public CHeapObj<mtInternal> {
 // like scavenge, garbage_collect etc.
 //
 
-// 表示一个特殊的专门用来执行比较耗时的VM_Operation的原生线程
+// 表示一个特殊的专门用来执行比较耗时的VM_Operation的原生线程，VMThread线程在整个JAVA进程有且只会有一个。
+// 可以想象一下VMThread线程的简单执行过程：不断地轮询某个任务列表并在有任务时依次执行任务。
+// 任务执行时，它会根据具体的任务决定是否会暂停整个应用，也就是stop the world，这是不是让我们联想到了我们熟悉的GC过程？
+// 是的，我们的ygc以及cmsgc的两个暂停应用的阶段(init_mark和remark)都是由这个线程来执行的，并且都要求暂停整个应用。
+// 比如在执行jstack命令时，触发的线程dump过程也是会暂停应用的，只是这个过程一般很快就结束，不会有明显的感觉。
+// 另外内存dump的jmap命令，也是会暂停整个应用的，如果使用了-F的参数，其底层也是使用serviceability agent的api来dump的，但是dump内存的速度会明显慢很多。
 class VMThread: public NamedThread {
  private:
     // 线程的优先级

@@ -62,6 +62,8 @@
 
 class SymbolHashMap;
 
+// 常量池的每项数据都通过类CPSlot表示，其定义跟ConstantPool类位于同一个文件中，只有一个属性，解析结果Klass或者Symbol的地址，如果未解析则地址是0，
+// 可以将该地址转换成Klass或者Symbol类的指针，定义了对应的转换方法（get_symbol和get_klass方法）和判断该数据项是否已经解析的方法（is_resolved和is_unresolved方法）。
 class CPSlot VALUE_OBJ_CLASS_SPEC {
   intptr_t _ptr;
  public:
@@ -86,6 +88,9 @@ class CPSlot VALUE_OBJ_CLASS_SPEC {
 
 class KlassSizeStats;
 /**
+ *  ConstantPool类的定义位于oops/constantPool.hpp文件中，用于表示class文件中的常量池，每个Klass都有对应的ConstantPool，两者是一一对应的。
+ *  常量池的数据大部分是在class文件解析的时候写入的，可以安全访问；但是CONSTANT_Class_info类型的常量数据是在这个类被解析时修改，这时只能通过解析状态判断这条数据是否修改完成。
+ *
  * 这个类的对象代码具体的常量池，保存着常量池元信息
  * 类表示常量池元信息，所以继承了类Metadata。_tags表示常量池中的内容，常量池中的总项数通过_length来保存，所以_tags数组的长度也为_length，
  * 具体存储的内容就是每一项的tag值，这都是虚拟机规范定义好的；_cache辅助解释运行来保存一些信息
@@ -99,21 +104,37 @@ class KlassSizeStats;
  * ---- 类和接口的完全限定名
  * ---- 字段名称和描述符
  * ---- 方法名称和描述符
+ *
+ * ConstantPool定义了读取和解析常量池数据的诸多方法，大致有以下几类：
+ *
+ * 属性读写的方法，如tags，set_tags，flags，set_flags，pool_holder，set_pool_holder，cache，set_cache等方法
+ * 读取基地址指定偏移位置的值的方法，如obj_at_addr_raw，long_at_addr，double_at_addr等方法
+ * 向常量池指定位置写入数据的方法，解析class文件时调用该类方法，如klass_at_put，unresolved_klass_at_put，method_handle_index_at_put，invoke_dynamic_at_put，int_at_put，field_at_put，name_and_type_at_put等方法
+ * 从常量池指定位置读取数据的方法，如klass_at，klass_name_at，resolved_klass_at，long_at，symbol_at，name_and_type_at，method_handle_name_ref_at等方法
+ * 解析常量池符号引用的方法，如resolve_constant_at，resolve_bootstrap_specifier_at，resolve_constant_at_impl，resolve_string_constants_impl，resolve_bootstrap_specifier_at_impl等方法
+ * 从class文件读取常量池的字节流时校验常量池是否符合规范的方法，如verify_on
+ *
  */
 class ConstantPool : public Metadata {
   friend class VMStructs;
   friend class BytecodeInterpreter;  // Directly extracts an oop in the pool for fast instanceof/checkcast
   friend class Universe;             // For null constructor
  private:
+    // 单字节数组指针，描述常量池所有数据的类型的tag数组，每个tag用一个单字节表示
   Array<u1>*           _tags;        // the tag array describing the constant pool's contents
+    // ConstantPoolCache类指针，保存解释器运行时用到的动态调用相关信息的缓存
   ConstantPoolCache*   _cache;       // the cache holding interpreter runtime information   解释执行时的运行时信息
+    // InstanceKlass指针，当前常量池所属的Klass实例
   InstanceKlass*       _pool_holder; // the corresponding class
+    // 两字节的数组指针，为大小可变的常量池数据项使用，通常为空
   Array<u2>*           _operands;    // for variable-sized (InvokeDynamic) nodes, usually empty
 
   // Array of resolved objects from the constant pool and map from resolved
   // object index to original constant pool index
   // jobject是指针类型
+  // jobject类型，实际是_jobject指针的别名，_jobject等同于C++层面的Java Object对象，表示已经解析的对象数组
   jobject              _resolved_references;
+  // 两字节的数组指针，表示已经解析的对象的索引到原始的常量池的索引的映射关系
   Array<u2>*           _reference_map;
 
   enum {
@@ -773,6 +794,7 @@ class ConstantPool : public Metadata {
 
   // Sizing (in words)
   static int header_size()             { return sizeof(ConstantPool)/HeapWordSize; }
+  // 将header_size加上length之后，进行内存对齐...
   static int size(int length)          { return align_object_size(header_size() + length); }
   int size() const                     { return size(length()); }
 #if INCLUDE_SERVICES

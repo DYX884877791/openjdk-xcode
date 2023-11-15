@@ -100,6 +100,11 @@
   template(ClassLoaderStatsOperation)             \
   template(JFROldObject)                          \
 
+/**
+ * VMThread执行的任务称为vm_opration，在JVM中存在两种vm_opration，
+ * 一种是需要在安全点内执行的(所谓安全点，就是系统处于一个安全的状态，除了VMThread这个线程可以正常运行之外，其他的线程都必须暂停执行，在这种情况下就可以放心执行当前的一系列vm_opration了)，
+ * 另外一种是不需要在安全点内执行的
+ */
 class VM_Operation: public CHeapObj<mtInternal> {
  public:
   enum Mode {
@@ -234,8 +239,10 @@ class VM_ForceSafepoint: public VM_Operation {
 class VM_ForceAsyncSafepoint: public VM_Operation {
  public:
   VM_ForceAsyncSafepoint() {}
+  // 其doit方法是一个空实现
   void doit()              {}
   VMOp_Type type() const                         { return VMOp_ForceAsyncSafepoint; }
+  // evaluation_mode方法表明其需要在安全点下执行
   Mode evaluation_mode() const                   { return _async_safepoint; }
   bool is_cheap_allocated() const                { return true; }
 };

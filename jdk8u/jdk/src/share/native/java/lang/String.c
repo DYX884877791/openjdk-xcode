@@ -29,5 +29,6 @@
 JNIEXPORT jobject JNICALL
 Java_java_lang_String_intern(JNIEnv *env, jobject this)
 {
+    // 调用了JVM_InternString方法
     return JVM_InternString(env, this);
 }

@@ -482,6 +482,8 @@ class Universe: AllStatic {
   // (extended == true).
   static void print_on(outputStream* st, bool extended = false);
   static void print_heap_at_SIGBREAK();
+    //跟log_heap最终调用的方法相同，就是传递的outputStream类型不同
+    //第二个参数ignore_extended没传，使用默认值false
   static void print_heap_before_gc() { print_heap_before_gc(gclog_or_tty); }
   static void print_heap_after_gc()  { print_heap_after_gc(gclog_or_tty); }
   static void print_heap_before_gc(outputStream* st, bool ignore_extended = false);

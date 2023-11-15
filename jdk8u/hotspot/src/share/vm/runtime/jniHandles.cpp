@@ -282,7 +282,7 @@ void JNIHandleBlock::zap() {
 }
 
 JNIHandleBlock* JNIHandleBlock::allocate_block(Thread* thread)  {
-  slog_debug("进入hotspot/src/share/vm/runtime/jniHandles.cpp中的JNIHandleBlock::allocate_block函数...");
+  slog_trace("进入hotspot/src/share/vm/runtime/jniHandles.cpp中的JNIHandleBlock::allocate_block函数...");
   assert(thread == NULL || thread == Thread::current(), "sanity check");
   JNIHandleBlock* block;
   // Check the thread-local free list for a block so we don't

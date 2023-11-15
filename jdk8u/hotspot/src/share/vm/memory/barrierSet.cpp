@@ -28,6 +28,7 @@
 #include "memory/universe.hpp"
 
 // count is number of array elements being written
+// static_write_ref_array_pre / static_write_ref_array_post这两方法是BarrierSet对外的仅有的两个static方法，同样是基于虚方法实现
 void BarrierSet::static_write_ref_array_pre(HeapWord* start, size_t count) {
   assert(count <= (size_t)max_intx, "count too large");
 #if 0

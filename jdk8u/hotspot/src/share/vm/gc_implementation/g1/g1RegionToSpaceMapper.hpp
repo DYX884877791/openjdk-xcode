@@ -29,6 +29,7 @@
 #include "memory/allocation.hpp"
 #include "utilities/debug.hpp"
 
+// G1MappingChangedListener就是一个定义了on_commit方法的接口类
 class G1MappingChangedListener VALUE_OBJ_CLASS_SPEC {
  public:
   // Fired after commit of the memory, i.e. the memory this listener is registered

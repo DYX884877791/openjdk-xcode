@@ -104,10 +104,13 @@ BlockListBuilder::BlockListBuilder(Compilation* compilation, IRScope* scope, int
  , _next_loop_index(0)
  , _loop_map() // size not known yet
 {
+    //生成起始块
   set_entries(osr_bci);
+    //根据指令数量构建所有块，存储在_bci2block(字节码和块映射)和_blocks(块列表)，并为当前块构建前驱和后驱
   set_leaders();
   CHECK_BAILOUT();
 
+    //处理块循环
   mark_loops();
   NOT_PRODUCT(if (PrintInitialBlockList) print());
 
@@ -3215,19 +3218,23 @@ GraphBuilder::GraphBuilder(Compilation* compilation, IRScope* scope)
   int osr_bci = compilation->osr_bci();
 
   // determine entry points and bci2block mapping
+    //构建所有块
   BlockListBuilder blm(compilation, scope, osr_bci);
   CHECK_BAILOUT();
 
+    //字节码到块的映射
   BlockList* bci2block = blm.bci2block();
   BlockBegin* start_block = bci2block->at(0);
 
   push_root_scope(scope, bci2block, start_block);
 
   // setup state for std entry
+    //块合并
   _initial_state = state_at_entry();
   start_block->merge(_initial_state);
 
   // complete graph
+    //完成图构建
   _vmap        = new ValueMap();
   switch (scope->method()->intrinsic_id()) {
   case vmIntrinsics::_dabs          : // fall through
@@ -3323,6 +3330,7 @@ GraphBuilder::GraphBuilder(Compilation* compilation, IRScope* scope)
   }
   CHECK_BAILOUT();
 
+    //块图入口
   _start = setup_start_block(osr_bci, start_block, _osr_entry, _initial_state);
 
   eliminate_redundant_phis(_start);

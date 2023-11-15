@@ -35,18 +35,29 @@
 // knows about ObjectWaiters, so we'll have to reconcile that code.
 // See next_waiter(), first_waiter(), etc.
 
+// ObjectWaiter 顾名思义对象等待者
+// ObjectWaiter 一个线程尝试获取monitor锁失败后，最终会被封装成一个ObjectWaiter对象 封装的是一个线程
+// ObjectWaiter 类似一个双向链表
 class ObjectWaiter : public StackObj {
  public:
   enum TStates { TS_UNDEF, TS_READY, TS_RUN, TS_WAIT, TS_ENTER, TS_CXQ } ;
   enum Sorted  { PREPEND, APPEND, SORTED } ;
+    // 下一个 ObjectWaiter
   ObjectWaiter * volatile _next;
+    // 上一个 ObjectWaiter
   ObjectWaiter * volatile _prev;
+    // 线程
   Thread*       _thread;
+    // _notifier_tid用于记录执行唤醒动作的线程指针
   jlong         _notifier_tid;
+    // 关联的线程属性
   ParkEvent *   _event;
+    // _notified属性用于记录该ObjectWaiter是否被某个线程唤醒了而不是因为线程中断唤醒的
   volatile int  _notified ;
+    // TState用于描述当前ObjectWaiter的状态，刚创建时的状态是TS_RUN，加入到cxq链表中状态是TS_CXQ，加入到EntryList链表后变成TS_ENTER，加入到WaitSet链表中的状态就是TS_WAIT，另外两个状态枚举没有调用。
   volatile TStates TState ;
   Sorted        _Sorted ;           // List placement disposition
+    // _active用于记录当前线程是否开启了线程监控，如果开启了可以通过jmm接口获取线程运行的统计数据，比如锁抢占的次数和累计耗时。
   bool          _active ;           // Contention monitoring is enabled
  public:
   ObjectWaiter(Thread* thread);
@@ -71,10 +82,18 @@ class ObjectWaiter : public StackObj {
 // It is also used as RawMonitor by the JVMTI
 
 /**
+ * 就是我们常说的monitor对象
  * ObjectMonitor不仅是重量级锁的实现，还是Object的wait/notify/notifyAll方法的底层核心实现。
+ *
+ * ObjectMonitor维护了三个ObjectWaiter链表，分别是cxq链表、EntryList链表和WaitSet链表，对应链表中ObjectWaiter的状态分别是TS_CXQ，TS_ENTER和TS_WAIT。
+ * 调用enter方法时，如果自旋获取锁失败就会创建一个ObjectWaiter并加入到cxq链表中，某个已经获取锁的线程调用wait方法会创建一个ObjectWaiter并加入到WaitSet链表中，
+ * 当某个线程调用notify/notifyAll方法“唤醒”该线程时，会将该ObjectWaiter从WaitSet链表中移除然后加入到cxq链表头。
+ * 当某个获取锁的线程释放锁时，就会唤醒EntryList链表头对应的线程，如果EntryList链表为空，则将此时的cxq链表中的元素整体转移到EntryList链表中，
+ * 然后同样的唤醒EntryList链表头对应的线程，被唤醒后该线程一样调用enter方法抢占锁。
  */
 class ObjectMonitor {
  public:
+    // 异常枚举
   enum {
     OM_OK,                    // no error
     OM_SYSTEM_ERROR,          // operating system error

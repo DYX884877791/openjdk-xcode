@@ -32,6 +32,8 @@ class ObjectStartArray;
 class PSPromotionManager;
 class GCTaskQueue;
 
+// CardTableExtension的定义在hotspot/src/share/vm/gc_implementation/parallelScavenge/cardTableExtension.hpp中，
+// 该类继承自CardTableModRefBS，是为ParallelScavengeHeap定制的卡表实现
 class CardTableExtension : public CardTableModRefBS {
  private:
   // Support methods for resizing the card table.
@@ -48,6 +50,7 @@ class CardTableExtension : public CardTableModRefBS {
   static void verify_all_young_refs_precise_helper(MemRegion mr);
 
  public:
+    // CardTableExtension添加了枚举ExtendedCardValue，表示扩展的CardValue
   enum ExtendedCardValue {
     youngergen_card   = CardTableModRefBS::CT_MR_BS_last_reserved + 1,
     verify_card       = CardTableModRefBS::CT_MR_BS_last_reserved + 5
@@ -60,6 +63,7 @@ class CardTableExtension : public CardTableModRefBS {
   // BarrierSet::Name kind() { return BarrierSet::CardTableExtension; }
 
   // Scavenge support
+  // CardTableExtension添加了一个新的用于并行遍历卡表的scavenge_contents_parallel方法
   void scavenge_contents_parallel(ObjectStartArray* start_array,
                                   MutableSpace* sp,
                                   HeapWord* space_top,

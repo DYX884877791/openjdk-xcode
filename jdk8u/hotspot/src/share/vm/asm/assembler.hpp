@@ -213,9 +213,10 @@ class RegisterOrConstant VALUE_OBJ_CLASS_SPEC {
 // The Assembler is generating code into a CodeBuffer.
 //
 // AbstractAssembler定义了生成汇编代码的抽象公共基础方法，如获取关联CodeBuffer的当前内存位置的pc()方法，
-// 将汇编指令全部刷新的CodeBuffer中的flush()方法，绑定跳转标签的bind方法等。其定义位于hotspot src/share/vm/asm/assembler.hpp中。
+// 将汇编指令全部刷新的CodeBuffer中的flush()方法，绑定跳转标签的bind方法等。其定义位于hotspot/src/share/vm/asm/assembler.hpp中。
 // 汇编器会生成机器指令序列，并且将生成的指令序列存储到缓存中，而_code_begin指向缓存区首地址，_code_pos指向缓存区的当前可写入的位置。
 // 这个汇编器提供了写机器指令的基础函数，通过这些函数可方便地写入8位、16位、32位和64位等的数据或指令。这个汇编器中处理的业务不会依赖于特定平台。
+// AbstractAssembler提供了一组汇编指令数据保存获取操作，如emit_int8(),addr_at()…，Label伪指令等。
 class AbstractAssembler : public ResourceObj  {
   friend class Label;
 

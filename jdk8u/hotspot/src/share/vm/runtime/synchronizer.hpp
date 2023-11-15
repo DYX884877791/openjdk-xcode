@@ -34,6 +34,8 @@
 
 class ObjectMonitor;
 
+// 该类用于实现Object的wait / notify方法，synchronized关键字底层的monitorenter / monitorexit字节码指令，
+// JNI中用于获取锁的接口jni_MonitorEnter / jni_MonitorExit，Unsafe类的Unsafe_MonitorEnter / Unsafe_MonitorExit方法
 class ObjectSynchronizer : AllStatic {
   friend class VMStructs;
  public:
@@ -144,9 +146,13 @@ class ObjectSynchronizer : AllStatic {
 
  private:
   enum { _BLOCKSIZE = 128 };
+    //全局的所有ObjectMonitor数组的链表，每个元素都是一个ObjectMonitor数组的头元素，可以据此遍历所有的ObjectMonitor实例
   static ObjectMonitor * volatile gBlockList;
+    //全局的空闲ObjectMonitor链表
   static ObjectMonitor * volatile gFreeList;
+    //全局的正在使用的ObjectMonitor链表，只有MonitorInUseLists为true时才有值
   static ObjectMonitor * volatile gOmInUseList; // for moribund thread, so monitors they inflated still get scanned
+    //gOmInUseList中包含的元素个数
   static int gOmInUseCount;
 
 };

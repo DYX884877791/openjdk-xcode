@@ -65,12 +65,18 @@ const char* GCCause::to_string(GCCause::Cause cause) {
       return "No GC";
 
     case _allocation_failure:
+        /**
+         * 内存分配失败引发的GC；
+         */
       return "Allocation Failure";
 
     case _tenured_generation_full:
       return "Tenured Generation Full";
 
     case _metadata_GC_threshold:
+        /**
+         * 元空间的使用超过了元空间实际分配的内存大小阈值而引发的GC；
+         */
       return "Metadata GC Threshold";
 
     case _cms_generation_full:
@@ -92,6 +98,10 @@ const char* GCCause::to_string(GCCause::Cause cause) {
       return "Old Generation Too Full To Scavenge";
 
     case _adaptive_size_policy:
+        /**
+         * 翻译成中文，是“人体工程学”。在JVM垃圾收集器中的Ergonomics就是负责自动的调解GC暂停时间和吞吐量之间的平衡，使虚拟机性能更好的一种做法。
+         * 简单说就是：Ergonomics表示JVM内部环境认为此时可以进行一次垃圾收集；
+         */
       return "Ergonomics";
 
     case _g1_inc_collection_pause:

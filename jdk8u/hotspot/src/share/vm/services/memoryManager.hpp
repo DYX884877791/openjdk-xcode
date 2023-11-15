@@ -40,6 +40,8 @@ class MemoryPool;
 class GCMemoryManager;
 class OopClosure;
 
+// MemoryManager的定义位于hotspot/src/shared/vm/service/memoryManager.hpp中，MemoryManager用来管理一个或者多个MemoryPool，
+// 垃圾回收器就是典型的MemoryManager。JVM有多个MemoryManager，一个MemoryPool可以被一个或者多个MemoryManager管理。
 class MemoryManager : public CHeapObj<mtInternal> {
 protected:
   enum {
@@ -47,10 +49,12 @@ protected:
   };
 
 private:
+    // max_num_pools是一个枚举值，值是10
   MemoryPool* _pools[max_num_pools];
   int         _num_pools;
 
 protected:
+    // _memory_mgr_obj表示一个与之对应的Java对象
   volatile instanceOop _memory_mgr_obj;
 
 public:
@@ -81,6 +85,7 @@ public:
   bool is_manager(instanceHandle mh)     { return mh() == _memory_mgr_obj; }
 
   virtual instanceOop get_memory_manager_instance(TRAPS);
+  // 为了能够方便区分MemoryManager的类型，MemoryManager定义了一个kind方法，该方法返回一个枚举值MemoryManager::Name来表示MemoryManager的类型
   virtual MemoryManager::Name kind()     { return MemoryManager::Abstract; }
   virtual bool is_gc_memory_manager()    { return false; }
   virtual const char* name() = 0;
@@ -121,13 +126,19 @@ public:
 
 class GCStatInfo : public ResourceObj {
 private:
+    //当前第几次GC
   size_t _index;
+    //gc开始时间
   jlong  _start_time;
+    //gc结束时间
   jlong  _end_time;
 
   // We keep memory usage of all memory pools
+    //是一个数组，通过index属性来读写数组的元素，每个元素对应一个MemoryPool，表示该Pool执行GC前的内存使用情况
   MemoryUsage* _before_gc_usage_array;
+    //同上，表示index处的MemoryPool在GC完成后的内存使用情况
   MemoryUsage* _after_gc_usage_array;
+    //表示MemoryPool数组的长度，等于GCMemoryManager管理的MemoryPool的个数
   int          _usage_array_size;
 
   void set_gc_usage(int pool_index, MemoryUsage, bool before_gc);
@@ -167,17 +178,27 @@ public:
   void clear();
 };
 
+// GCMemoryManager在 MemoryManager的基础上增加了部分跟GC相关的字段
 class GCMemoryManager : public MemoryManager {
 private:
   // TODO: We should unify the GCCounter and GCMemoryManager statistic
+    //执行GC的总次数
   size_t       _num_collections;
+    //累积时间
   elapsedTimer _accumulated_timer;
+    // 当前GC的时间
   elapsedTimer _gc_timer;         // for measuring every GC duration
+    //上一次GC的统计数据
   GCStatInfo*  _last_gc_stat;
+    //上一次GC的锁
   Mutex*       _last_gc_lock;
+    //当前GC的统计数据
   GCStatInfo*  _current_gc_stat;
+    //GC的线程数
   int          _num_gc_threads;
+    //是否允许通知GC的结果
   volatile bool _notification_enabled;
+    //标识管理的MemoryPool是否在GC完成后更新MemoryUsage
   bool         _pool_always_affected_by_gc[MemoryManager::max_num_pools];
 
 public:

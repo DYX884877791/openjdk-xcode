@@ -46,6 +46,7 @@ ageTable::ageTable(bool global) {
     const char* agetable_ns = "generation.0.agetable";
     const char* bytes_ns = PerfDataManager::name_space(agetable_ns, "bytes");
 
+      //初始化用于收集性能的PerfVariable
     for(int age = 0; age < table_size; age ++) {
       char age_name[10];
       jio_snprintf(age_name, sizeof(age_name), "%2.2d", age);
@@ -61,6 +62,7 @@ ageTable::ageTable(bool global) {
   }
 }
 
+//将所有的数组元素的值重置为0
 void ageTable::clear() {
   for (size_t* p = sizes; p < sizes + table_size; ++p) {
     *p = 0;
@@ -80,10 +82,14 @@ void ageTable::merge_par(ageTable* subTable) {
 }
 
 uint ageTable::compute_tenuring_threshold(size_t survivor_capacity, GCTracer &tracer) {
+    //TargetSurvivorRatio表示GC后Survivor区已使用内存占总内存的比例，默认是50
+    //计算期望的survivor区的大小
   size_t desired_survivor_size = (size_t)((((double) survivor_capacity)*TargetSurvivorRatio)/100);
   size_t total = 0;
   uint age = 1;
   assert(sizes[0] == 0, "no objects with age zero should be recorded");
+    //从低到高依次遍历ageTable，将给分代年龄对应的对象大小加起来，一旦超过desired_survivor_size，则该age就是目标age
+    //低于该age的对象就会被拷贝到to区，从而保证Survivor区的内存在GC结束后满足TargetSurvivorRatio限制
   while (age < table_size) {
     total += sizes[age];
     // check if including objects of age 'age' made us pass the desired
@@ -95,6 +101,7 @@ uint ageTable::compute_tenuring_threshold(size_t survivor_capacity, GCTracer &tr
 
   if (PrintTenuringDistribution || UsePerfData || AgeTableTracer::is_tenuring_distribution_event_enabled()) {
 
+      //打印日志，更新PerfData和相关计数器
     if (PrintTenuringDistribution) {
       gclog_or_tty->cr();
       gclog_or_tty->print_cr("Desired survivor size " SIZE_FORMAT " bytes, new threshold %u (max %u)",
@@ -106,6 +113,7 @@ uint ageTable::compute_tenuring_threshold(size_t survivor_capacity, GCTracer &tr
     while (age < table_size) {
       total += sizes[age];
       if (sizes[age] > 0) {
+          // 打印GC前后对象的年龄分布...
         if (PrintTenuringDistribution) {
           gclog_or_tty->print_cr("- age %3u: " SIZE_FORMAT_W(10) " bytes, " SIZE_FORMAT_W(10) " total",
                                         age,    sizes[age]*oopSize,          total*oopSize);

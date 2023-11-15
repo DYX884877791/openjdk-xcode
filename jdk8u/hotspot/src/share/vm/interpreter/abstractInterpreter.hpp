@@ -70,7 +70,7 @@
 //------------------------------------------------------------------------------------------------------------------------
 // The C++ interface to the bytecode interpreter(s).
 
-//  AbstractInterpreter的定义位于hotspot src/share/vm/interpreter/abstractInterpreter.hpp中，
+//  AbstractInterpreter的定义位于hotspot/src/share/vm/interpreter/abstractInterpreter.hpp中，
 // 是CppInterpreter和TemplateInterpreter共同的基类，用来抽象平台独立的解释器相关的属性和方法。AbstractInterpreter定义的属性都是protected
 
 // 抽象解释器,这个抽象解释器描述了解释器的基本骨架:

@@ -58,6 +58,7 @@
 #include "services/memTracker.hpp"
 #include "utilities/events.hpp"
 #include "utilities/stack.inline.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif // INCLUDE_JFR
@@ -2001,6 +2002,7 @@ void PSParallelCompact::invoke(bool maximum_heap_compaction) {
 // This method contains no policy. You should probably
 // be calling invoke() instead.
 bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psParallelCompact.cpp中的PSParallelCompact::invoke_no_policy函数...");
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
   assert(ref_processor() != NULL, "Sanity");
 

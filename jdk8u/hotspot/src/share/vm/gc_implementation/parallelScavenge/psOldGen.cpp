@@ -32,10 +32,12 @@
 #include "memory/gcLocker.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/java.hpp"
+#include "utilities/slog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
 inline const char* PSOldGen::select_name() {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psOldGen.cpp中的PSOldGen::select_name函数...");
   return UseParallelOldGC ? "ParOldGen" : "PSOldGen";
 }
 
@@ -451,9 +453,9 @@ void PSOldGen::print_on(outputStream* st) const {
 
 void PSOldGen::print_used_change(size_t prev_used) const {
   gclog_or_tty->print(" [%s:", name());
-  gclog_or_tty->print(" "  SIZE_FORMAT "K"
-                      "->" SIZE_FORMAT "K"
-                      "("  SIZE_FORMAT "K)",
+  gclog_or_tty->print(" GC之前老年代内存占用:"  SIZE_FORMAT "K"
+                      "->GC之后老年代内存占用:" SIZE_FORMAT "K"
+                      "(老年代内存容量:"  SIZE_FORMAT "K)",
                       prev_used / K, used_in_bytes() / K,
                       capacity_in_bytes() / K);
   gclog_or_tty->print("]");

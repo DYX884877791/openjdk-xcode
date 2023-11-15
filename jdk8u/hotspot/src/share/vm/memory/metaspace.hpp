@@ -81,6 +81,8 @@ class VirtualSpaceList;
 // allocate() method returns a block for use as a
 // quantum of metadata.
 
+// Metaspace的定义位于hotspot/src/share/vm/memory/metaspace.hpp中，Metaspace表示用来给Klass等元数据分配内存的一个内存空间，通常称为元空间，
+// 每个ClassLoader实例包括启动类加载器都会创建一个对应的Metaspace实例，每个Metaspace实例都有一个SpaceManager实例，通过SpaceManager完成内存分配与管理。
 class Metaspace : public CHeapObj<mtClass> {
   friend class VMStructs;
   friend class SpaceManager;
@@ -89,11 +91,13 @@ class Metaspace : public CHeapObj<mtClass> {
   friend class MetaspaceAux;
 
  public:
+    // MetadataType表示元数据的类型，即只有两种Class相关的数据和非Class相关的数据，设置这两个属性的目的是为了快速的获取指定类型的所有Metachunks的内存使用量和容量，避免遍历所有的classloaders
   enum MetadataType {
     ClassType,
     NonClassType,
     MetadataTypeCount
   };
+    // 枚举MetaspaceType表示元空间的类型
   enum MetaspaceType {
     StandardMetaspaceType,
     BootMetaspaceType,
@@ -118,6 +122,7 @@ class Metaspace : public CHeapObj<mtClass> {
   static size_t align_word_size_up(size_t);
 
   // Aligned size of the metaspace.
+    // //compressed class对应的Metaspace大小
   static size_t _compressed_class_space_size;
 
   static size_t compressed_class_space_size() {
@@ -128,15 +133,21 @@ class Metaspace : public CHeapObj<mtClass> {
     _compressed_class_space_size = size;
   }
 
+    //第一个NonClassType类型的MetaChunk的大小
   static size_t _first_chunk_word_size;
+    //第一个ClassType类型的MetaChunk的大小
   static size_t _first_class_chunk_word_size;
 
+    //commit内存的粒度
   static size_t _commit_alignment;
+    //reserve内存的粒度
   static size_t _reserve_alignment;
 
+    //NonClassType类型的元数据对应的SpaceManager
   SpaceManager* _vsm;
   SpaceManager* vsm() const { return _vsm; }
 
+    //ClassType类型的元数据对应的SpaceManager
   SpaceManager* _class_vsm;
   SpaceManager* class_vsm() const { return _class_vsm; }
   SpaceManager* get_space_manager(MetadataType mdtype) {
@@ -150,12 +161,17 @@ class Metaspace : public CHeapObj<mtClass> {
   MetaWord* allocate(size_t word_size, MetadataType mdtype);
 
   // Virtual Space lists for both classes and other metadata
+    // NonClassType类型的元数据对应的VirtualSpaceList
   static VirtualSpaceList* _space_list;
+    // ClassType类型的元数据对应的VirtualSpaceList，这里ClassType类型的ChunkManager和VirtualSpaceList具体是指开启UseCompressedClassPointers下用来存储Class等元数据的元空间。
   static VirtualSpaceList* _class_space_list;
 
+    // NonClassType类型的元数据对应的ChunkManager
   static ChunkManager* _chunk_manager_metadata;
+    // ClassType类型的元数据对应的ChunkManager
   static ChunkManager* _chunk_manager_class;
 
+    // 打印日志使用
   static const MetaspaceTracer* _tracer;
 
  public:
@@ -192,6 +208,7 @@ class Metaspace : public CHeapObj<mtClass> {
   static void initialize_class_space(ReservedSpace rs);
 #endif
 
+    // 一个简单的记录内存分配结果的数据结构
   class AllocRecord : public CHeapObj<mtClass> {
   public:
     AllocRecord(address ptr, MetaspaceObj::Type type, int byte_size)
@@ -202,7 +219,9 @@ class Metaspace : public CHeapObj<mtClass> {
     int _byte_size;
   };
 
+    // AllocRecord链表的头部元素
   AllocRecord * _alloc_record_head;
+    // AllocRecord链表的尾部元素
   AllocRecord * _alloc_record_tail;
 
   size_t class_chunk_size(size_t word_size);
@@ -212,6 +231,7 @@ class Metaspace : public CHeapObj<mtClass> {
   Metaspace(Mutex* lock, MetaspaceType type);
   ~Metaspace();
 
+    //  ergo_initialize、global_initialize、post_initialize这三个方法都是Metaspace的初始化方法
   static void ergo_initialize();
   static void global_initialize();
   static void post_initialize();
@@ -279,6 +299,8 @@ class Metaspace : public CHeapObj<mtClass> {
 
 };
 
+// MetaspaceAux同样定义在metaspace.hpp中，它定义的属性和方法都是静态的，主要用于外部类获取Metaspace的内存使用情况，如获取Metaspace的当前最大容量的capacity_bytes方法，
+// 获取已使用空间大小的used_bytes方法，获取空闲的空间大小的free_bytes方法，获取已经分配内存的量的committed_bytes方法，获取保留的未分配内存的量的reserved_bytes方法。
 class MetaspaceAux : AllStatic {
   static size_t free_chunks_total_words(Metaspace::MetadataType mdtype);
 
@@ -345,7 +367,10 @@ class MetaspaceAux : AllStatic {
   static size_t used_bytes(Metaspace::MetadataType mdtype) {
     return used_words(mdtype) * BytesPerWord;
   }
+  // used_bytes / used_bytes_slow
+  //      这两个方法都是获取Metaspace已使用内存大小的方法，前者是通过静态属性_used_words快速获取的，后者就是通过遍历所有的classloaders累加计算出来的
   static size_t used_bytes() {
+      //BytesPerWord表示一个字段对应的字节数
     return used_words() * BytesPerWord;
   }
 
@@ -392,6 +417,9 @@ class MetaspaceAux : AllStatic {
 // This class implements a policy for inducing GC's to recover
 // Metaspaces.
 
+// MetaspaceGC并不是像类名一样用来对Metaspace执行GC的，仅仅用来维护属性_capacity_until_GC，当Metaspace的已分配内存值达到该属性就会触发GC，
+// GC结束后_capacity_until_GC的值会增加直到达到参数MaxMetaspaceSize设置的Metaspace的最大值。
+// MetaspaceGC的定义在hotspot/src/shared/vm/memory/metaspace.hpp中，包含的属性只有三个
 class MetaspaceGC : AllStatic {
 
   // The current high-water-mark for inducing a GC.

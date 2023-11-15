@@ -37,6 +37,7 @@
 //
 // Note: all sizes are in oops
 
+// ageTable的定义在hotspot\src\share\vm\gc_implementation\shared\ageTable.hpp中，用来记录不同分代年龄的对象的大小，然后据此动态调整tenuring_threshold，重要属性只有一个
 class ageTable VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
 
@@ -45,6 +46,8 @@ class ageTable VALUE_OBJ_CLASS_SPEC {
   enum { table_size = markOopDesc::max_age + 1 };
 
   // instance variables
+  // sizes就是保存不同分代年龄的对象的大小的数组。重点关注以下方法的实现，clear方法用于将sizes数组中各元素的值置为0，add方法用于增加某个分代年龄下的对象大小，
+  // compute_tenuring_threshold方法用于计算新的tenuring_threshold，保证to区中已使用空间占总空间的比例满足TargetSurvivorRatio的要求
   size_t sizes[table_size];
 
   // constructor.  "global" indicates that this is the global age table

@@ -41,6 +41,7 @@ class HasAccumulatedModifiedOopsClosure : public KlassClosure {
  public:
   HasAccumulatedModifiedOopsClosure() : _found(false) {}
   void do_klass(Klass* klass) {
+      //只要找到一个has_accumulated_modified_oops为true的_found就为true
     if (_found) {
       return;
     }
@@ -54,8 +55,10 @@ class HasAccumulatedModifiedOopsClosure : public KlassClosure {
   }
 };
 
+// mod_union_is_clear方法用于判断是否存在_accumulated_modified_oops属性为1的Klass
 bool KlassRemSet::mod_union_is_clear() {
   HasAccumulatedModifiedOopsClosure closure;
+    //遍历所有的Klass
   ClassLoaderDataGraph::classes_do(&closure);
 
   return !closure.found();
@@ -66,6 +69,7 @@ class ClearKlassModUnionClosure : public KlassClosure {
  public:
   void do_klass(Klass* klass) {
     if (klass->has_accumulated_modified_oops()) {
+        //清除_accumulated_modified_oops标识
       klass->clear_accumulated_modified_oops();
     }
   }
@@ -73,5 +77,6 @@ class ClearKlassModUnionClosure : public KlassClosure {
 
 void KlassRemSet::clear_mod_union() {
   ClearKlassModUnionClosure closure;
+    //遍历所有的Klass
   ClassLoaderDataGraph::classes_do(&closure);
 }

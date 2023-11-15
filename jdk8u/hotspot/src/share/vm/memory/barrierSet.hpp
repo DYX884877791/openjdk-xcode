@@ -31,9 +31,20 @@
 // This class provides the interface between a barrier implementation and
 // the rest of the system.
 
+// BarrierSet表示一个数据读写动作的栅栏，跟高速缓存中用来在不同CPU之间同步数据的的Barrier（内存屏障）完全不同，BarrierSet的功能类似于一个拦截器，
+// 在读写动作实际作用于内存前执行某些前置或者后置动作，其定义在hotspot/src/share/vm/memory/barrierSet.hpp中。BarrierSet是一个抽象类，
+// 其类继承关系如下：
+// BarrierSet
+// -ModRefBarrierSet
+// --CardTableModRefBS
+// ---CardTableExtension
+// ---CardTableModRefBSForCTRS
+// ----G1SATBCardTableModRefBS
+// -----G1SATBCardTableLoggingModRefBS
 class BarrierSet: public CHeapObj<mtGC> {
   friend class VMStructs;
 public:
+    // BarrierSet定义了一个枚举Name来描述不同类型的子类
   enum Name {
     ModRef,
     CardTableModRef,
@@ -48,6 +59,7 @@ public:
     None                = 0,
     TargetUninitialized = 1
   };
+  // BarrierSet定义的属性就两个:
 protected:
   int _max_covered_regions;
   Name _kind;
@@ -57,7 +69,15 @@ public:
   BarrierSet() { _kind = Uninit; }
   // To get around prohibition on RTTI.
   BarrierSet::Name kind() { return _kind; }
+
+  // BarrierSet定义的方法都是虚方法，重点关注其基于虚方法实现的内联方法和静态方法的实现。
+
   virtual bool is_a(BarrierSet::Name bsn) = 0;
+
+  // BarrierSet定义了几个虚方法来描述BarrierSet子类支持的动作:
+  // 方法名中的ref表示引用类型的数据，prim表示基本类型的数据，has_read_ref_barrier表示该BarrierSet是在读取引用类型数据时执行的，
+  // has_write_ref_barrier表示该BarrierSet是在写入引用类型数据时执行的，
+  // has_write_ref_pre_barrier表示该BarrierSet是在写入引用类型数据前预先执行的。
 
   // These operations indicate what kind of barriers the BarrierSet has.
   virtual bool has_read_ref_barrier() = 0;
@@ -115,6 +135,11 @@ public:
 
   // The first six operations tell whether such an optimization exists for
   // the particular barrier.
+  // 与上面has_read_ref_barrier等虚方法功能类似的还有如下虚方法：
+  // 即BarrierSet支持的读写数据除了对象字段属性还有数组，MemRegion类型的数据，其定义的方法也可以按照数据类型整体上分为三类：
+  //  1. 读写对象属性类型的数据，如read_ref_field，read_prim_field，write_ref_field，write_prim_field
+  //  2. 读写数组类型的数据，如read_ref_array，read_prim_array，write_ref_array_pre，write_ref_array_pre，write_prim_array，write_ref_array
+  //  3. 读写MemRegion类型的数据，如read_region，write_region
   virtual bool has_read_ref_array_opt() = 0;
   virtual bool has_read_prim_array_opt() = 0;
   virtual bool has_write_ref_array_pre_opt() { return true; }

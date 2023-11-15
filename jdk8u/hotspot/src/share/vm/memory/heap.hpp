@@ -30,27 +30,33 @@
 
 // Blocks
 
+// HeapBlock表示一个内存块，HeapBlock只有一个union联合属性
 class HeapBlock VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
 
  public:
   struct Header {
+      // _length属性表示这个内存块的大小
     size_t  _length;                             // the length in segments
+      // _used属性表示这个内存块是否被占用了
     bool    _used;                               // Used bit
   };
 
  protected:
   union {
+      // 通过_padding属性来保证_header属性对应的内存大小必须是sizeof(int64_t)的整数倍，即按照sizeof(int64_t)对齐，64位下sizeof(int64_t)等于8。Header是一个结构体
     Header _header;
     int64_t _padding[ (sizeof(Header) + sizeof(int64_t)-1) / sizeof(int64_t) ];
                         // pad to 0 mod 8
   };
 
  public:
+    // HeapBlock定义的方法都是操作Header的两个属性的
   // Initialization
   void initialize(size_t length)                 { _header._length = length; set_used(); }
 
   // Accessors
+  // allocated_space方法返回这个内存块可用于分配其他对象的内存地址，this+1即表示HeapBlock本身的内存区域的下一个字节的地址
   void* allocated_space() const                  { return (void*)(this + 1); }
   size_t length() const                          { return _header._length; }
 
@@ -60,12 +66,14 @@ class HeapBlock VALUE_OBJ_CLASS_SPEC {
   bool free()                                    { return !_header._used; }
 };
 
+// FreeBlock继承自HeapBlock，添加了一个_link属性
 class FreeBlock: public HeapBlock {
   friend class VMStructs;
  protected:
   FreeBlock* _link;
 
  public:
+    // FreeBlock添加的方法都是读写_link属性的，可以通过此属性将所有空闲的HeapBlock组成一个链表，便于管理。
   // Initialization
   void initialize(size_t length)             { HeapBlock::initialize(length); _link= NULL; }
 
@@ -77,26 +85,37 @@ class FreeBlock: public HeapBlock {
   void set_link(FreeBlock* link)             { _link = link; }
 };
 
+// CodeHeap就是实际管理汇编代码内存分配的实现，其定义在hotspot/src/share/vm/memory/heap.hpp中
 class CodeHeap : public CHeapObj<mtCode> {
   friend class VMStructs;
  private:
+    // 用于描述CodeHeap对应的一段连续的内存空间
   VirtualSpace _memory;                          // the memory holding the blocks
+    // 用于保存所有的segment的起始地址，记录这些segment的使用情况，通过mark_segmap_as_free方法标记为未分配给Block，通过mark_segmap_as_used方法标记为已分配给Block
   VirtualSpace _segmap;                          // the memory holding the segment map
 
+    // 已分配内存的segments的数量
   size_t       _number_of_committed_segments;
+    // 剩余的未分配内存的保留的segments的数量
   size_t       _number_of_reserved_segments;
+    // 一个segment的大小，一个segment可以理解为一个内存页，是操作系统分配内存的最小粒度，为了避免内存碎片，任意一个Block的大小都必须是segment的整数倍，即任意一个Block会对应N个segment。
   size_t       _segment_size;
+    // segment的大小取log2，用于计算根据内存地址计算所属的segment的序号
   int          _log2_segment_size;
 
+    // 下一待分配给Block的segment的序号
   size_t       _next_segment;
 
+    // 可用的HeapBlock 链表，所有的Block按照地址依次增加的顺序排序，即_freelist是内存地址最小的一个Block
   FreeBlock*   _freelist;
+    // 可用的segments的个数
   size_t       _freelist_segments;               // No. of segments in freelist
 
   // Helper functions
   size_t   size_to_segments(size_t size) const { return (size + _segment_size - 1) >> _log2_segment_size; }
   size_t   segments_to_size(size_t number_of_segments) const { return number_of_segments << _log2_segment_size; }
 
+    //根据地址计算所属的segment的序号
   size_t   segment_for(void* p) const            { return ((char*)p - _memory.low()) >> _log2_segment_size; }
   HeapBlock* block_at(size_t i) const            { return (HeapBlock*)(_memory.low() + (i << _log2_segment_size)); }
 
@@ -124,9 +143,19 @@ class CodeHeap : public CHeapObj<mtCode> {
  public:
   CodeHeap();
 
+  /**
+   * CodeHeap定义的public方法主要有以下几类：
+`  *
+   * 内存初始化，扩展，缩小和释放的，如reserve，release，expand_by，shrink_by等
+   * CodeBlob内存分配和销毁的，如allocate，deallocate
+   * 获取CodeHeap的内存使用情况的，如low_boundary，high，capacity，allocated_capacity等
+   * CodeBlob遍历相关的，如first，next
+   */
   // Heap extents
+  // reserve方法用于CodeHeap的初始化，CodeCache初始化时调用此方法
   bool  reserve(size_t reserved_size, size_t committed_size, size_t segment_size);
   void  release();                               // releases all allocated memory
+  // expand_by方法用于扩展CodeHeap的内存，CodeHeap的内存不足即分配CodeBlob失败时调用
   bool  expand_by(size_t size);                  // expands commited memory by size
   void  shrink_by(size_t size);                  // shrinks commited memory by size
   void  clear();                                 // clears all heap contents
@@ -140,6 +169,7 @@ class CodeHeap : public CHeapObj<mtCode> {
   char* high() const                             { return _memory.high(); }
   char* high_boundary() const                    { return _memory.high_boundary(); }
 
+    //是否在地址范围内
   bool  contains(const void* p) const            { return low_boundary() <= p && p < high(); }
   void* find_start(void* p) const;              // returns the block containing p or NULL
   size_t alignment_unit() const;                // alignment of any block

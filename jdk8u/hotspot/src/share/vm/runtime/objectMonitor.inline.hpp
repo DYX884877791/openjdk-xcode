@@ -97,6 +97,7 @@ inline bool ObjectMonitor::check(TRAPS) {
 
 
 // return number of threads contending for this monitor
+//返回抢占这个锁的线程数
 inline intptr_t ObjectMonitor::contentions() const {
   return _count;
 }

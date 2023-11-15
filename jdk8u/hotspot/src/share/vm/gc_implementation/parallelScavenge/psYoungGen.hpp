@@ -33,6 +33,7 @@
 
 class PSMarkSweepDecorator;
 
+// PS是指Parallel Scavenge
 class PSYoungGen : public CHeapObj<mtGC> {
   friend class VMStructs;
   friend class ParallelScavengeHeap;

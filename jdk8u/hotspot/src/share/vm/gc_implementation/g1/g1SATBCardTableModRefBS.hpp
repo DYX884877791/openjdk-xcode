@@ -37,6 +37,10 @@ class G1SATBCardTableLoggingModRefBS;
 // This barrier is specialized to use a logging barrier to support
 // snapshot-at-the-beginning marking.
 
+// G1SATBCardTableModRefBS继承自CardTableModRefBSForCTRS，定义在hotspot/src/share/vm/gc_implementation/g1/g1SATBCardTableModRefBS.hpp中，
+// 是为了支持G1的SATB（snapshot-at-the-beginning）并发标记算法而定制的特殊BarrierSet，改写了父类CardTableModRefBS的诸多方法的实现
+//  CardTableModRefBS中只用到了dirty_card和clean_card两种CardValue，G1SATBCardTableModRefBS增加了claimed_card和deferred_card两种，
+//  并自定义了一个扩展的g1_young_gen，表示该卡表项对应的内存区域是一个young gen
 class G1SATBCardTableModRefBS: public CardTableModRefBSForCTRS {
 protected:
   enum G1CardValues {
@@ -57,13 +61,16 @@ public:
     return bsn == BarrierSet::G1SATBCT || CardTableModRefBS::is_a(bsn);
   }
 
+    // 该方法在CardTableModRefBS中返回false，表示不支持在写入引用类型的属性时执行预处理
   virtual bool has_write_ref_pre_barrier() { return true; }
 
   // This notes that we don't need to access any BarrierSet data
   // structures, so this can be called from a static context.
   template <class T> static void write_ref_field_pre_static(T* field, oop newVal) {
     T heap_oop = oopDesc::load_heap_oop(field);
+      //如果oop非空
     if (!oopDesc::is_null(heap_oop)) {
+        //如果采用指针压缩，即T是narrowOop时需要做decode还原
       enqueue(oopDesc::decode_heap_oop(heap_oop));
     }
   }
@@ -108,10 +115,12 @@ public:
   }
 
   void set_card_claimed(size_t card_index) {
+        //获取对应卡表项的值
       jbyte val = _byte_map[card_index];
       if (val == clean_card_val()) {
         val = (jbyte)claimed_card_val();
       } else {
+          //使用或运算，会保留卡表项原来的状态
         val |= (jbyte)claimed_card_val();
       }
       _byte_map[card_index] = val;
@@ -128,6 +137,7 @@ public:
   }
 };
 
+//  G1SATBCardTableLoggingModRefBSChangedListener的定义和G1SATBCardTableLoggingModRefBS在同一个文件中，表示G1下CardTable内存变化后触发的动作
 class G1SATBCardTableLoggingModRefBSChangedListener : public G1MappingChangedListener {
  private:
   G1SATBCardTableLoggingModRefBS* _card_table;
@@ -141,9 +151,12 @@ class G1SATBCardTableLoggingModRefBSChangedListener : public G1MappingChangedLis
 
 // Adds card-table logging to the post-barrier.
 // Usual invariant: all dirty cards are logged in the DirtyCardQueueSet.
+// G1SATBCardTableLoggingModRefBS跟G1SATBCardTableLoggingModRefBS定义在同一个g1SATBCardTableModRefBS.hpp中，
+// G1实际使用的是G1SATBCardTableLoggingModRefBS作为BarrierSet的实现类，该类同样对父类的实现做了大幅调整，以适配G1的垃圾回收机制
 class G1SATBCardTableLoggingModRefBS: public G1SATBCardTableModRefBS {
   friend class G1SATBCardTableLoggingModRefBSChangedListener;
  private:
+    // G1SATBCardTableLoggingModRefBS新增了两个属性，这两个都是在构造方法中完成初始化
   G1SATBCardTableLoggingModRefBSChangedListener _listener;
   DirtyCardQueueSet& _dcqs;
  public:
@@ -155,9 +168,11 @@ class G1SATBCardTableLoggingModRefBS: public G1SATBCardTableModRefBS {
   G1SATBCardTableLoggingModRefBS(MemRegion whole_heap,
                                  int max_covered_regions);
 
+    // G1SATBCardTableLoggingModRefBS将父类initialize的实现改成了空实现，增加了一个有参数的initialize方法完成其初始化
   virtual void initialize() { }
   virtual void initialize(G1RegionToSpaceMapper* mapper);
 
+    // G1SATBCardTableLoggingModRefBS下resize_covered_region不会被调用，因为covered元素只有一个，就是表示整个堆内存的whole_heap，所以将该方法改成一个空实现
   virtual void resize_covered_region(MemRegion new_region) { ShouldNotReachHere(); }
 
   bool is_a(BarrierSet::Name bsn) {

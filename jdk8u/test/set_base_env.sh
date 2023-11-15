@@ -1,5 +1,5 @@
 #!/bin/bash
-set -ex
+set -e
 
 # 如果使用dirname $0的话，$0保存了被执行脚本的程序名称。注意，它保存的是以二进制方式执行的脚本名而非以source方式加载的脚本名称。
 # 例如，执行a.sh时，a.sh中的$0的值是a.sh，如果a.sh执行b.sh，b.sh中的$0的值是b.sh，如果a.sh中source b.sh，则b.sh中的$0的值为a.sh。

@@ -527,8 +527,18 @@ void VMThread::loop() {
 
       // If we are at a safepoint we will evaluate all the operations that
       // follow that also require a safepoint
+        //已经获取了一个vm_operation。
       if (_cur_vm_operation->evaluate_at_safepoint()) {
 
+          //如果该vm_operation需要在安全点内执行
+          /**
+           * 在这里重点解释下在安全点内执行的vm_opration的过程，VMThread通过不断循环从_vm_queue中获取一个或者几个需要在安全点内执行的vm_opertion，
+           * 然后在准备执行这些vm_opration之前先通过调用SafepointSynchronize::begin()进入到安全点状态，在执行完这些vm_opration之后，
+           * 调用SafepointSynchronize::end()，退出安全点模式，恢复之前暂停的所有线程让他们继续运行。
+           * 对于安全点这块的逻辑挺复杂的，仅仅需要记住在进入安全点模式的时候会持有Threads_lock这把线程互斥锁，对线程的操作都需要获取到这把锁才能继续执行，
+           * 并且还会设置安全点的状态，如果正在进入安全点过程中设置_state为_synchronizing，当所有线程都完全进入了安全点之后设置_state为_synchronized状态，
+           * 退出的时候设置为_not_synchronized状态。
+           */
         _vm_queue->set_drain_list(safepoint_ops); // ensure ops can be scanned
 
           // 进入线程安全点，准备做事。
@@ -577,6 +587,7 @@ void VMThread::loop() {
         _vm_queue->set_drain_list(NULL);
 
         // Complete safepoint synchronization
+          //退出安全点
         SafepointSynchronize::end();
 
       } else {  // not a safepoint operation

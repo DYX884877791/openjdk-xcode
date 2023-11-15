@@ -80,8 +80,10 @@ void GcThreadCountClosure::do_thread(Thread* thread) {
   _count++;
 }
 
+// 在是CollectedHeap初始化完成后调用的，用来设置CollectedHeap对应的MemoryPool和GCMemoryManager
 void MemoryService::set_universe_heap(CollectedHeap* heap) {
   CollectedHeap::Name kind = heap->kind();
+    //区分不同的堆类型，分别处理
   switch (kind) {
     case CollectedHeap::GenCollectedHeap : {
       add_gen_collected_heap_info(GenCollectedHeap::heap());
@@ -103,16 +105,19 @@ void MemoryService::set_universe_heap(CollectedHeap* heap) {
   }
 
   // set the GC thread count
+    //会遍历所有的GC线程
   GcThreadCountClosure gctcc;
   heap->gc_threads_do(&gctcc);
   int count = gctcc.count();
   if (count > 0) {
+      //设置GC线程数
     _minor_gc_manager->set_num_gc_threads(count);
     _major_gc_manager->set_num_gc_threads(count);
   }
 
   // All memory pools and memory managers are initialized.
   //
+    //初始化GCStatInfo
   _minor_gc_manager->initialize_gc_stat_info();
   _major_gc_manager->initialize_gc_stat_info();
 }
@@ -130,6 +135,7 @@ void MemoryService::add_gen_collected_heap_info(GenCollectedHeap* heap) {
   if (two_gen_policy != NULL) {
     GenerationSpec** specs = two_gen_policy->generations();
     Generation::Name kind = specs[0]->name();
+      //区分不同的Generation设置_minor_gc_manager
     switch (kind) {
       case Generation::DefNew:
         _minor_gc_manager = MemoryManager::get_copy_memory_manager();
@@ -144,6 +150,7 @@ void MemoryService::add_gen_collected_heap_info(GenCollectedHeap* heap) {
         guarantee(false, "Unrecognized generation spec");
         break;
     }
+      //设置_major_gc_manager
     if (policy->is_mark_sweep_policy()) {
       _major_gc_manager = MemoryManager::get_msc_memory_manager();
 #if INCLUDE_ALL_GCS
@@ -156,9 +163,12 @@ void MemoryService::add_gen_collected_heap_info(GenCollectedHeap* heap) {
   } else {
     guarantee(false, "Non two-gen policy");
   }
+    //添加manager
   _managers_list->append(_minor_gc_manager);
   _managers_list->append(_major_gc_manager);
 
+    //区分不同的Generation，为eden和survivor区分别创建适配的MemoryPool，并添加到_pools_list中
+    //参考add_psYoung_memory_pool方法的实现
   add_generation_memory_pool(heap->get_gen(minor), _major_gc_manager, _minor_gc_manager);
   add_generation_memory_pool(heap->get_gen(major), _major_gc_manager);
 }
@@ -169,11 +179,13 @@ void MemoryService::add_gen_collected_heap_info(GenCollectedHeap* heap) {
 // The collector for ParallelScavengeHeap will have two memory managers.
 void MemoryService::add_parallel_scavenge_heap_info(ParallelScavengeHeap* heap) {
   // Two managers to keep statistics about _minor_gc_manager and _major_gc_manager GC.
+    //设置对应的_minor_gc_manager和_major_gc_manager
   _minor_gc_manager = MemoryManager::get_psScavenge_memory_manager();
   _major_gc_manager = MemoryManager::get_psMarkSweep_memory_manager();
   _managers_list->append(_minor_gc_manager);
   _managers_list->append(_major_gc_manager);
 
+    //为eden和survivor区分别创建适配的MemoryPool，并添加到_pools_list中
   add_psYoung_memory_pool(heap->young_gen(), _major_gc_manager, _minor_gc_manager);
   add_psOld_memory_pool(heap->old_gen(), _major_gc_manager);
 }
@@ -181,11 +193,13 @@ void MemoryService::add_parallel_scavenge_heap_info(ParallelScavengeHeap* heap) 
 void MemoryService::add_g1_heap_info(G1CollectedHeap* g1h) {
   assert(UseG1GC, "sanity");
 
+    //设置对应的_minor_gc_manager和_major_gc_manager
   _minor_gc_manager = MemoryManager::get_g1YoungGen_memory_manager();
   _major_gc_manager = MemoryManager::get_g1OldGen_memory_manager();
   _managers_list->append(_minor_gc_manager);
   _managers_list->append(_major_gc_manager);
 
+    //为eden和survivor区分别创建适配的MemoryPool，并添加到_pools_list中
   add_g1YoungGen_memory_pool(g1h, _major_gc_manager, _minor_gc_manager);
   add_g1OldGen_memory_pool(g1h, _major_gc_manager, _minor_gc_manager);
 }
@@ -463,23 +477,27 @@ void MemoryService::track_memory_pool_usage(MemoryPool* pool) {
   }
 }
 
+// gc_begin和gc_end方法是对GCMemoryManager的gc_begin和gc_end的再封装
 void MemoryService::gc_begin(bool fullGC, bool recordGCBeginTime,
                              bool recordAccumulatedGCTime,
                              bool recordPreGCUsage, bool recordPeakUsage) {
 
   GCMemoryManager* mgr;
+    //根据是否fullGC找到对应的GCMemoryManager
   if (fullGC) {
     mgr = _major_gc_manager;
   } else {
     mgr = _minor_gc_manager;
   }
   assert(mgr->is_gc_memory_manager(), "Sanity check");
+    //执行gc_begin
   mgr->gc_begin(recordGCBeginTime, recordPreGCUsage, recordAccumulatedGCTime);
 
   // Track the peak memory usage when GC begins
   if (recordPeakUsage) {
     for (int i = 0; i < _pools_list->length(); i++) {
       MemoryPool* pool = _pools_list->at(i);
+        //记录GC开始前的内存使用
       pool->record_peak_memory_usage();
     }
   }
@@ -500,6 +518,7 @@ void MemoryService::gc_end(bool fullGC, bool recordPostGCUsage,
   assert(mgr->is_gc_memory_manager(), "Sanity check");
 
   // register the GC end statistics and memory usage
+    //GC完成，记录GC的耗时，GC后的内存使用情况等
   mgr->gc_end(recordPostGCUsage, recordAccumulatedGCTime, recordGCEndTime,
               countCollection, cause, allMemoryPoolsAffected);
 }

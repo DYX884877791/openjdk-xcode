@@ -152,7 +152,7 @@ class markOopDesc: public oopDesc {
          unlocked_value           = 1,  // 无锁状态值，mark word 最后3位为001，转为10进制为1。
          monitor_value            = 2,  // 重量级锁状态值，mark word 最后2位为10，转为10进制为2。
          marked_value             = 3,  // mark word 最后2位为11，转为10进制为3。作用比较复杂，1：当锁升级为重量级锁的过程中，会将markword设置为这个值。2：当对象GC时也要使用这个值。
-         biased_lock_pattern      = 5   // 偏向锁状态值，mark word 最后3位为101，转为10进制为5。
+         biased_lock_pattern      = 5   // 偏向锁状态值，mark word 最后3位为101，转为10进制为5。biased_lock_pattern仅仅只是表示JVM已经开启了偏向锁，当前对象支持偏向锁。具体是否持有偏向锁需要通过biased_locker方法来判断
   };
 
   enum { no_hash                  = 0 };  // no hash value assigned
@@ -174,6 +174,7 @@ class markOopDesc: public oopDesc {
   bool has_bias_pattern() const {
     return (mask_bits(value(), biased_lock_mask_in_place) == biased_lock_pattern);
   }
+  // 判断用来存储持有当前对象偏向锁的线程指针是否为空，为空则表示该对象的偏向锁未被其他线程占有，不为空则表示已经被其他线程占用了。
   JavaThread* biased_locker() const {
     assert(has_bias_pattern(), "should not call this otherwise");
     return (JavaThread*) ((intptr_t) (mask_bits(value(), ~(biased_lock_mask_in_place | age_mask_in_place | epoch_mask_in_place))));
@@ -200,6 +201,7 @@ class markOopDesc: public oopDesc {
   }
   // Prototype mark for initialization
   static markOop biased_locking_prototype() {
+      //biased_lock_pattern表示该对象支持偏向锁
     return markOop( biased_lock_pattern );
   }
 
@@ -275,14 +277,17 @@ class markOopDesc: public oopDesc {
   }
   BasicLock* locker() const {
     assert(has_locker(), "check");
+      //获取对象头中保存的BasicLock
     return (BasicLock*) value();
   }
   bool has_monitor() const {
     return ((value() & monitor_value) != 0);
   }
   ObjectMonitor* monitor() const {
+      //断定为重量级锁
     assert(has_monitor(), "check");
     // Use xor instead of &~ to provide one extra tag-bit check.
+      //将Mark Word值转化成指针，指向的就是obj的ObjectMonitor锁对象
     return (ObjectMonitor*) (value() ^ monitor_value);
   }
   bool has_displaced_mark_helper() const {
@@ -290,7 +295,9 @@ class markOopDesc: public oopDesc {
   }
   markOop displaced_mark_helper() const {
     assert(has_displaced_mark_helper(), "check");
+      //去除对象头中的锁标识位
     intptr_t ptr = (value() & ~monitor_value);
+      //注意此处是将ptr强转成markOop* 指针，然后获取该指针指向的值，即该对象原来的对象头
     return *(markOop*)ptr;
   }
   void set_displaced_mark_helper(markOop m) const {

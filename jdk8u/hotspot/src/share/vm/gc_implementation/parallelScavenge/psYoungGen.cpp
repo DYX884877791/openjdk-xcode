@@ -32,6 +32,7 @@
 #include "gc_implementation/shared/spaceDecorator.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/java.hpp"
+#include "utilities/slog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -797,12 +798,13 @@ void PSYoungGen::compact() {
 
 void PSYoungGen::print() const { print_on(tty); }
 void PSYoungGen::print_on(outputStream* st) const {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psYoungGen.cpp中的PSYoungGen::print_on函数...");
   st->print(" %-15s", "PSYoungGen");
   if (PrintGCDetails && Verbose) {
-    st->print(" total " SIZE_FORMAT ", used " SIZE_FORMAT,
+    st->print(" total(=eden+from) " SIZE_FORMAT ", used(=eden+from) " SIZE_FORMAT,
                capacity_in_bytes(), used_in_bytes());
   } else {
-    st->print(" total " SIZE_FORMAT "K, used " SIZE_FORMAT "K",
+    st->print(" total(=eden+from) " SIZE_FORMAT "K, used(=eden+from) " SIZE_FORMAT "K",
                capacity_in_bytes()/K, used_in_bytes()/K);
   }
   virtual_space()->print_space_boundaries_on(st);
@@ -813,10 +815,11 @@ void PSYoungGen::print_on(outputStream* st) const {
 
 // Note that a space is not printed before the [NAME:
 void PSYoungGen::print_used_change(size_t prev_used) const {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psYoungGen.cpp中的PSYoungGen::print_used_change函数...");
   gclog_or_tty->print("[%s:", name());
-  gclog_or_tty->print(" "  SIZE_FORMAT "K"
-                      "->" SIZE_FORMAT "K"
-                      "("  SIZE_FORMAT "K)",
+  gclog_or_tty->print(" GC之前新生代内存占用:"  SIZE_FORMAT "K"
+                      "->GC之后新生代内存占用:" SIZE_FORMAT "K"
+                      "(新生代内存容量:"  SIZE_FORMAT "K)",
                       prev_used / K, used_in_bytes() / K,
                       capacity_in_bytes() / K);
   gclog_or_tty->print("]");

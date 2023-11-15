@@ -34,6 +34,8 @@
 class OopClosure;
 class Generation;
 
+// ModRefBarrierSet继承自BarrierSet，表示一个只支持引用字段类型修改的BarrierSet，
+// ModRefBarrierSet在同目录的modRefBarrierSet.hpp中，ModRefBarrierSet提供了BarrierSet中定义的虚方法的空实现，同时新增了两个虚方法。
 class ModRefBarrierSet: public BarrierSet {
 public:
 
@@ -43,6 +45,7 @@ public:
     return bsn == BarrierSet::ModRef;
   }
 
+  // ModRefBarrierSet中用来描述其支持的动作类型的方法的实现如下
   // Barriers only on ref writes.
   bool has_read_ref_barrier() { return false; }
   bool has_read_prim_barrier() { return false; }

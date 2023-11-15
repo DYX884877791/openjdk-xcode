@@ -39,7 +39,7 @@
 // x86 implementations.
 
 // ICache继承自AbstractICache，表示一个用来更新处理器的汇编指令缓存的接口，任何时候JVM修改了汇编指令，就必须刷新指令缓存。
-// AbstractICache定义在hotspot src/share/vm/runtime/icache.hpp中，其定义的属性只有一个
+// AbstractICache定义在hotspot/src/share/vm/runtime/icache.hpp中，其定义的属性只有一个
 // ICache的实现跟特定的CPU架构有关，通过icache.hpp中的宏定义引入
 class ICache : public AbstractICache {
  public:

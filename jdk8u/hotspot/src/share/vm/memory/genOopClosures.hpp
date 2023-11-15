@@ -95,6 +95,7 @@ class OopsInKlassOrGenClosure: public OopsInGenClosure {
     assert(k == NULL || _scanned_klass == NULL, "Must be");
     _scanned_klass = k;
   }
+  // KlassScanClosure会调用set_scanned_klass来设置
   bool is_scanning_a_klass() { return _scanned_klass != NULL; }
   void do_klass_barrier();
 };
@@ -125,6 +126,8 @@ class ScanClosure: public OopsInKlassOrGenClosure {
 // This closure only performs barrier store calls on
 // pointers into the DefNewGeneration. This is less
 // precise, but faster, than a ScanClosure
+// FastScanClosure用于遍历年轻代中的存活对象oop，如果该对象没有promote，则执行promote，根据对象的分代年龄将对象拷贝到to区或者老年代，并将拷贝的目标地址写入对象头中；
+// 然后修改oop使其指向对象的新地址，即对象头中的forward指针；最后如果_scanned_klass不为空则标记该klass的oop发生了修改，如果_gc_barrier为true，则会将对象地址对应的卡表项置为youngergen_card。
 class FastScanClosure: public OopsInKlassOrGenClosure {
  protected:
   DefNewGeneration* _g;
@@ -142,6 +145,7 @@ class FastScanClosure: public OopsInKlassOrGenClosure {
   }
 };
 
+// KlassScanClosure与FastScanClosure配合使用，用来遍历所引用的oop发生修改的Klass对应的类Class实例，遍历逻辑就是FastScanClosure。
 class KlassScanClosure: public KlassClosure {
   OopsInKlassOrGenClosure* _scavenge_closure;
   // true if the the modified oops state should be saved.
@@ -182,6 +186,7 @@ class FilteringClosure: public ExtendedOopClosure {
 // NOTE: very much like ScanClosure but not derived from
 //  OopsInGenClosure -- weak references are processed all
 //  at once, with no notion of which generation they were in.
+// ScanWeakRefClosure用于扫描弱引用的
 class ScanWeakRefClosure: public OopClosure {
  protected:
   DefNewGeneration* _g;

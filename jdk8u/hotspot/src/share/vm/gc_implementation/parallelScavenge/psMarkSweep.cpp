@@ -53,6 +53,7 @@
 #include "services/memoryService.hpp"
 #include "utilities/events.hpp"
 #include "utilities/stack.inline.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif // INCLUDE_JFR
@@ -108,6 +109,7 @@ void PSMarkSweep::invoke(bool maximum_heap_compaction) {
 // This method contains no policy. You should probably
 // be calling invoke() instead.
 bool PSMarkSweep::invoke_no_policy(bool clear_all_softrefs) {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psMarkSweep.cpp中的PSMarkSweep::invoke_no_policy函数...");
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
   assert(ref_processor() != NULL, "Sanity");
 

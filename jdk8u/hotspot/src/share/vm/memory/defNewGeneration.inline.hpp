@@ -60,6 +60,7 @@ inline void DefNewGeneration::KeepAliveClosure::do_oop_work(T* p) {
   // extra check probably isn't worthwhile.
   if (Universe::heap()->is_in_reserved(p)) {
     oop obj = oopDesc::load_decode_heap_oop_not_null(p);
+      //将对应的卡表项设置为youngergen_card，而非脏的
     _rs->inline_write_ref_field_gc(p, obj);
   }
 }
@@ -82,6 +83,7 @@ inline void DefNewGeneration::FastKeepAliveClosure::do_oop_work(T* p) {
   // we set a younger_gen card if we have an older->youngest
   // generation pointer.
   oop obj = oopDesc::load_decode_heap_oop_not_null(p);
+    //同KeepAliveClosure的实现，多了一个地址范围的判断
   if (((HeapWord*)obj < _boundary) && Universe::heap()->is_in_reserved(p)) {
     _rs->inline_write_ref_field_gc(p, obj);
   }

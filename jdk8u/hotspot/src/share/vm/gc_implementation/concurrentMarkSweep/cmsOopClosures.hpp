@@ -367,6 +367,7 @@ class CMSInnerParMarkAndPushClosure: public MetadataAwareOopClosure {
 // A parallel (MT) version of the above, used when
 // reference processing is parallel; the only difference
 // is in the do_oop method.
+// CMSParKeepAliveClosure用于将某个对象标记成存活的，底层依赖于BitMap
 class CMSParKeepAliveClosure: public MetadataAwareOopClosure {
  private:
   MemRegion     _span;

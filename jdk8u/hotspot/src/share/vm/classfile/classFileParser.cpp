@@ -335,6 +335,7 @@ inline Symbol* check_symbol_at(constantPoolHandle cp, int index) {
 }
 
 constantPoolHandle ClassFileParser::parse_constant_pool(TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/classfile/classFileParser.cpp中的ClassFileParser::parse_constant_pool函数...");
   ClassFileStream* cfs = stream();
   constantPoolHandle nullHandle;
 
@@ -344,9 +345,11 @@ constantPoolHandle ClassFileParser::parse_constant_pool(TRAPS) {
     length >= 1, "Illegal constant pool size %u in class file %s",
     length, CHECK_(nullHandle));
     // 调用ConstantPool::allocate()创建ConstantPool对象
+    // length代表当前class文件的常量池中一共包含多少个常量池元素，该数值由javac编译器对.java文件编译时分析计算得出
   ConstantPool* constant_pool = ConstantPool::allocate(_loader_data, length,
                                                         CHECK_(nullHandle));
   _cp = constant_pool; // save in case of errors
+  // 这里的cp是constantPoolHandle类型...
   constantPoolHandle cp (THREAD, constant_pool);
 
   // parsing constant pool entries

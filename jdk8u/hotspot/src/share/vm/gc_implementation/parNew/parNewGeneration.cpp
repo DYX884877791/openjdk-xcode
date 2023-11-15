@@ -54,6 +54,7 @@
 #include "utilities/copy.hpp"
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/workgroup.hpp"
+#include "utilities/slog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -914,6 +915,7 @@ void ParNewGeneration::collect(bool   full,
                                bool   clear_all_soft_refs,
                                size_t size,
                                bool   is_tlab) {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parNew/parNewGeneration.cpp中的ParNewGeneration::collect函数...");
   assert(full || size > 0, "otherwise we don't want to collect");
 
   GenCollectedHeap* gch = GenCollectedHeap::heap();

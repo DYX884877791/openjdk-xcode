@@ -39,15 +39,34 @@ class STWGCTimer;
 
 // DefNewGeneration is a young generation containing eden, from- and
 // to-space.
+// 在JVM内部提供了多种方式来实现新生代的内存，如DefNewGeneration、ParNewGeneration和ASParNewGeneration等，由虚拟机的启动参数决定最终采用哪种方式进行实现。
+// DefNewGeneration是一个young generation，包含了eden、from and to内存区，当虚拟机启动参数中没有指定垃圾回收算法时，默认使用该方式实现新生代
+// DefNew: 是使用-XX:+UseSerialGC（新生代，老年代都使用串行回收收集器）时启用
+// ParNew: 是使用-XX:+UseParNewGC（新生代使用并行收集器，老年代使用串行回收收集器）或者-XX:+UseConcMarkSweepGC(新生代使用并行收集器，老年代使用CMS)时启用。
+//
+// 原本HotSpotVM里并没有并行GC，当时只有NewGeneration。新生代，老年代都使用串行回收收集。后来准备加入新生代并行GC，就把NewGeneration改名为DefNewGeneration，然后把新加的并行版叫做ParNewGeneration。
+// DefNewGeneration、ParNewGeneration都在Hotspot VM”分代式GC框架“内。但后来有个开发不愿意被这个框架憋着(证明了那句：所有壮举都不是在框架内产生的)，自已硬写了个新的并行GC。
+// 测试后效果还不错。于是这个也放入VM的GC中。这就是我们现在看到的ParallelScavenge。
+//
+//  这个时候就出现个两个新生代的并行GC收集器：ParNewGeneration，ParallelScavenge。
+//
+//  (R大： Scavenge或者叫scavenging GC，其实就是copying GC的另一种叫法而已。HotSpot VM里的GC都是在minor GC收集器里用scavenging的，DefNew、ParNew和ParallelScavenge都是，
+//  只不过DefNew是串行的copying GC，而后两者是并行的copying GC。 由此名字就可以知道，“ParallelScavenge”的初衷就是把“scavenge”给并行化。换句话说就是把minor GC并行化。至于full GC，那不是当初关注的重点。 )
 
+// DefNewGeneration继承自Generation，其定义在defNewGeneration.hpp中
+// 表示默认配置下CMS算法使用的年轻代
 class DefNewGeneration: public Generation {
   friend class VMStructs;
 
 protected:
+    //对老年代的引用，初始化时为null，第一次GC时会赋值
   Generation* _next_gen;
+    //将对象拷贝到老年代的分代年龄阈值，大于该值拷贝到老年代，否则拷贝到to区，该值在初始化时赋值成参数MaxTenuringThreshold，默认是15；每次GC结束后都会通过ageTable调整。
   uint        _tenuring_threshold;   // Tenuring threshold for next collection.
+    //记录不同分代年龄的对象的总大小
   ageTable    _age_table;
   // Size of object to pretenure in words; command line provides bytes
+  //表示年轻代中允许分配的对象的最大字宽数，默认是0，即无限制
   size_t      _pretenure_size_threshold_words;
 
   ageTable*   age_table() { return &_age_table; }
@@ -56,8 +75,10 @@ protected:
   // happen.
   void   init_assuming_no_promotion_failure();
   // True iff a promotion has failed in the current collection.
+  //记录是否出现promotion失败的oop
   bool   _promotion_failed;
   bool   promotion_failed() { return _promotion_failed; }
+    //记录promotion失败的对象信息
   PromotionFailedInfo _promotion_failed_info;
 
   // Handling promotion failure.  A young generation collection
@@ -93,17 +114,22 @@ protected:
 
   // Together, these keep <object with a preserved mark, mark value> pairs.
   // They should always contain the same number of elements.
+  //记录promotion失败需要被保留的oop，如果对象头中包含锁，分代年龄等非初始化状态的信息，则需要单独保留，否则无法恢复
   Stack<oop, mtGC>     _objs_with_preserved_marks;
+    //记录promotion失败需要被保留的对象头
   Stack<markOop, mtGC> _preserved_marks_of_objs;
 
   // Promotion failure handling
+  //用来遍历_promo_failure_scan_stack中的oop所引用的其他对象
   ExtendedOopClosure *_promo_failure_scan_stack_closure;
   void set_promo_failure_scan_stack_closure(ExtendedOopClosure *scan_stack_closure) {
     _promo_failure_scan_stack_closure = scan_stack_closure;
   }
 
+    //保存promotion失败的oop
   Stack<oop, mtGC> _promo_failure_scan_stack;
   void drain_promo_failure_scan_stack(void);
+    //是否应该处理_promo_failure_scan_stack中保存的oop
   bool _promo_failure_drain_in_progress;
 
   // Performance Counters
@@ -113,10 +139,13 @@ protected:
   CSpaceCounters*      _to_counters;
 
   // sizing information
+  //当年轻代达到最大内存时对应的eden区的内存，即eden区的最大内存
   size_t               _max_eden_size;
+    //当年轻代达到最大内存时对应的survivor区的内存，即survivor区的最大内存
   size_t               _max_survivor_size;
 
   // Allocation support
+  // 是否从to区中分配对象
   bool _should_allocate_from_space;
   bool should_allocate_from_space() const {
     return _should_allocate_from_space;
@@ -132,10 +161,13 @@ protected:
   void adjust_desired_tenuring_threshold(GCTracer &tracer);
 
   // Spaces
+  //三个内存区
   EdenSpace*       _eden_space;
   ContiguousSpace* _from_space;
+    //注意to区正常情况下都是空的，只在垃圾回收的时候才使用
   ContiguousSpace* _to_space;
 
+    //计时器
   STWGCTimer* _gc_timer;
 
   enum SomeProtectedConstants {
@@ -146,12 +178,16 @@ protected:
 
   // Return the size of a survivor space if this generation were of size
   // gen_size.
+    //根据SurvivorRatio计算survivor的最大内存，该属性表示年轻代与survivor区内存的比值，默认是8,即默认配置下
+    //survivor区约占年轻代内存的10分之一
   size_t compute_survivor_size(size_t gen_size, size_t alignment) const {
     size_t n = gen_size / (SurvivorRatio + 2);
+      //向下做内存取整
     return n > alignment ? align_size_down(n, alignment) : alignment;
   }
 
  public:  // was "protected" but caused compile error on win32
+    //  IsAliveClosure用来判断某个oop是否是存活的
   class IsAliveClosure: public BoolObjectClosure {
     Generation* _g;
   public:
@@ -170,6 +206,8 @@ protected:
     virtual void do_oop(narrowOop* p);
   };
 
+  // FastKeepAliveClosure继承自KeepAliveClosure，只适用于DefNewGeneration，用于将某个oop标记成存活状态，具体来说就是将该对象拷贝到to区或者老年代，
+  // 然后更新对象的对象头指针和BS对应的卡表项，从而让is_forwarded方法返回true
   class FastKeepAliveClosure: public KeepAliveClosure {
   protected:
     HeapWord* _boundary;
@@ -191,6 +229,7 @@ protected:
     void do_void();
   };
 
+  // FastEvacuateFollowersClosure比较特殊，主要用来遍历所有被promote到老年代的对象，恢复他们的对象头，并且遍历其包含的所有引用类型属性
   class FastEvacuateFollowersClosure: public VoidClosure {
     GenCollectedHeap* _gch;
     int _level;
@@ -237,6 +276,9 @@ protected:
   HeapWord** end_addr() const;
 
   // Thread-local allocation buffers
+  // supports_tlab_allocation / tlab_capacity / tlab_used / unsafe_max_tlab_alloc
+  //     这四个方法都是分配TLAB时使用的，其调用方主要是GenCollectedHeap
+  // 在开启TLAB时，基本所有的小对象都是在TLAB中分配的，不会直接在eden区中分配，所以eden区的capacity和used就是该年轻代用于分配TLAB的capacity和used。
   bool supports_tlab_allocation() const { return true; }
   size_t tlab_capacity() const;
   size_t tlab_used() const;
@@ -259,11 +301,13 @@ protected:
   void space_iterate(SpaceClosure* blk, bool usedOnly = false);
 
   // Allocation support
+  // should_allocate方法判断当前DefNewGeneration是否支持指定大小的内存块的内存分配
   virtual bool should_allocate(size_t word_size, bool is_tlab) {
     assert(UseTLAB || !is_tlab, "Should not allocate tlab");
 
     size_t overflow_limit    = (size_t)1 << (BitsPerSize_t - LogHeapWordSize);
 
+      //校验word_size大于0，不超过overflow_limit，不超过_pretenure_size_threshold_words
     const bool non_zero      = word_size > 0;
     const bool overflows     = word_size >= overflow_limit;
     const bool check_too_big = _pretenure_size_threshold_words > 0;

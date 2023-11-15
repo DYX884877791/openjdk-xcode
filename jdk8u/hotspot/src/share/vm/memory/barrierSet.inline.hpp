@@ -32,6 +32,7 @@
 // performance-critical calls when the barrier is the most common
 // card-table kind.
 
+// 因为BarrierSet的子类只有支持写屏障的类型，所以BarrierSet基于子类的虚方法提供了上述内联方法的默认实现，然后重点关注对应的子类虚方法实现即可。
 template <class T> void BarrierSet::write_ref_field_pre(T* field, oop new_val) {
   if (kind() == CardTableModRef) {
     ((CardTableModRefBS*)this)->inline_write_ref_field_pre(field, new_val);
@@ -49,6 +50,7 @@ void BarrierSet::write_ref_field(void* field, oop new_val, bool release) {
 }
 
 // count is number of array elements being written
+//start是准备写入数组的起始元素的地址，count是写入的元素个数
 void BarrierSet::write_ref_array(HeapWord* start, size_t count) {
   assert(count <= (size_t)max_intx, "count too large");
   HeapWord* end = (HeapWord*)((char*)start + (count*heapOopSize));
@@ -63,6 +65,8 @@ void BarrierSet::write_ref_array(HeapWord* start, size_t count) {
   // interface, so it is "exactly precise" (if i may be allowed the adverbial
   // redundancy for emphasis) and does not include narrow oop slots not
   // included in the original write interval.
+    //在没有开启指针压缩的场景下，start和end都是经过对齐的，start等于aligned_start，end等于aligned_end
+    //开启指针压缩了则不一定
   HeapWord* aligned_start = (HeapWord*)align_size_down((uintptr_t)start, HeapWordSize);
   HeapWord* aligned_end   = (HeapWord*)align_size_up  ((uintptr_t)end,   HeapWordSize);
   // If compressed oops were not being used, these should already be aligned

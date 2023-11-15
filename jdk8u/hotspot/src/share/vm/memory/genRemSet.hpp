@@ -36,6 +36,7 @@ class OopsInGenClosure;
 class CardTableRS;
 
 // Helper to remember modified oops in all klasses.
+// KlassRemSet是一个工具类，用来遍历所有Klass将其_accumulated_modified_oops标识置为0。
 class KlassRemSet {
   bool _accumulate_modified_oops;
  public:
@@ -46,6 +47,7 @@ class KlassRemSet {
   void clear_mod_union();
 };
 
+// Gen就是表示分代内存的Generation的缩写，Rem是Remembered的缩写，GenRemSet支持对跨代引用的遍历，尤其是老年代对象持有的对年轻代对象的引用。GenRemSet的定义在同目录的genRemSet.hpp中
 class GenRemSet: public CHeapObj<mtGC> {
   friend class Generation;
 
@@ -53,6 +55,7 @@ class GenRemSet: public CHeapObj<mtGC> {
   KlassRemSet _klass_rem_set;
 
 public:
+    // GenRemSet同样定义了一个枚举Name来描述子类
   enum Name {
     CardTable,
     Other
@@ -60,6 +63,8 @@ public:
 
   GenRemSet(BarrierSet * bs) : _bs(bs) {}
   GenRemSet() : _bs(NULL) {}
+
+  // GenRemSet定义的方法都是未提供默认实现的虚方法，具体实现参考唯一的子类CardTableRS，CardTableRS借助CardTable来实现跨代引用的遍历。
 
   virtual Name rs_kind() = 0;
 

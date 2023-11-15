@@ -34,6 +34,7 @@
 #include "utilities/exceptions.hpp"
 
 // The verifier class
+// 链接包含验证，准备和解析，其中符号引用的解析由ConstantPool完成，验证则是由Verifier类完成，该类的定义在classfile/verifier.hpp中，该类比较简单，核心方法就一个静态方法verify
 class Verifier : AllStatic {
  public:
   enum {

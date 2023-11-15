@@ -55,7 +55,7 @@
 #include "services/threadService.hpp"
 #include "utilities/defaultStream.hpp"
 #include "utilities/events.hpp"
-#include "utilities/slog.hpp"
+
 #ifdef TARGET_OS_FAMILY_linux
 # include "os_linux.inline.hpp"
 #endif
@@ -1347,8 +1347,11 @@ void os::set_memory_serialize_page(address page) {
   _mem_serialize_page = (volatile int32_t *)page;
   // We initialize the serialization page shift count here
   // We assume a cache line size of 64 bytes
+    //SerializePageShiftCount是一个常量，64位下取值为4
   assert(SerializePageShiftCount == count,
          "thread size changed, fix SerializePageShiftCount constant");
+    //vm_page_size返回内存页的大小，64位下默认是4k，4096字节
+    //sizeof(int32_t)是32位int的大小，是4字节
   set_serialize_page_mask((uintptr_t)(vm_page_size() - sizeof(int32_t)));
 }
 
@@ -1367,22 +1370,34 @@ void os::block_on_serialize_page_trap() {
   // Generally, it is unsafe to manipulate locks in signal handlers, but in
   // this case, it's OK as the signal is synchronous and we know precisely when
   // it can occur.
+    //尝试去获取锁，会阻塞当前线程直到获取成功，获取成功表示serialize_thread_states方法执行完成
   Thread::muxAcquire(&SerializePageLock, "set_memory_serialize_page");
+    //再次释放该锁
   Thread::muxRelease(&SerializePageLock);
 }
 
 // Serialize all thread state variables
+// 该方法相当于执行OrderAccess::fence()方法，会强制各线程对线程状态的修改从高速缓存同步到内存中，从而方便SafepointSynchronize能够高效准确的获取线程状态。
+//
+// 当执行os::serialize_thread_states期间，如果有其他线程并行的执行write_memory_serialize_page方法且_mem_serialize_page是只读的，
+// 则执行write_memory_serialize_page方法的Linux内核线程会终止对应的用户线程的执行，然后向该线程发送SIGSEGV（表示操作指定的内存段错误）信号量，
+// JVM负责处理信号的线程接受到该信号后，判断触发SIGSEGV的内存地址位于_mem_serialize_page中，则会调用os::block_on_serialize_page_trap方法阻塞该用户线程，
+// 直到os::serialize_thread_states执行完成，然后重新执行修改
 void os::serialize_thread_states() {
   // On some platforms such as Solaris & Linux, the time duration of the page
   // permission restoration is observed to be much longer than expected  due to
   // scheduler starvation problem etc. To avoid the long synchronization
   // time and expensive page trap spinning, 'SerializePageLock' is used to block
   // the mutator thread if such case is encountered. See bug 6546278 for details.
+    //SerializePageLock用于同步对_mem_serialize_page的写入操作，获取锁
   Thread::muxAcquire(&SerializePageLock, "serialize_thread_states");
+    //将_mem_serialize_page对应的内存页先设置为只读，再设置为可读写，底层调用Linux的mprotect方法
+    //Linux修改对应内存页的属性时会强制高速缓存中对该内存页的修改刷新到内存中
   os::protect_memory((char *)os::get_memory_serialize_page(),
                      os::vm_page_size(), MEM_PROT_READ);
   os::protect_memory((char *)os::get_memory_serialize_page(),
                      os::vm_page_size(), MEM_PROT_RW);
+    //释放锁
   Thread::muxRelease(&SerializePageLock);
 }
 

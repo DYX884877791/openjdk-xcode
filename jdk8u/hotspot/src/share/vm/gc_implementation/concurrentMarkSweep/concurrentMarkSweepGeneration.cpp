@@ -1678,6 +1678,7 @@ void ConcurrentMarkSweepGeneration::collect(bool   full,
                                             size_t size,
                                             bool   tlab)
 {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/concurrentMarkSweep/concurrentMarkSweepGeneration.cpp中的ConcurrentMarkSweepGeneration::collect函数...");
   collector()->collect(full, clear_all_soft_refs, size, tlab);
 }
 
@@ -1686,6 +1687,7 @@ void CMSCollector::collect(bool   full,
                            size_t size,
                            bool   tlab)
 {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/concurrentMarkSweep/concurrentMarkSweepGeneration.cpp中的CMSCollector::collect函数...");
   if (!UseCMSCollectionPassing && _collectorState > Idling) {
     // For debugging purposes skip the collection if the state
     // is not currently idle
@@ -1721,6 +1723,7 @@ void CMSCollector::request_full_gc(unsigned int full_gc_count, GCCause::Cause ca
     MutexLockerEx y(CGC_lock, Mutex::_no_safepoint_check_flag);
     _full_gc_requested = true;
     _full_gc_cause = cause;
+      //唤醒CMS Thread，该线程检查_full_gc_requested为true会触发一次老年代的GC
     CGC_lock->notify();   // nudge CMS thread
   } else {
     assert(gc_count > full_gc_count, "Error: causal loop");
@@ -1740,6 +1743,10 @@ void CMSCollector::report_concurrent_mode_interruption() {
     }
   } else {
     if (PrintGCDetails) {
+        // https://www.cnblogs.com/jpfss/p/8856935.html
+        // 并发模式失败，产生并发失败原因：
+        // 1. 年轻区提升速度过快，导致年老区回收速度赶不上提升速度
+        // 2. 年老区的内存碎片，导致年轻区的提升失败
       gclog_or_tty->print(" (concurrent mode failure)");
     }
     _gc_tracer_cm->report_concurrent_mode_failure();
@@ -1815,60 +1822,75 @@ void CMSCollector::report_concurrent_mode_interruption() {
 //   returns after all phases of the collection are done
 //
 
+// acquire_control_and_collect就是CMSCollector::collect方法的核心实现了，首先会从执行后台GC的CMSThread中获取GC的执行权限，然后判断是否需要压缩老年代，根据是否压缩走不同的标记清理逻辑
 void CMSCollector::acquire_control_and_collect(bool full,
         bool clear_all_soft_refs) {
+    //当前线程处于安全点上
   assert(SafepointSynchronize::is_at_safepoint(), "should be at safepoint");
+    //当前线程是VMThread
   assert(!Thread::current()->is_ConcurrentGC_thread(),
          "shouldn't try to acquire control from self!");
 
   // Start the protocol for acquiring control of the
   // collection from the background collector (aka CMS thread).
+    //校验VMThread已经获取了CMS Token
   assert(ConcurrentMarkSweepThread::vm_thread_has_cms_token(),
          "VM thread should have CMS token");
   // Remember the possibly interrupted state of an ongoing
   // concurrent collection
+    //当前的垃圾回收状态
   CollectorState first_state = _collectorState;
 
   // Signal to a possibly ongoing concurrent collection that
   // we want to do a foreground collection.
+    //_foregroundGCIsActive置为true表示前台GC已经激活了
   _foregroundGCIsActive = true;
 
   // Disable incremental mode during a foreground collection.
+    //临时暂停ICMS模式
   ICMSDisabler icms_disabler;
 
   // release locks and wait for a notify from the background collector
   // releasing the locks in only necessary for phases which
   // do yields to improve the granularity of the collection.
+    //校验已经获取了锁
   assert_lock_strong(bitMapLock());
   // We need to lock the Free list lock for the space that we are
   // currently collecting.
   assert(haveFreelistLocks(), "Must be holding free list locks");
+    //释放锁等待后台GC让出GC执行权
   bitMapLock()->unlock();
   releaseFreelistLocks();
   {
+      //获取锁CGC_lock
     MutexLockerEx x(CGC_lock, Mutex::_no_safepoint_check_flag);
     if (_foregroundGCShouldWait) {
       // We are going to be waiting for action for the CMS thread;
       // it had better not be gone (for instance at shutdown)!
+        //_foregroundGCShouldWait为true，表示后台GC正在进行
       assert(ConcurrentMarkSweepThread::cmst() != NULL,
              "CMS thread must be running");
       // Wait here until the background collector gives us the go-ahead
+        //释放VMThread占用的CMS Token
       ConcurrentMarkSweepThread::clear_CMS_flag(
         ConcurrentMarkSweepThread::CMS_vm_has_token);  // release token
       // Get a possibly blocked CMS thread going:
       //   Note that we set _foregroundGCIsActive true above,
       //   without protection of the CGC_lock.
+        // 唤醒可能等待的CMS Thread继续执行
       CGC_lock->notify();
       assert(!ConcurrentMarkSweepThread::vm_thread_wants_cms_token(),
              "Possible deadlock");
       while (_foregroundGCShouldWait) {
         // wait for notification
+          //循环等待直到_foregroundGCShouldWait变为false，即后台GC交出了GC执行权
         CGC_lock->wait(Mutex::_no_safepoint_check_flag);
         // Possibility of delay/starvation here, since CMS token does
         // not know to give priority to VM thread? Actually, i think
         // there wouldn't be any delay/starvation, but the proof of
         // that "fact" (?) appears non-trivial. XXX 20011219YSR
       }
+        //重新获取CMS Token
       ConcurrentMarkSweepThread::set_CMS_flag(
         ConcurrentMarkSweepThread::CMS_vm_has_token);
     }
@@ -1876,6 +1898,7 @@ void CMSCollector::acquire_control_and_collect(bool full,
   // The CMS_token is already held.  Get back the other locks.
   assert(ConcurrentMarkSweepThread::vm_thread_has_cms_token(),
          "VM thread should have CMS token");
+    //重新获取锁
   getFreelistLocks();
   bitMapLock()->lock_without_safepoint_check();
   if (TraceCMSState) {
@@ -1886,6 +1909,7 @@ void CMSCollector::acquire_control_and_collect(bool full,
 
   // Check if we need to do a compaction, or if not, whether
   // we need to start the mark-sweep from scratch.
+    //判断是否需要进行压缩，如果不需要是否需要标记清理
   bool should_compact    = false;
   bool should_start_over = false;
   decide_foreground_collection_type(clear_all_soft_refs,
@@ -1904,6 +1928,7 @@ NOT_PRODUCT(
 )
 
   if (first_state > Idling) {
+      //如果当前GC状态不是空闲，则说明后台GC已经完成了部分GC步骤，打印被中断日志
     report_concurrent_mode_interruption();
   }
 
@@ -1918,16 +1943,21 @@ NOT_PRODUCT(
     // Scrub the list of those references because Mark-Sweep-Compact
     // code assumes referents are not NULL and that all discovered
     // Reference objects are active.
+      //清空discovered References链表中的References实例，Mark-Sweep-Compact代码假定他们的referent都不是NULL且
+      //References实例都是存活的
     ref_processor()->clean_up_discovered_references();
 
     if (first_state > Idling) {
+        //保存当前堆内存和元空间的使用情况
       save_heap_summary();
     }
 
+      //执行压缩并标记清理，底层核心实现是GenMarkSweep
     do_compaction_work(clear_all_soft_refs);
 
     // Has the GC time limit been exceeded?
     DefNewGeneration* young_gen = _young_gen->as_DefNewGeneration();
+      //获取eden区的最大容量
     size_t max_eden_size = young_gen->max_eden_size();
     GenCollectedHeap* gch = GenCollectedHeap::heap();
     GCCause::Cause gc_cause = gch->gc_cause();
@@ -1939,12 +1969,15 @@ NOT_PRODUCT(
                                            gc_cause,
                                            gch->collector_policy());
   } else {
+      //执行标记清理
     do_mark_sweep_work(clear_all_soft_refs, first_state,
       should_start_over);
   }
   // Reset the expansion cause, now that we just completed
   // a collection cycle.
+    //清空扩展的原因
   clear_expansion_cause();
+    //_foregroundGCIsActive置为false
   _foregroundGCIsActive = false;
   return;
 }
@@ -1981,20 +2014,25 @@ void CMSCollector::decide_foreground_collection_type(
   // Inform cms gen if this was due to partial collection failing.
   // The CMS gen may use this fact to determine its expansion policy.
   if (gch->incremental_collection_will_fail(false /* don't consult_young */)) {
+      //如果增量收集会失败
     assert(!_cmsGen->incremental_collection_failed(),
            "Should have been noticed, reacted to and cleared");
     _cmsGen->set_incremental_collection_failed();
   }
+    //UseCMSCompactAtFullCollection表示在Full GC时是否执行压缩，默认为true
+    //CMSFullGCsBeforeCompaction表示一个阈值，Full GC的次数超过该值才会执行压缩
   *should_compact =
     UseCMSCompactAtFullCollection &&
     ((_full_gcs_since_conc_gc >= CMSFullGCsBeforeCompaction) ||
-     GCCause::is_user_requested_gc(gch->gc_cause()) ||
-     gch->incremental_collection_will_fail(true /* consult_young */));
+     GCCause::is_user_requested_gc(gch->gc_cause()) || //用户通过System.gc方法请求GC
+     gch->incremental_collection_will_fail(true /* consult_young */)); //增量收集失败
   *should_start_over = false;
+    //如果should_compact为false且clear_all_soft_refs为true
   if (clear_all_soft_refs && !*should_compact) {
     // We are about to do a last ditch collection attempt
     // so it would normally make sense to do a compaction
     // to reclaim as much space as possible.
+      //当clear_all_soft_refs为true时是否需要压缩，默认为true
     if (CMSCompactWhenClearAllSoftRefs) {
       // Default: The rationale is that in this case either
       // we are past the final marking phase, in which case
@@ -2012,10 +2050,14 @@ void CMSCollector::decide_foreground_collection_type(
       // we came in, and if we are past the refs processing
       // phase, we'll choose to just redo the mark-sweep
       // collection from scratch.
+        //如果当前GC已经过FinalMarking环节了，在该环节才处理所有的Refenrence，则需要重新开始一轮GC，
+        //重新查找待处理的Refenrence
       if (_collectorState > FinalMarking) {
         // We are past the refs processing phase;
         // start over and do a fresh synchronous CMS cycle
+          //将GC的状态设置为重置
         _collectorState = Resetting; // skip to reset to start new cycle
+          //执行重置
         reset(false /* == !asynch */);
         *should_start_over = true;
       } // else we can continue a possibly ongoing current cycle
@@ -6129,10 +6171,15 @@ public:
 
 CMSParKeepAliveClosure::CMSParKeepAliveClosure(CMSCollector* collector,
   MemRegion span, CMSBitMap* bit_map, OopTaskQueue* work_queue):
+    //老年代对应的内存区域
    _span(span),
+    //老年代的BitMap
    _bit_map(bit_map),
+    //执行任务的队列
    _work_queue(work_queue),
+    //CMSInnerParMarkAndPushClosure实例
    _mark_and_push(collector, span, bit_map, work_queue),
+    //CMSWorkQueueDrainThreshold表示CMSWorkQueue的阈值，默认是10，_work_queue的最大容量
    _low_water_mark(MIN2((uint)(work_queue->max_elems()/4),
                         (uint)(CMSWorkQueueDrainThreshold * ParallelGCThreads)))
 { }
@@ -6749,6 +6796,7 @@ HeapWord* CMSCollector::next_card_start_after_block(HeapWord* addr) const {
 // Construct a CMS bit map infrastructure, but don't create the
 // bit vector itself. That is done by a separate call CMSBitMap::allocate()
 // further below.
+// 构造方法主要是初始化lock和shifter属性，其他属性都是在allocate方法中完成初始化的
 CMSBitMap::CMSBitMap(int shifter, int mutex_rank, const char* mutex_name):
   _bm(),
   _shifter(shifter),
@@ -6761,23 +6809,28 @@ CMSBitMap::CMSBitMap(int shifter, int mutex_rank, const char* mutex_name):
 bool CMSBitMap::allocate(MemRegion mr) {
   _bmStartWord = mr.start();
   _bmWordSize  = mr.word_size();
+    //为bitMap申请指定大小的一段连续地址段
   ReservedSpace brs(ReservedSpace::allocation_align_size_up(
                      (_bmWordSize >> (_shifter + LogBitsPerByte)) + 1));
   if (!brs.is_reserved()) {
+      //分配失败
     warning("CMS bit map allocation failure");
     return false;
   }
   // For now we'll just commit all of the bit map up fromt.
   // Later on we'll try to be more parsimonious with swap.
+    //初始化_virtual_space
   if (!_virtual_space.initialize(brs, brs.size())) {
     warning("CMS bit map backing store failure");
     return false;
   }
   assert(_virtual_space.committed_size() == brs.size(),
          "didn't reserve backing store for all of CMS bit map?");
+    //设置bitMap的映射起始地址
   _bm.set_map((BitMap::bm_word_t*)_virtual_space.low());
   assert(_virtual_space.committed_size() << (_shifter + LogBitsPerByte) >=
          _bmWordSize, "inconsistency in bit map sizing");
+    //设置大小
   _bm.set_size(_bmWordSize >> _shifter);
 
   // bm.clear(); // can we rely on getting zero'd memory? verify below
@@ -6795,9 +6848,11 @@ void CMSBitMap::dirty_range_iterate_clear(MemRegion mr, MemRegionClosure* cl) {
   // XXX assert that start and end are appropriately aligned
   for (next_addr = mr.start(), end_addr = mr.end();
        next_addr < end_addr; next_addr = last_addr) {
+      //找到BitMap中下一个连续的被打标的区域
     MemRegion dirty_region = getAndClearMarkedRegion(next_addr, end_addr);
     last_addr = dirty_region.end();
     if (!dirty_region.is_empty()) {
+        //执行遍历
       cl->do_MemRegion(dirty_region);
     } else {
       assert(last_addr == end_addr, "program logic");
@@ -6815,6 +6870,8 @@ void CMSBitMap::assert_locked() const {
   CMSLockVerifier::assert_locked(lock());
 }
 
+
+//判断mr是否在指BitMap对应的内存区域中
 bool CMSBitMap::covers(MemRegion mr) const {
   // assert(_bm.map() == _virtual_space.low(), "map inconsistency");
   assert((size_t)_bm.size() == (_bmWordSize >> _shifter),
@@ -6842,10 +6899,12 @@ void CMSBitMap::region_invariant(MemRegion mr)
   // convert address range into offset range
   size_t start_ofs = heapWordToOffset(mr.start());
   // Make sure that end() is appropriately aligned
+    //校验mr的结束地址已经对齐了
   assert(mr.end() == (HeapWord*)round_to((intptr_t)mr.end(),
                         ((intptr_t) 1 << (_shifter+LogHeapWordSize))),
          "Misaligned mr.end()");
   size_t end_ofs   = heapWordToOffset(mr.end());
+    //校验结束地址大于起始地址
   assert(end_ofs > start_ofs, "Should mark at least one bit");
 }
 
@@ -6853,18 +6912,22 @@ void CMSBitMap::region_invariant(MemRegion mr)
 
 bool CMSMarkStack::allocate(size_t size) {
   // allocate a stack of the requisite depth
+    //按照size个oop大小申请内存，oop实际是oopDesc*的别名
   ReservedSpace rs(ReservedSpace::allocation_align_size_up(
                    size * sizeof(oop)));
   if (!rs.is_reserved()) {
+      //申请内存失败
     warning("CMSMarkStack allocation failure");
     return false;
   }
+    //初始化_virtual_space
   if (!_virtual_space.initialize(rs, rs.size())) {
     warning("CMSMarkStack backing store failure");
     return false;
   }
   assert(_virtual_space.committed_size() == rs.size(),
          "didn't reserve backing store for all of CMS stack?");
+    //将申请内存的基地址作为base数组的起始地址
   _base = (oop*)(_virtual_space.low());
   _index = 0;
   _capacity = size;
@@ -6879,9 +6942,12 @@ bool CMSMarkStack::allocate(size_t size) {
 // messages below. (Or defer the printing to the caller.
 // For now we take the expedient path of just disabling the
 // messages for the problematic case.)
+// expand方法用于扩容，不同于同样基于数组实现的ArrayList的扩容，这里只是重新申请了两倍MarkStack原来对应的内存区域，原来的内存区域直接释放了
 void CMSMarkStack::expand() {
+    //MarkStackSizeMax表示MarkStack的最大大小，64位下默认是512M
   assert(_capacity <= MarkStackSizeMax, "stack bigger than permitted");
   if (_capacity == MarkStackSizeMax) {
+      //如果达到最大容量了
     if (_hit_limit++ == 0 && !CMSConcurrentMTEnabled && PrintGCDetails) {
       // We print a warning message only once per CMS cycle.
       gclog_or_tty->print_cr(" (benign) Hit CMSMarkStack max size limit");
@@ -6889,24 +6955,30 @@ void CMSMarkStack::expand() {
     return;
   }
   // Double capacity if possible
+    //扩容一倍
   size_t new_capacity = MIN2(_capacity*2, MarkStackSizeMax);
   // Do not give up existing stack until we have managed to
   // get the double capacity that we desired.
+    //申请内存
   ReservedSpace rs(ReservedSpace::allocation_align_size_up(
                    new_capacity * sizeof(oop)));
   if (rs.is_reserved()) {
     // Release the backing store associated with old stack
+      //释放原来的内存
     _virtual_space.release();
     // Reinitialize virtual space for new stack
+      //重试初始化
     if (!_virtual_space.initialize(rs, rs.size())) {
       fatal("Not enough swap for expanded marking stack");
     }
+      //重置属性
     _base = (oop*)(_virtual_space.low());
     _index = 0;
     _capacity = new_capacity;
   } else if (_failed_double++ == 0 && !CMSConcurrentMTEnabled && PrintGCDetails) {
     // Failed to double capacity, continue;
     // we print a detail message only once per CMS cycle.
+      //申请内存失败
     gclog_or_tty->print(" (benign) Failed to expand marking stack from " SIZE_FORMAT "K to "
             SIZE_FORMAT "K",
             _capacity / K, new_capacity / K);
@@ -8847,6 +8919,7 @@ void SweepClosure::print_free_block_coalesced(FreeChunk* fc) const {
 // CMSIsAliveClosure
 bool CMSIsAliveClosure::do_object_b(oop obj) {
   HeapWord* addr = (HeapWord*)obj;
+    //BitMap中打标则认为其是存活的
   return addr != NULL &&
          (!_span.contains(addr) || _bit_map->isMarked(addr));
 }

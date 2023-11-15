@@ -59,6 +59,8 @@ class GCMessage : public FormatBuffer<1024> {
   GCMessage() {}
 };
 
+// GCHeapLog的定义在同一个文件collectedHeap.hpp中
+// GCHeapLog继承自EventLogBase，用来打印GC日志的。EventLogBase是一个模板类，主要定义了打印日志所需的基础属性。 GCMessage继承自FormatBuffer，实际就是一个指定长度的char数组，用来存储GC的日志信息
 class GCHeapLog : public EventLogBase<GCMessage> {
  private:
   void log_heap(bool before);
@@ -77,10 +79,13 @@ class GCHeapLog : public EventLogBase<GCMessage> {
 //
 // CollectedHeap
 //   SharedHeap
-//     GenCollectedHeap
-//     G1CollectedHeap
-//   ParallelScavengeHeap
+//     GenCollectedHeap:    GenCollectedHeap是开启UseSerialGC或者UseConcMarkSweepGC的GC实现，分别对应两种不同的GenCollectorPolicy
+//     G1CollectedHeap:     G1CollectedHeap是开启UseG1GC时的GC实现
+//   ParallelScavengeHeap:  ParallelScavengeHeap就是开启UseParallelGC时的GC实现
 //
+// CollectedHeap是一个抽象类，表示一个Java堆，定义了各种垃圾回收算法必须实现的公共接口，这些接口就是上层类用来分配Java对象，分配TLAB，获取Java堆使用情况等的统一API。
+// CollectedHeap定义位于hotspot /src/share/vm/gc_interface/collectedHeap.hpp中
+// CollectedHeap定义的方法多数都是虚方法，需要结合具体的实现类来看
 class CollectedHeap : public CHeapObj<mtInternal> {
   friend class VMStructs;
   friend class IsGCActiveMark; // Block structured external access to _is_gc_active
@@ -90,29 +95,42 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 #endif
 
   // Used for filler objects (static, but initialized in ctor).
+  //填充数组的最大值，_filler_array_max_size表示使用int数组填充时能够填充的最大的int数组的字宽数，其初始化在CollectedHeap的构造函数中
   static size_t _filler_array_max_size;
 
+  //用来打印GC日志
   GCHeapLog* _gc_heap_log;
 
   // Used in support of ReduceInitialCardMarks; only consulted if COMPILER2 is being used
+  //开启C2编译时使用，支持ReduceInitialCardMarks
   bool _defer_initial_card_mark;
 
  protected:
+    //Java堆对应的一段连续内存空间
   MemRegion _reserved;
+    //卡表（CardTable）的基类
   BarrierSet* _barrier_set;
+    //是否正在执行GC
   bool _is_gc_active;
+    //并行执行GC任务的线程数
   uint _n_par_threads;
 
+    //从JVM启动至今的GC次数
   unsigned int _total_collections;          // ... started
+    //从JVM启动至今的Full GC次数
   unsigned int _total_full_collections;     // ... started
   NOT_PRODUCT(volatile size_t _promotion_failure_alot_count;)
   NOT_PRODUCT(volatile size_t _promotion_failure_alot_gc_number;)
 
   // Reason for current garbage collection.  Should be set to
   // a value reflecting no collection between collections.
+    //当前GC被触发的原因，Cause是GCCause定义的枚举
   GCCause::Cause _gc_cause;
+    //上一次GC被触发的原因
   GCCause::Cause _gc_lastcause;
+    //开启UsePerfData时用来保存_gc_cause
   PerfStringVariable* _perf_gc_cause;
+    //开启UsePerfData时用来保存_gc_lastcause
   PerfStringVariable* _perf_gc_lastcause;
 
   // Constructor
@@ -183,6 +201,12 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   debug_only(static void check_for_valid_allocation_state();)
 
  public:
+    // 这里类继承关系与CollectedHeap定义的表示GC实现类名称的枚举Name相对应:
+    // CollectedHeap
+    //   SharedHeap
+    //     GenCollectedHeap
+    //     G1CollectedHeap
+    //   ParallelScavengeHeap
   enum Name {
     Abstract,
     SharedHeap,
@@ -195,6 +219,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
     return _filler_array_max_size;
   }
 
+    // 虚方法kind会返回当前GC实现的类型
   virtual CollectedHeap::Name kind() const { return CollectedHeap::Abstract; }
 
   /**
@@ -463,12 +488,14 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   virtual void collect(GCCause::Cause cause) = 0;
 
   // Perform a full collection
+  // do_full_collection是一个虚方法， CollectedHeap没有给出默认实现
   virtual void do_full_collection(bool clear_all_soft_refs) = 0;
 
   // This interface assumes that it's being called by the
   // vm thread. It collects the heap assuming that the
   // heap lock is already held and that we are executing in
   // the context of the vm thread.
+  // collect_as_vm_thread该方法用于执行特定GCCause::Cause下的垃圾回收
   virtual void collect_as_vm_thread(GCCause::Cause cause);
 
   // Returns the barrier set for this heap
@@ -477,6 +504,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   // Returns "true" iff there is a stop-world GC in progress.  (I assume
   // that it should answer "false" for the concurrent part of a concurrent
   // collector -- dld).
+  // 父类方法
   bool is_gc_active() const { return _is_gc_active; }
 
   // Total number of GC collections (started)
@@ -486,8 +514,10 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   // Increment total number of GC collections (started)
   // Should be protected but used by PSMarkSweep - cleanup for 1.4.2
   void increment_total_collections(bool full = false) {
+      //增加总的GC次数
     _total_collections++;
     if (full) {
+        //增加Full GC的次数
       increment_total_full_collections();
     }
   }

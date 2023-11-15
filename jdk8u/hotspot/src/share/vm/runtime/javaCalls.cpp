@@ -393,7 +393,6 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
     // 这个参数会做为实参传递给StubRoutines::call_stub()函数指针指向的“函数”
     // EntryPoint例程:是从当前要执行的Java方法中获取的： hotspot/src/share/vm/oops/method.hpp
   address entry_point = method->from_interpreted_entry();
-  slog_trace("获取目标方法[%s]的解释模式入口地址为[%p]", method->name_and_sig_as_C_string(), entry_point);
   if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
     entry_point = method->interpreter_entry();
   }

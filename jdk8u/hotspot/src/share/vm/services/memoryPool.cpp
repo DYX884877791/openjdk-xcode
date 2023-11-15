@@ -74,31 +74,39 @@ void MemoryPool::add_manager(MemoryManager* mgr) {
 // Returns an instanceHandle of a MemoryPool object.
 // It creates a MemoryPool instance when the first time
 // this function is called.
+// get_memory_pool_instance用于创建一个对应的MemoryPoolImpl类的实例，从而可以通过java.lang.management API获取该MemoryPool的内存使用情况
 instanceOop MemoryPool::get_memory_pool_instance(TRAPS) {
   // Must do an acquire so as to force ordering of subsequent
   // loads from anything _memory_pool_obj points to or implies.
+    // load_ptr_acquire是将其强转成volatile指针，即获取该值的最新值
   instanceOop pool_obj = (instanceOop)OrderAccess::load_ptr_acquire(&_memory_pool_obj);
   if (pool_obj == NULL) {
     // It's ok for more than one thread to execute the code up to the locked region.
     // Extra pool instances will just be gc'ed.
+      // 获取sun_management_ManagementFactory对应的Klass
     Klass* k = Management::sun_management_ManagementFactory_klass(CHECK_NULL);
     instanceKlassHandle ik(THREAD, k);
 
+      //创建一个Java String对象
     Handle pool_name = java_lang_String::create_from_str(_name, CHECK_NULL);
     jlong usage_threshold_value = (_usage_threshold->is_high_threshold_supported() ? 0 : -1L);
     jlong gc_usage_threshold_value = (_gc_usage_threshold->is_high_threshold_supported() ? 0 : -1L);
 
     JavaValue result(T_OBJECT);
     JavaCallArguments args;
+      //方法参数
     args.push_oop(pool_name);           // Argument 1
     args.push_int((int) is_heap());     // Argument 2
 
+      //方法名
     Symbol* method_name = vmSymbols::createMemoryPool_name();
+      //方法签名
     Symbol* signature = vmSymbols::createMemoryPool_signature();
 
     args.push_long(usage_threshold_value);    // Argument 3
     args.push_long(gc_usage_threshold_value); // Argument 4
 
+      //调用createMemoryPool(String name, boolean isHeap, long uThreshold, long gcThreshold)方法
     JavaCalls::call_static(&result,
                            ik,
                            method_name,
@@ -106,11 +114,13 @@ instanceOop MemoryPool::get_memory_pool_instance(TRAPS) {
                            &args,
                            CHECK_NULL);
 
+      //获取createMemoryPool方法的执行结果
     instanceOop p = (instanceOop) result.get_jobject();
     instanceHandle pool(THREAD, p);
 
     {
       // Get lock since another thread may have create the instance
+        //获取锁
       MutexLocker ml(Management_lock);
 
       // Check if another thread has created the pool.  We reload
@@ -119,6 +129,7 @@ instanceOop MemoryPool::get_memory_pool_instance(TRAPS) {
       //
       // The lock has done an acquire, so the load can't float above it,
       // but we need to do a load_acquire as above.
+        //如果其他线程已经创建了该实例则返回
       pool_obj = (instanceOop)OrderAccess::load_ptr_acquire(&_memory_pool_obj);
       if (pool_obj != NULL) {
          return pool_obj;
@@ -131,6 +142,7 @@ instanceOop MemoryPool::get_memory_pool_instance(TRAPS) {
       // with creating the pool are visible before publishing its address.
       // The unlock will publish the store to _memory_pool_obj because
       // it does a release first.
+        //原子的设置_memory_pool_obj属性
       OrderAccess::release_store_ptr(&_memory_pool_obj, pool_obj);
     }
   }
@@ -168,6 +180,8 @@ void MemoryPool::set_gc_usage_sensor_obj(instanceHandle sh) {
   set_sensor_obj_at(&_gc_usage_sensor, sh);
 }
 
+// oops_do方法用于GC时遍历对象引用的
+// 分别以_memory_pool_obj和_usage_sensor/_gc_usage_sensor中的_sensor_obj对象为根对象遍历，找到所有引用了这三个对象的对象。这三个在MemoryPool构造时都是NULL
 void MemoryPool::oops_do(OopClosure* f) {
   f->do_oop((oop*) &_memory_pool_obj);
   if (_usage_sensor != NULL) {
@@ -263,8 +277,10 @@ MemoryUsage CodeHeapPool::get_memory_usage() {
 MetaspacePool::MetaspacePool() :
   MemoryPool("Metaspace", NonHeap, 0, calculate_max_size(), true, false) { }
 
+// 在MetaspacePool改写了get_memory_usage方法的实现
 MemoryUsage MetaspacePool::get_memory_usage() {
   size_t committed = MetaspaceAux::committed_bytes();
+  // commited和used都是从MetaspaceAux中获取的，初始值就是构造函数传入的0，最大值就是calculate_max_size的返回值
   return MemoryUsage(initial_size(), used_in_bytes(), committed, max_size());
 }
 

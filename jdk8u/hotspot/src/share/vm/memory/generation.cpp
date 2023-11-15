@@ -48,12 +48,14 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 Generation::Generation(ReservedSpace rs, size_t initial_size, int level) :
   _level(level),
   _ref_processor(NULL) {
+    //初始化ReservedSpace，并申请initial_size的内存
   if (!_virtual_space.initialize(rs, initial_size)) {
     vm_exit_during_initialization("Could not reserve enough space for "
                     "object heap");
   }
   // Mangle all of the the initial generation.
   if (ZapUnusedHeapArea) {
+      //新申请的内存区域做Mangle填充处理
     MemRegion mangle_region((HeapWord*)_virtual_space.low(),
       (HeapWord*)_virtual_space.high());
     SpaceMangler::mangle_region(mangle_region);
@@ -97,6 +99,7 @@ void Generation::print_heap_change(size_t prev_used) const {
 void Generation::ref_processor_init() {
   assert(_ref_processor == NULL, "a reference processor already exists");
   assert(!_reserved.is_empty(), "empty generation?");
+    //初始化ReferenceProcessor
   _ref_processor = new ReferenceProcessor(_reserved);    // a vanilla reference processor
   if (_ref_processor == NULL) {
     vm_exit_during_initialization("Could not allocate ReferenceProcessor object");
@@ -152,8 +155,10 @@ class GenerationIsInClosure : public SpaceClosure {
   GenerationIsInClosure(const void* p) : _p(p), sp(NULL) {}
 };
 
+//  is_in判断某个地址是否在当前Generation已分配的内存空间内，底层调用的是Space::is_in方法
 bool Generation::is_in(const void* p) const {
   GenerationIsInClosure blk(p);
+    //Generation可能包含多个Space实例，space_iterate方法会遍历所有的Space
   ((Generation*)this)->space_iterate(&blk);
   return blk.sp != NULL;
 }
@@ -166,6 +171,7 @@ DefNewGeneration* Generation::as_DefNewGeneration() {
   return (DefNewGeneration*) this;
 }
 
+//根据level从GenCollectedHeap中获取下一个Generation，并不是直接返回_next_gen属性
 Generation* Generation::next_gen() const {
   GenCollectedHeap* gch = GenCollectedHeap::heap();
   int next = level() + 1;
@@ -233,6 +239,7 @@ void Generation::par_promote_alloc_undo(int thread_num,
   guarantee(false, "No good general implementation.");
 }
 
+// space_containing找到包含指定地址的Space实例，底层调用的是Space::is_in_reserved方法
 Space* Generation::space_containing(const void* p) const {
   GenerationIsInReservedClosure blk(p);
   // Cast away const
@@ -255,6 +262,7 @@ class GenerationBlockStartClosure : public SpaceClosure {
   GenerationBlockStartClosure(const void* p) { _p = p; _start = NULL; }
 };
 
+// 获取指定地址对应的内存块的起始地址
 HeapWord* Generation::block_start(const void* p) const {
   GenerationBlockStartClosure blk(p);
   // Cast away const
@@ -274,6 +282,7 @@ class GenerationBlockSizeClosure : public SpaceClosure {
   GenerationBlockSizeClosure(const HeapWord* p) { _p = p; size = 0; }
 };
 
+// 获取指定地址对应的内存块的内存大小
 size_t Generation::block_size(const HeapWord* p) const {
   GenerationBlockSizeClosure blk(p);
   // Cast away const
@@ -294,6 +303,7 @@ class GenerationBlockIsObjClosure : public SpaceClosure {
   GenerationBlockIsObjClosure(const HeapWord* p) { _p = p; is_obj = false; }
 };
 
+// 指定地址处是否是一个对象
 bool Generation::block_is_obj(const HeapWord* p) const {
   GenerationBlockIsObjClosure blk(p);
   // Cast away const
@@ -311,6 +321,7 @@ class GenerationOopIterateClosure : public SpaceClosure {
     _cl(cl) {}
 };
 
+// 遍历当前Generation中已分配的Java对象所引用的其他Java对象
 void Generation::oop_iterate(ExtendedOopClosure* cl) {
   GenerationOopIterateClosure blk(cl);
   space_iterate(&blk);
@@ -332,6 +343,7 @@ class GenerationObjIterateClosure : public SpaceClosure {
   GenerationObjIterateClosure(ObjectClosure* cl) : _cl(cl) {}
 };
 
+// 遍历Generation中已分配的Java对象
 void Generation::object_iterate(ObjectClosure* cl) {
   GenerationObjIterateClosure blk(cl);
   space_iterate(&blk);
@@ -352,10 +364,13 @@ void Generation::safe_object_iterate(ObjectClosure* cl) {
   space_iterate(&blk);
 }
 
+// 执行compaction的准备工作，计算移动的目标地址并写入对象头中
 void Generation::prepare_for_compaction(CompactPoint* cp) {
   // Generic implementation, can be specialized
+    //循环遍历所有的Space
   CompactibleSpace* space = first_compaction_space();
   while (space != NULL) {
+      //调用prepare_for_compaction方法
     space->prepare_for_compaction(cp);
     space = space->next_compaction_space();
   }
@@ -368,6 +383,7 @@ class AdjustPointersClosure: public SpaceClosure {
   }
 };
 
+// 调整所有引用了需要被移动的对象的引用地址，使其指向新地址
 void Generation::adjust_pointers() {
   // Note that this is done over all spaces, not just the compactible
   // ones.
@@ -375,6 +391,7 @@ void Generation::adjust_pointers() {
   space_iterate(&blk, true);
 }
 
+// 从对象头中获取目标地址，执行对象复制
 void Generation::compact() {
   CompactibleSpace* sp = first_compaction_space();
   while (sp != NULL) {
@@ -392,12 +409,15 @@ CardGeneration::CardGeneration(ReservedSpace rs, size_t initial_byte_size,
 {
   HeapWord* start = (HeapWord*)rs.base();
   size_t reserved_byte_size = rs.size();
+    //start地址和reserved_byte_size必须是4的整数倍
   assert((uintptr_t(start) & 3) == 0, "bad alignment");
   assert((reserved_byte_size & 3) == 0, "bad alignment");
   MemRegion reserved_mr(start, heap_word_size(reserved_byte_size));
+    //初始化bts
   _bts = new BlockOffsetSharedArray(reserved_mr,
                                     heap_word_size(initial_byte_size));
   MemRegion committed_mr(start, heap_word_size(initial_byte_size));
+    //重置卡表对应的内存区域
   _rs->resize_covered_region(committed_mr);
   if (_bts == NULL)
     vm_exit_during_initialization("Could not allocate a BlockOffsetArray");
@@ -406,22 +426,27 @@ CardGeneration::CardGeneration(ReservedSpace rs, size_t initial_byte_size,
   // If this wasn't true, a single card could span more than on generation,
   // which would cause problems when we commit/uncommit memory, and when we
   // clear and dirty cards.
+    //校验start地址和end地址都对应某个卡表项的起始地址
   guarantee(_rs->is_aligned(reserved_mr.start()), "generation must be card aligned");
   if (reserved_mr.end() != Universe::heap()->reserved_region().end()) {
     // Don't check at the very end of the heap as we'll assert that we're probing off
     // the end if we try.
     guarantee(_rs->is_aligned(reserved_mr.end()), "generation must be card aligned");
   }
+    //MinHeapDeltaBytes的取值是128k，表示扩展时的最低内存
   _min_heap_delta_bytes = MinHeapDeltaBytes;
   _capacity_at_prologue = initial_byte_size;
   _used_at_prologue = 0;
 }
 
+// expand用于将内存扩展，第一个参数表示期望扩展的内存空间，第二个参数表示期望扩展的最低内存空间，如果扩展了一部分内存空间，即使小于最低内存空间，则返回true，底层会调用grow_by完成扩展，如果扩展失败则尝试grow_to_reserved。
+//第一个参数bytes表示期望扩展的内存大小，第二个表示期望扩展的最低内存大小
 bool CardGeneration::expand(size_t bytes, size_t expand_bytes) {
   assert_locked_or_safepoint(Heap_lock);
   if (bytes == 0) {
     return true;  // That's what grow_by(0) would return
   }
+    //做内存对齐
   size_t aligned_bytes  = ReservedSpace::page_align_size_up(bytes);
   if (aligned_bytes == 0){
     // The alignment caused the number of bytes to wrap.  An expand_by(0) will
@@ -435,12 +460,14 @@ bool CardGeneration::expand(size_t bytes, size_t expand_bytes) {
   size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);
   bool success = false;
   if (aligned_expand_bytes > aligned_bytes) {
+      //扩展内存空间，正常来说aligned_bytes大于aligned_expand_bytes
     success = grow_by(aligned_expand_bytes);
   }
   if (!success) {
     success = grow_by(aligned_bytes);
   }
   if (!success) {
+      //依然扩展失败，则尝试扩展至最大内存
     success = grow_to_reserved();
   }
   if (PrintGC && Verbose) {
@@ -466,20 +493,26 @@ void CardGeneration::invalidate_remembered_set() {
 }
 
 
+// 该方法是在GC结束后根据参数MinHeapFreeRatio和MaxHeapFreeRatio以及当前内存的使用量来重新计算期望的容量，并做适当的扩容或者缩容处理
 void CardGeneration::compute_new_size() {
   assert(_shrink_factor <= 100, "invalid shrink factor");
   size_t current_shrink_factor = _shrink_factor;
+    //将_shrink_factor置为0，后面缩容时会重新赋值
   _shrink_factor = 0;
 
   // We don't have floating point command-line arguments
   // Note:  argument processing ensures that MinHeapFreeRatio < 100.
+    //MinHeapFreeRatio表示老年代空闲内存占总内存的最低百分比，默认值是80
+    //计算最低的空闲百分比和最大的已使用百分比
   const double minimum_free_percentage = MinHeapFreeRatio / 100.0;
   const double maximum_used_percentage = 1.0 - minimum_free_percentage;
 
   // Compute some numbers about the state of the heap.
+    //获取GC后的容量和已使用量
   const size_t used_after_gc = used();
   const size_t capacity_after_gc = capacity();
 
+    //计算期望的最低容量，必须大于初始值
   const double min_tmp = used_after_gc / maximum_used_percentage;
   size_t minimum_desired_capacity = (size_t)MIN2(min_tmp, double(max_uintx));
   // Don't shrink less than the initial generation size
@@ -510,9 +543,12 @@ void CardGeneration::compute_new_size() {
 
   if (capacity_after_gc < minimum_desired_capacity) {
     // If we have less free space than we want then expand
+      //当前容量小于期望的容量，需要扩容
+      //计算期望扩容的量
     size_t expand_bytes = minimum_desired_capacity - capacity_after_gc;
     // Don't expand unless it's significant
     if (expand_bytes >= _min_heap_delta_bytes) {
+        //必须大于最低扩容量才执行扩容
       expand(expand_bytes, 0); // safe if expansion fails
     }
     if (PrintGC && Verbose) {
@@ -528,11 +564,15 @@ void CardGeneration::compute_new_size() {
   }
 
   // No expansion, now see if we want to shrink
+    //当前容量大于期望的容量，需要缩容
   size_t shrink_bytes = 0;
   // We would never want to shrink more than this
+    //计算缩容的容量
   size_t max_shrink_bytes = capacity_after_gc - minimum_desired_capacity;
 
+    //MaxHeapFreeRatio表示空闲堆内存的最大百分比，默认是70%，用来避免缩容，通常用于老年代，但是G1和ParallelGC下应用于整个堆
   if (MaxHeapFreeRatio < 100) {
+      //根据MaxHeapFreeRatio和used_after_gc计算期望的最大内存容量
     const double maximum_free_percentage = MaxHeapFreeRatio / 100.0;
     const double minimum_used_percentage = 1.0 - maximum_free_percentage;
     const double max_tmp = used_after_gc / minimum_used_percentage;
@@ -558,6 +598,7 @@ void CardGeneration::compute_new_size() {
 
     if (capacity_after_gc > maximum_desired_capacity) {
       // Capacity too large, compute shrinking size
+        //计算需要缩容的内存容量
       shrink_bytes = capacity_after_gc - maximum_desired_capacity;
       // We don't want shrink all the way back to initSize if people call
       // System.gc(), because some programs do that between "phases" and then
@@ -565,6 +606,7 @@ void CardGeneration::compute_new_size() {
       // damp the shrinking: 0% on the first call, 10% on the second call, 40%
       // on the third call, and 100% by the fourth call.  But if we recompute
       // size without shrinking, it goes back to 0%.
+        //为了避免一次调用就缩容到初始大小，所以设置了_shrink_factor，第一次调用实际不缩容，第二次缩容10%，第三次40%，第四次100%，如果中间有一次扩容，则被重置为0
       shrink_bytes = shrink_bytes / 100 * current_shrink_factor;
       assert(shrink_bytes <= max_shrink_bytes, "invalid shrink size");
       if (current_shrink_factor == 0) {
@@ -596,6 +638,7 @@ void CardGeneration::compute_new_size() {
     // We might have expanded for promotions, in which case we might want to
     // take back that expansion if there's room after GC.  That keeps us from
     // stretching the heap with promotions when there's plenty of room.
+      //执行GC后老年代的容量变大了，这可能是因为在promote的过程中扩展了，缩容时候需要考虑这一部分内存
     size_t expansion_for_promotion = capacity_after_gc - _capacity_at_prologue;
     expansion_for_promotion = MIN2(expansion_for_promotion, max_shrink_bytes);
     // We have two shrinking computations, take the largest
@@ -615,6 +658,7 @@ void CardGeneration::compute_new_size() {
     }
   }
   // Don't shrink unless it's significant
+    //需要缩容的内存大于最低要求，则执行缩容
   if (shrink_bytes >= _min_heap_delta_bytes) {
     shrink(shrink_bytes);
   }

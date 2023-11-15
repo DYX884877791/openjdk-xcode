@@ -107,17 +107,25 @@ class ClassLoaderData;
 class SymbolBase : public MetaspaceObj {
  public:
   ATOMIC_SHORT_PAIR(
+      // 支持原子操作的short变量，表示该Symbol的引用计数
     volatile short _refcount,  // needs atomic operation
+      // UTF-8字符串的长度
     unsigned short _length     // number of UTF8 characters in the symbol (does not need atomic op)
   );
+  // hash唯一标识码
   int            _identity_hash;
 };
 
+// Symbol类的定义位于oops/symbol.hpp中，Symbol表示一个规范化的字符串形式的描述符，如方法Object m(int i, double d, Thread t) {...}对应的方法描述符就是(IDLjava/lang/Thread;)Ljava/lang/Object
+// 所有的Symbol实例通过保存在全局的SymbolTable中，SymbolTable即符号表，基于此实现符号引用计数功能。当有一个新的指针指向该Symbol实例，则引用计数加1，
+// 当该指针销毁时需要将引用计数减1，当一个Symbol的引用计数为0，垃圾回收器就会从SymbolTable中删除该Symbol并回收内存。
+// 定义了可以操作该属性的byte_at_put(int index, int value)方法，打印具体字符串内容的as_C_string()，as_utf8()方法，以及引用计数相关的refcount()，increment_refcount()，decrement_refcount()方法。
 class Symbol : private SymbolBase {
   friend class VMStructs;
   friend class SymbolTable;
   friend class MoveSymbols;
  private:
+    // Symbol增加一个字节数组的属性_body，用于存储描述符对应的字符串
   jbyte _body[1];
 
   enum {

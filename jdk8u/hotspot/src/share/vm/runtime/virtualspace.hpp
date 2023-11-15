@@ -29,14 +29,20 @@
 
 // ReservedSpace is a data structure for reserving a contiguous address range.
 
+// ReservedSpace用来分配一段地址连续的内存空间，底层通过mmap实现，注意此时未实际分配内存。其定义位于hotspot/src/share/vm/runtime/virtualspace.hpp中。
+// ReservedSpace的子类有两个:ReservedHeapSpace、ReservedCodeSpace，但是子类并未添加新的字段或者方法
 class ReservedSpace VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
  private:
+    // base表示这段连续内存空间的基地址
   char*  _base;
+    // size表示内存空间大小
   size_t _size;
   size_t _noaccess_prefix;
   size_t _alignment;
+    // special表示是否走特殊方法分配
   bool   _special;
+    // executable表示这段内存存储的数据是否是可执行的
   bool   _executable;
 
   // ReservedSpace
@@ -103,6 +109,7 @@ ReservedSpace ReservedSpace::last_part(size_t partition_size)
 }
 
 // Class encapsulating behavior specific of memory space reserved for Java heap
+// ReservedHeapSpace是分配Java堆内存使用的
 class ReservedHeapSpace : public ReservedSpace {
 public:
   // Constructor
@@ -119,6 +126,7 @@ class ReservedCodeSpace : public ReservedSpace {
 
 // VirtualSpace is data structure for committing a previously reserved address range in smaller chunks.
 
+// VirtualSpace是与ReservedSpace配合使用的，ReservedSpace是预先分配一段连续的内存空间，VirtualSpace负责在这段内存空间内实际申请内存。
 class VirtualSpace VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
  private:

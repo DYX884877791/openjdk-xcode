@@ -41,6 +41,7 @@
 
 class vtableEntry;
 
+// KlassVtable 这个里面主要维护了 InstanceKlass 和 vtable 的关系, 以及 vtable 的一些附加信息
 class klassVtable : public ResourceObj {
   KlassHandle  _klass;            // my klass
   int          _tableOffset;      // offset of start of vtable data within klass

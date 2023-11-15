@@ -130,6 +130,7 @@ class ThreadStateTransition : public StackObj {
 
   // Change threadstate in a manner, so safepoint can detect changes.
   // Time-critical: called on exit from every runtime routine
+    //transition方法会检查是否进入安全点，如果是则阻塞当前线程
   static inline void transition(JavaThread *thread, JavaThreadState from, JavaThreadState to) {
     assert(from != _thread_in_Java, "use transition_from_java");
     assert(from != _thread_in_native, "use transition_from_native");
@@ -193,6 +194,7 @@ class ThreadStateTransition : public StackObj {
   // have not been setup.
   static inline void transition_from_java(JavaThread *thread, JavaThreadState to) {
     assert(thread->thread_state() == _thread_in_Java, "coming from wrong thread state");
+      //直接切换，未检查安全点
     thread->set_thread_state(to);
   }
 
@@ -236,11 +238,14 @@ class ThreadStateTransition : public StackObj {
 class ThreadInVMfromJava : public ThreadStateTransition {
  public:
   ThreadInVMfromJava(JavaThread* thread) : ThreadStateTransition(thread) {
+      //将线程状态从_thread_in_Java切换成_thread_in_vm
     trans_from_java(_thread_in_vm);
   }
   ~ThreadInVMfromJava()  {
+      //将线程状态从_thread_in_vm切换成_thread_in_Java
     trans(_thread_in_vm, _thread_in_Java);
     // Check for pending. async. exceptions or suspends.
+      //检查是否有异常
     if (_thread->has_special_runtime_exit_condition()) _thread->handle_special_runtime_exit_condition();
   }
 };

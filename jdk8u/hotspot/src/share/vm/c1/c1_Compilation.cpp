@@ -144,6 +144,7 @@ void Compilation::build_hir() {
     log->stamp();
     log->end_head();
   }
+    //构建HIR，高级中间表示（High-level Intermediate Representation），HIR与平台无关，通常采用图结构，更适合JVM对程序进行优化。
   _hir = new IR(this, method(), osr_bci());
   if (log)  log->done("parse");
   if (!_hir->is_valid()) {
@@ -164,6 +165,7 @@ void Compilation::build_hir() {
 
   _hir->verify();
 
+    //各种编译优化
   if (UseC1Optimizations) {
     NEEDS_CLEANUP
     // optimization
@@ -206,6 +208,7 @@ void Compilation::build_hir() {
   if (RangeCheckElimination) {
     if (_hir->osr_entry() == NULL) {
       PhaseTraceTime timeit(_t_rangeCheckElimination);
+        //访问越界优化
       RangeCheckElimination::eliminate(_hir);
     }
   }
@@ -224,6 +227,7 @@ void Compilation::build_hir() {
     // optimization
     PhaseTraceTime timeit(_t_optimize_null_checks);
 
+      //null检查优化
     _hir->eliminate_null_checks();
   }
 
@@ -258,6 +262,7 @@ void Compilation::emit_lir() {
     LinearScan* allocator = new LinearScan(hir(), &gen, frame_map());
     set_allocator(allocator);
     // Assign physical registers to LIR operands using a linear scan algorithm.
+      //线性扫描算法，赋值物理寄存器给LIR操作数
     allocator->do_linear_scan();
     CHECK_BAILOUT();
 
@@ -340,6 +345,7 @@ int Compilation::emit_code_body() {
 
   LIR_Assembler lir_asm(this);
 
+    //发射代码
   lir_asm.emit_code(hir()->code());
   CHECK_BAILOUT_(0);
 
@@ -358,6 +364,14 @@ int Compilation::emit_code_body() {
 }
 
 
+/**
+ * 编译流程分三步：
+ *
+ * 1. HIR阶段：构建CFG流程图，根据流程图进行数据流优化
+ * 2. LIR阶段：为指令操作数分配虚拟寄存器，根据变量存活周期采用线性扫描算法分配物理寄存器
+ * 3. 发射阶段：LIR宏汇编器优化，存储编译好的机器码到内存缓冲区
+ *
+ */
 int Compilation::compile_java_method() {
   assert(!method()->is_native(), "should not reach here");
 
@@ -375,6 +389,7 @@ int Compilation::compile_java_method() {
 
   {
     PhaseTraceTime timeit(_t_buildIR);
+      //编译字节码为中间表示HIR
     build_hir();
   }
   if (BailoutAfterHIR) {
@@ -386,12 +401,14 @@ int Compilation::compile_java_method() {
     PhaseTraceTime timeit(_t_emit_lir);
 
     _frame_map = new FrameMap(method(), hir()->number_of_locks(), MAX2(4, hir()->max_stack()));
+      //编译HIR为低级表示LIR，低级中间表示（Low-level Intermediate Representation，以下称为LIR），在LIR的基础上会进行寄存器分配、窥孔优化（局部的优化方式，编译器在一个基本块或者多个基本块中，针对已经生成的代码，结合CPU自己指令的特点，通过一些认为可能带来性能提升的转换规则或者通过整体的分析，进行指令转换，来提升代码性能）等操作，最终生成机器码。
     emit_lir();
   }
   CHECK_BAILOUT_(no_frame_size);
 
   {
     PhaseTraceTime timeit(_t_codeemit);
+      //编译结果存贮
     return emit_code_body();
   }
 }
@@ -420,6 +437,7 @@ void Compilation::install_code(int frame_size) {
 
 void Compilation::compile_method() {
   // setup compilation
+    //初始化编译环境
   initialize();
 
   if (!method()->can_be_compiled()) {
@@ -445,6 +463,7 @@ void Compilation::compile_method() {
 #endif
 
   // compile method
+    //这里开始真正执行java方法的编译
   int frame_size = compile_java_method();
 
   // bailout if method couldn't be compiled
@@ -454,6 +473,7 @@ void Compilation::compile_method() {
   if (InstallMethods) {
     // install code
     PhaseTraceTime timeit(_t_codeinstall);
+      //编译完成以后进行原方法替换
     install_code(frame_size);
   }
 
@@ -522,6 +542,7 @@ void Compilation::generate_exception_handler_table() {
 }
 
 
+// 当编译线程循环从任务队列拿到一个编译任务时，会构造Compilation并执行compile_method
 Compilation::Compilation(AbstractCompiler* compiler, ciEnv* env, ciMethod* method,
                          int osr_bci, BufferBlob* buffer_blob)
 : _compiler(compiler)

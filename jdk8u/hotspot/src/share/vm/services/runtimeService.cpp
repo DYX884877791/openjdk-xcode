@@ -156,6 +156,7 @@ void RuntimeService::record_safepoint_end() {
 
   // Print the time interval for which the app was stopped
   // during the current safepoint operation.
+  // 打印 STW 时间
   if (PrintGCApplicationStoppedTime) {
     gclog_or_tty->date_stamp(PrintGCDateStamps);
     gclog_or_tty->stamp(PrintGCTimeStamps);

@@ -57,8 +57,10 @@ class G1CollectorPolicy;
 class GCPolicyCounters;
 class MarkSweepPolicy;
 
+// CollectorPolicy的定义在hotspot/src/share/vm/memory/collectorPolicy.hpp中，该类及其子类用于定义垃圾回收器使用的全局属性，并初始化分代内存及其他共享资源
 class CollectorPolicy : public CHeapObj<mtGC> {
  protected:
+    //跟踪分代内存的性能的计数器
   GCPolicyCounters* _gc_policy_counters;
 
   virtual void initialize_alignments() = 0;
@@ -68,22 +70,30 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   DEBUG_ONLY(virtual void assert_flags();)
   DEBUG_ONLY(virtual void assert_size_info();)
 
+    //初始堆内存
   size_t _initial_heap_byte_size;
+    //最大堆内存
   size_t _max_heap_byte_size;
+    //最小堆内存
   size_t _min_heap_byte_size;
 
+    //space分配粒度
   size_t _space_alignment;
+    //heap分配粒度，_heap_alignment必须大于_space_alignment，且是_space_alignment的整数倍
   size_t _heap_alignment;
 
   // Needed to keep information if MaxHeapSize was set on the command line
   // when the flag value is aligned etc by ergonomics
+    //是否通过命令行参数设置了最大堆内存
   bool _max_heap_size_cmdline;
 
   // The sizing of the heap are controlled by a sizing policy.
+    //用来自适应调整堆内存大小的策略实现
   AdaptiveSizePolicy* _size_policy;
 
   // Set to true when policy wants soft refs cleared.
   // Reset to false by gc after it clears all soft refs.
+    //是否需要清除所有的软引用，当软引用清除结束，垃圾回收器会将其置为false
   bool _should_clear_all_soft_refs;
 
   // Set to true by the GC if the just-completed gc cleared all
@@ -91,6 +101,7 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   // set to false each time gc returns to the mutator.  For example, in the
   // ParallelScavengeHeap case the latter would be done toward the end of
   // mem_allocate() where it returns op.result()
+    //当GC刚清除完所有的软引用时会设置该属性为true，当返回mutator时被设置成false
   bool _all_soft_refs_clear;
 
   CollectorPolicy();

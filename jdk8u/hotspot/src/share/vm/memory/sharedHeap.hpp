@@ -108,20 +108,25 @@ protected:
   // There should be only a single instance of "SharedHeap" in a program.
   // This is enforced with the protected constructor below, which will also
   // set the static pointer "_sh" to that instance.
+  //静态SharedHeap实例
   static SharedHeap* _sh;
 
   // and the Gen Remembered Set, at least one good enough to scan the perm
   // gen.
+  //卡表实现
   GenRemSet* _rem_set;
 
   // A gc policy, controls global gc resource issues
+  //垃圾回收策略
   CollectorPolicy *_collector_policy;
 
   // See the discussion below, in the specification of the reader function
   // for this variable.
+  //遍历Java线程包含的oop使用的
   int _strong_roots_parity;
 
   // If we're doing parallel GC, use this gang of threads.
+  //执行并行GC的线程池
   FlexibleWorkGang* _workers;
 
   // Full initialization is done in a concrete subtype's "initialize"

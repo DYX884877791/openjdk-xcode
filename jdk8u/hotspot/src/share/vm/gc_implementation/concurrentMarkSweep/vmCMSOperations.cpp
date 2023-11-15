@@ -225,57 +225,71 @@ void VM_GenCollectFullConcurrent::doit() {
     // to say do this only if we are sure we will not bail
     // out to a full collection in this attempt, but that's
     // for the future.
+      //GC的次数没有变说明未执行young gc
     assert(SafepointSynchronize::is_at_safepoint(),
       "We can only be executing this arm of if at a safepoint");
     GCCauseSetter gccs(gch, _gc_cause);
+      //执行年轻代的垃圾回收
     gch->do_full_collection(gch->must_clear_all_soft_refs(),
                             0 /* collect only youngest gen */);
   } // Else no need for a foreground young gc
-  assert((_gc_count_before < gch->total_collections()) ||
+  assert((_gc_count_before < gch->total_collections()) ||   //执行过GC了
          (GC_locker::is_active() /* gc may have been skipped */
-          && (_gc_count_before == gch->total_collections())),
+          && (_gc_count_before == gch->total_collections())),   //因为有线程处于JNI关键区，GC被中止了
          "total_collections() should be monotonically increasing");
 
+    //获取锁FullGCCount_lock
   MutexLockerEx x(FullGCCount_lock, Mutex::_no_safepoint_check_flag);
   assert(_full_gc_count_before <= gch->total_full_collections(), "Error");
   if (gch->total_full_collections() == _full_gc_count_before) {
     // Disable iCMS until the full collection is done, and
     // remember that we did so.
+      //total_full_collections未变，说明老年代的GC未执行
+      //禁用icms
     CMSCollector::disable_icms();
     _disabled_icms = true;
     // In case CMS thread was in icms_wait(), wake it up.
+      //唤醒在icms_wait()上等待的CMS Thread
     CMSCollector::start_icms();
     // Nudge the CMS thread to start a concurrent collection.
+      //推动CMS Thread执行一次老年代的GC
     CMSCollector::request_full_gc(_full_gc_count_before, _gc_cause);
   } else {
+      //说明已经执行过一次老年代GC了，不用再执行
     assert(_full_gc_count_before < gch->total_full_collections(), "Error");
     FullGCCount_lock->notify_all();  // Inform the Java thread its work is done
   }
 }
 
+//判断是否需要在安全点上执行
 bool VM_GenCollectFullConcurrent::evaluate_at_safepoint() const {
   Thread* thr = Thread::current();
   assert(thr != NULL, "Unexpected tid");
   if (!thr->is_Java_thread()) {
+      //如果是VMThread执行的
     assert(thr->is_VM_thread(), "Expected to be evaluated by VM thread");
     GenCollectedHeap* gch = GenCollectedHeap::heap();
     if (_gc_count_before != gch->total_collections()) {
       // No need to do a young gc, we'll just nudge the CMS thread
       // in the doit() method above, to be executed soon.
+        //如果已经完成了一次Young GC
       assert(_gc_count_before < gch->total_collections(),
              "total_collections() should be monotnically increasing");
       return false;  // no need for foreground young gc
     }
   }
+    //如果是JavaThread调用的，如System.gc()方法
   return true;       // may still need foreground young gc
 }
 
 
+//GC结束后调用
 void VM_GenCollectFullConcurrent::doit_epilogue() {
   Thread* thr = Thread::current();
   assert(thr->is_Java_thread(), "just checking");
   JavaThread* jt = (JavaThread*)thr;
   // Release the Heap_lock first.
+    //释放锁
   Heap_lock->unlock();
   release_and_notify_pending_list_lock();
 
@@ -292,6 +306,7 @@ void VM_GenCollectFullConcurrent::doit_epilogue() {
     // maybe we should change the condition to test _gc_cause ==
     // GCCause::_java_lang_system_gc, instead of
     // _gc_cause != GCCause::_gc_locker
+      //正常只有调用System.gc()时会走此方法
     assert(_gc_cause == GCCause::_java_lang_system_gc,
            "the only way to get here if this was a System.gc()-induced GC");
     assert(ExplicitGCInvokesConcurrent, "Error");
@@ -300,16 +315,21 @@ void VM_GenCollectFullConcurrent::doit_epilogue() {
     // FullGCEvent_lock, which may be needed by the VM thread
     // or by the CMS thread, so we do not want to be suspended
     // while holding that lock.
+      //调整线程状态由in vm到in native
     ThreadToNativeFromVM native(jt);
+      //获取锁MutexLockerEx
     MutexLockerEx ml(FullGCCount_lock, Mutex::_no_safepoint_check_flag);
     // Either a concurrent or a stop-world full gc is sufficient
     // witness to our request.
     while (gch->total_full_collections_completed() <= _full_gc_count_before) {
+        //还是小于等于，说明GC未完成，在FullGCCount_lock上等待直到total_full_collections_completed大于_full_gc_count_before
+        //即GC结束
       FullGCCount_lock->wait(Mutex::_no_safepoint_check_flag);
     }
   }
   // Enable iCMS back if we disabled it earlier.
   if (_disabled_icms) {
+      //重新开启icms
     CMSCollector::enable_icms();
   }
 }

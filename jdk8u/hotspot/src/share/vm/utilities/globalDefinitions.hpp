@@ -125,6 +125,7 @@ extern int heapOopSize;                       // Oop within a java object
 const int wordSize           = sizeof(char*);
 const int longSize           = sizeof(jlong);
 const int jintSize           = sizeof(jint);
+//size_t在64位下，是long类型，8个字节
 const int size_tSize         = sizeof(size_t);
 
 const int BytesPerOop        = BytesPerWord;  // Full-width oop

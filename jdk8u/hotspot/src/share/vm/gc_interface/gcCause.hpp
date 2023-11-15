@@ -34,6 +34,7 @@
 // and implemenation-private "causes".
 //
 
+//  GCCause的定义在同目录下的gcCause.hpp中，表示导致GC的原因，GCCause专门定义了一个枚举表示所有可能的原因
 class GCCause : public AllStatic {
  public:
   enum Cause {
@@ -90,11 +91,13 @@ class GCCause : public AllStatic {
   }
 
   // Return a string describing the GCCause.
+  // 与之对应的to_string(GCCause::Cause cause)方法用来返回给定Cause的描述字符串，参考gcCause.cpp中的实现。
   static const char* to_string(GCCause::Cause cause);
 };
 
 // Helper class for doing logging that includes the GC Cause
 // as a string.
+// GCCauseString是一个工具类，用来打印包含GCCause::Cause的日志
 class GCCauseString : StackObj {
  private:
    static const int _length = 128;
@@ -103,7 +106,9 @@ class GCCauseString : StackObj {
 
  public:
    GCCauseString(const char* prefix, GCCause::Cause cause) {
+       //PrintGCCause表示是否打印GC原因，默认为true
      if (PrintGCCause) {
+         //jio_snprintf返回char数组中被占用的元素的个数，_buffer是起始空闲位置，_length是空闲的元素个数
       _position = jio_snprintf(_buffer, _length, "%s (%s) ", prefix, GCCause::to_string(cause));
      } else {
       _position = jio_snprintf(_buffer, _length, "%s ", prefix);
@@ -113,6 +118,7 @@ class GCCauseString : StackObj {
    }
 
    GCCauseString& append(const char* str) {
+       //将str插入到_buffer中已有的字符串的后面
      int res = jio_snprintf(_buffer + _position, _length - _position, "%s", str);
      _position += res;
      assert(res >= 0 && _position <= _length,
@@ -120,6 +126,7 @@ class GCCauseString : StackObj {
      return *this;
    }
 
+    //运算符重载，将其强转成const char*时返回_buffer
    operator const char*() {
      return _buffer;
    }

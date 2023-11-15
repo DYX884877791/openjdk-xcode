@@ -55,6 +55,7 @@ class Metadebug;
 
 // GC root for walking class loader data created
 
+// ClassLoaderDataGraph的定义同样位于classLoaderData.hpp中，相当于ClassLoaderData的一个管理类，方便遍历所有的ClassLoaderData，其定义的属性和方法都是静态的
 class ClassLoaderDataGraph : public AllStatic {
   friend class ClassLoaderData;
   friend class ClassLoaderDataGraphMetaspaceIterator;
@@ -62,7 +63,9 @@ class ClassLoaderDataGraph : public AllStatic {
   friend class VMStructs;
  private:
   // All CLDs (except the null CLD) can be reached by walking _head->_next->...
+  // 当前活跃的ClassLoaderData链表
   static ClassLoaderData* _head;
+  // 即将被卸载的ClassLoaderData链表
   static ClassLoaderData* _unloading;
   // CMS support.
   static ClassLoaderData* _saved_head;
@@ -75,6 +78,7 @@ class ClassLoaderDataGraph : public AllStatic {
   static ClassLoaderData* find_or_create(Handle class_loader, TRAPS);
   static void purge();
   static void clear_claimed_marks();
+  // 定义的方法主要是GC遍历相关的，其实现都是通过_head属性遍历所有的ClassLoaderData然后调用ClassLoaderData的对应遍历方法
   // oops do
   static void oops_do(OopClosure* f, KlassClosure* klass_closure, bool must_claim);
   static void keep_alive_oops_do(OopClosure* blk, KlassClosure* klass_closure, bool must_claim);
@@ -171,6 +175,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
 
   static ClassLoaderData * _the_null_class_loader_data;
 
+  // 对应的类加载器对象
   oop _class_loader;          // oop used to uniquely identify a class loader
                               // class loader or a canonical class path
   Dependencies _dependencies; // holds dependencies from this class loader
@@ -179,8 +184,12 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   Metaspace * _metaspace;  // Meta-space where meta-data defined by the
                            // classes in the class loader are allocated.
   Mutex* _metaspace_lock;  // Locks the metaspace for allocations and setup.
+  // 表示这个类加载是否需要卸载的
   bool _unloading;         // true if this class loader goes away
+  // 如果这个值是true，那这个类加载器会认为是活的，会将其做为GC ROOT的一部分，gc的时候不会被回收
+  // _keep_alive到底用在哪？其实是在GC的的时候，来决定要不要用Closure或者用什么Closure来扫描对应的ClassLoaderData。
   bool _keep_alive;        // if this CLD is kept alive without a keep_alive_object().
+  // 是否匿名，这种ClassLoaderData主要是在lambda表达式里用的
   bool _is_anonymous;      // if this CLD is for an anonymous class
   volatile int _claimed;   // true if claimed, for example during GC traces.
                            // To avoid applying oop closure more than once.
@@ -200,6 +209,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   GrowableArray<Metadata*>*      _deallocate_list;
 
   // Support for walking class loader data objects
+  // 指向下一个ClassLoaderData，在gc的时候方便遍历
   ClassLoaderData* _next; /// Next loader_datas created
 
   // ReadOnly and ReadWrite metaspaces (static because only on the null

@@ -354,14 +354,17 @@ void LIRGenerator::block_do_epilog(BlockBegin* block) {
 void LIRGenerator::block_do(BlockBegin* block) {
   CHECK_BAILOUT();
 
+    // 转换每个基本块前的操作,设置label
   block_do_prolog(block);
   set_block(block);
 
+    // 遍历基本块中的所有HIR指令，调用do_root(instr)将它们转换为LIR指令
   for (Instruction* instr = block; instr != NULL; instr = instr->next()) {
     if (instr->is_pinned()) do_root(instr);
   }
 
   set_block(NULL);
+    // 转换每个基本块后的操作
   block_do_epilog(block);
 }
 

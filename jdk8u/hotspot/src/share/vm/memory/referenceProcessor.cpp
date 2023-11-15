@@ -211,6 +211,7 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(
 
   _soft_ref_timestamp_clock = java_lang_ref_SoftReference::clock();
 
+  // PrintReferenceGC表示：打印 Reference 处理信息
   bool trace_time = PrintGCDetails && PrintReferenceGC;
 
   // Soft references

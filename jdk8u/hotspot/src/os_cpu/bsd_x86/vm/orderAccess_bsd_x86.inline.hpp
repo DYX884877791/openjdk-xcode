@@ -40,7 +40,7 @@ inline void OrderAccess::storeload()  { fence(); }
 inline void OrderAccess::acquire() {
   volatile intptr_t local_dummy;
 #ifdef AMD64
-  __asm__ volatile ("movq 0(%%rsp), %0" : "=r" (local_dummy) : : "memory");
+  __asm__ volatile ("movq 0(%%rsp),%0" : "=r" (local_dummy) : : "memory");
 #else
   __asm__ volatile ("movl 0(%%esp),%0" : "=r" (local_dummy) : : "memory");
 #endif // AMD64
@@ -113,7 +113,7 @@ inline void     OrderAccess::store_fence(jint*   p, jint   v) {
 
 inline void     OrderAccess::store_fence(jlong*   p, jlong   v) {
 #ifdef AMD64
-  __asm__ __volatile__ ("xchgq (%2), %0"
+  __asm__ __volatile__ ("xchgq (%2),%0"
                         : "=r" (v)
                         : "0" (v), "r" (p)
                         : "memory");
@@ -133,7 +133,7 @@ inline void     OrderAccess::store_fence(jdouble* p, jdouble v) { *p = v; fence(
 
 inline void     OrderAccess::store_ptr_fence(intptr_t* p, intptr_t v) {
 #ifdef AMD64
-  __asm__ __volatile__ ("xchgq (%2), %0"
+  __asm__ __volatile__ ("xchgq (%2),%0"
                         : "=r" (v)
                         : "0" (v), "r" (p)
                         : "memory");
@@ -144,7 +144,7 @@ inline void     OrderAccess::store_ptr_fence(intptr_t* p, intptr_t v) {
 
 inline void     OrderAccess::store_ptr_fence(void**    p, void*    v) {
 #ifdef AMD64
-  __asm__ __volatile__ ("xchgq (%2), %0"
+  __asm__ __volatile__ ("xchgq (%2),%0"
                         : "=r" (v)
                         : "0" (v), "r" (p)
                         : "memory");
@@ -175,7 +175,7 @@ inline void     OrderAccess::release_store_fence(volatile jint*   p, jint   v) {
 
 inline void     OrderAccess::release_store_fence(volatile jlong*   p, jlong   v) {
 #ifdef AMD64
-  __asm__ __volatile__ (  "xchgq (%2), %0"
+  __asm__ __volatile__ (  "xchgq (%2),%0"
                           : "=r" (v)
                           : "0" (v), "r" (p)
                           : "memory");
@@ -194,7 +194,7 @@ inline void     OrderAccess::release_store_fence(volatile jdouble* p, jdouble v)
 
 inline void     OrderAccess::release_store_ptr_fence(volatile intptr_t* p, intptr_t v) {
 #ifdef AMD64
-  __asm__ __volatile__ (  "xchgq (%2), %0"
+  __asm__ __volatile__ (  "xchgq (%2),%0"
                           : "=r" (v)
                           : "0" (v), "r" (p)
                           : "memory");
@@ -204,7 +204,7 @@ inline void     OrderAccess::release_store_ptr_fence(volatile intptr_t* p, intpt
 }
 inline void     OrderAccess::release_store_ptr_fence(volatile void*     p, void*    v) {
 #ifdef AMD64
-  __asm__ __volatile__ (  "xchgq (%2), %0"
+  __asm__ __volatile__ (  "xchgq (%2),%0"
                           : "=r" (v)
                           : "0" (v), "r" (p)
                           : "memory");

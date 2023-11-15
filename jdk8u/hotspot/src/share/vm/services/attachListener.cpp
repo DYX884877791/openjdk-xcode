@@ -139,17 +139,21 @@ static jint thread_dump(AttachOperation* op, outputStream* out) {
   }
 
   // thread stacks
+    // 打印线程栈
   VM_PrintThreads op1(out, print_concurrent_locks);
   VMThread::execute(&op1);
 
   // JNI global handles
+    // 打印JNI
   VM_PrintJNI op2(out);
   VMThread::execute(&op2);
 
   // Deadlock detection
+    // 打印死锁
   VM_FindDeadlocks op3(out);
   VMThread::execute(&op3);
 
+    // 三个操作都是交给VMThread线程去执行的
   return JNI_OK;
 }
 
@@ -430,7 +434,8 @@ static void attach_listener_thread_entry(JavaThread* thread, TRAPS) {
        * 在AttachListener::dequeue(); 在liunx里的实现就是监听刚才创建的socket的文件，如果有请求进来，找到请求对应的操作，
        * 调用操作得到结果并把结果写到这个socket的文件，如果你把socket的文件删除，jstack/jmap会出现错误信息 unable to open socket file:........
        *
-       * 我们经常使用 kill -3 pid的操作打印出线程栈信息，我们可以看到具体的实现是在Signal Dispatcher 线程中完成的，因为kill -3 pid 并不会创建.attach_pid#pid文件，所以一直初始化不成功，从而线程的栈信息被打印到控制台中。
+       * 我们经常使用 kill -3 pid的操作打印出线程栈信息，我们可以看到具体的实现是在Signal Dispatcher 线程中完成的，
+       * 因为kill -3 pid 并不会创建.attach_pid#pid文件，所以一直初始化不成功，从而线程的栈信息被打印到控制台中。
        */
     AttachOperation* op = AttachListener::dequeue();
     if (op == NULL) {

@@ -487,6 +487,7 @@ class ContiguousSpace: public CompactibleSpace {
   WaterMark bottom_mark()     { return WaterMark(this, bottom()); }
   WaterMark top_mark()        { return WaterMark(this, top()); }
   WaterMark saved_mark()      { return WaterMark(this, saved_mark_word()); }
+    //DefNewGeneration::save_marks会将该属性置为top
   bool saved_mark_at_top() const { return saved_mark_word() == top(); }
 
   // In debug mode mangle (write it with a particular bit

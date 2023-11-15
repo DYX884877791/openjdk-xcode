@@ -32,6 +32,7 @@
 #include "gc_implementation/shared/gcUtil.hpp"
 #include "memory/defNewGeneration.hpp"
 
+// clear_all用于清空BitMap中所有的标志
 inline void CMSBitMap::clear_all() {
   assert_locked();
   // CMS bitmaps are usually cover large memory regions
@@ -40,6 +41,7 @@ inline void CMSBitMap::clear_all() {
 }
 
 inline size_t CMSBitMap::heapWordToOffset(HeapWord* addr) const {
+    //pointer_delta算出addr相对于起始地址的偏移量，单位是字节
   return (pointer_delta(addr, _bmStartWord)) >> _shifter;
 }
 
@@ -52,8 +54,11 @@ inline size_t CMSBitMap::heapWordDiffToOffsetDiff(size_t diff) const {
   return diff >> _shifter;
 }
 
+// mark和par_mark是将某个地址在BitMap中对应的位打标
 inline void CMSBitMap::mark(HeapWord* addr) {
+    //校验已经获取了锁
   assert_locked();
+    //校验addr在CMSBitMap对应的地址范围内
   assert(_bmStartWord <= addr && addr < (_bmStartWord + _bmWordSize),
          "outside underlying space?");
   _bm.set_bit(heapWordToOffset(addr));
@@ -66,6 +71,7 @@ inline bool CMSBitMap::par_mark(HeapWord* addr) {
   return _bm.par_at_put(heapWordToOffset(addr), true);
 }
 
+// par_clear用于清除某个地址在BitMap中对应的标志
 inline void CMSBitMap::par_clear(HeapWord* addr) {
   assert_locked();
   assert(_bmStartWord <= addr && addr < (_bmStartWord + _bmWordSize),
@@ -73,13 +79,16 @@ inline void CMSBitMap::par_clear(HeapWord* addr) {
   _bm.par_at_put(heapWordToOffset(addr), false);
 }
 
+// mark_range和par_mark_range是将某个小范围的地址区间在BitMap中对应的位打标
 inline void CMSBitMap::mark_range(MemRegion mr) {
   NOT_PRODUCT(region_invariant(mr));
   // Range size is usually just 1 bit.
+    //通过heapWordToOffset算出来的起始地址通常只相差一位
   _bm.set_range(heapWordToOffset(mr.start()), heapWordToOffset(mr.end()),
                 BitMap::small_range);
 }
 
+// clear_range和par_clear_range用于清除某个小范围的地址区间在BitMap中对应的位的标志
 inline void CMSBitMap::clear_range(MemRegion mr) {
   NOT_PRODUCT(region_invariant(mr));
   // Range size is usually just 1 bit.
@@ -104,10 +113,12 @@ inline void CMSBitMap::par_clear_range(MemRegion mr) {
 inline void CMSBitMap::mark_large_range(MemRegion mr) {
   NOT_PRODUCT(region_invariant(mr));
   // Range size must be greater than 32 bytes.
+    //通过heapWordToOffset算出来的起始地址通常只相差至少32位
   _bm.set_range(heapWordToOffset(mr.start()), heapWordToOffset(mr.end()),
                 BitMap::large_range);
 }
 
+// clear_large_range和par_clear_large_range用于清除某个大范围的地址区间在BitMap中对应的位的标志
 inline void CMSBitMap::clear_large_range(MemRegion mr) {
   NOT_PRODUCT(region_invariant(mr));
   // Range size must be greater than 32 bytes.
@@ -131,6 +142,7 @@ inline void CMSBitMap::par_clear_large_range(MemRegion mr) {
 
 // Starting at "addr" (inclusive) return a memory region
 // corresponding to the first maximally contiguous marked ("1") region.
+// getAndClearMarkedRegion用于清除指定地址范围内第一个被连续打标的区域的标志
 inline MemRegion CMSBitMap::getAndClearMarkedRegion(HeapWord* addr) {
   return getAndClearMarkedRegion(addr, endWord());
 }
@@ -142,16 +154,20 @@ inline MemRegion CMSBitMap::getAndClearMarkedRegion(HeapWord* start_addr,
                                                     HeapWord* end_addr) {
   HeapWord *start, *end;
   assert_locked();
+    //找到start_addr后第一个打标的地址
   start = getNextMarkedWordAddress  (start_addr, end_addr);
+    //找到start之后的第一个没有打标的地址，start和end之间的区域就是一段连续打标的区域
   end   = getNextUnmarkedWordAddress(start,      end_addr);
   assert(start <= end, "Consistency check");
   MemRegion mr(start, end);
   if (!mr.is_empty()) {
+      //将start和end之间的标志去掉
     clear_range(mr);
   }
   return mr;
 }
 
+//  isMarked 和par_isMarked 用于判断某个地址是否已经打标
 inline bool CMSBitMap::isMarked(HeapWord* addr) const {
   assert_locked();
   assert(_bmStartWord <= addr && addr < (_bmStartWord + _bmWordSize),
@@ -161,12 +177,14 @@ inline bool CMSBitMap::isMarked(HeapWord* addr) const {
 
 // The same as isMarked() but without a lock check.
 inline bool CMSBitMap::par_isMarked(HeapWord* addr) const {
+    //与isMarked相比，不需要检查锁
   assert(_bmStartWord <= addr && addr < (_bmStartWord + _bmWordSize),
          "outside underlying space?");
   return _bm.at(heapWordToOffset(addr));
 }
 
 
+// isUnmarked是否未打标
 inline bool CMSBitMap::isUnmarked(HeapWord* addr) const {
   assert_locked();
   assert(_bmStartWord <= addr && addr < (_bmStartWord + _bmWordSize),
@@ -174,8 +192,12 @@ inline bool CMSBitMap::isUnmarked(HeapWord* addr) const {
   return !_bm.at(heapWordToOffset(addr));
 }
 
+// getNextMarkedWordAddress / getNextUnmarkedWordAddress / getAndClearMarkedRegion
+//     三个方法都有两个重载版本，指定起止地址和只指定起始地址，结束地址默认BitMap的结束地址。
+
 // Return the HeapWord address corresponding to next "1" bit
 // (inclusive).
+// getNextMarkedWordAddress返回指定地址范围的第一个位等于1的地址
 inline HeapWord* CMSBitMap::getNextMarkedWordAddress(HeapWord* addr) const {
   return getNextMarkedWordAddress(addr, endWord());
 }
@@ -185,9 +207,11 @@ inline HeapWord* CMSBitMap::getNextMarkedWordAddress(HeapWord* addr) const {
 inline HeapWord* CMSBitMap::getNextMarkedWordAddress(
   HeapWord* start_addr, HeapWord* end_addr) const {
   assert_locked();
+    //找到在指定地址范围内位下一个等于1的地址
   size_t nextOffset = _bm.get_next_one_offset(
                         heapWordToOffset(start_addr),
                         heapWordToOffset(end_addr));
+    //将BitMap中的地址转换成实际地址
   HeapWord* nextAddr = offsetToHeapWord(nextOffset);
   assert(nextAddr >= start_addr &&
          nextAddr <= end_addr, "get_next_one postcondition");
@@ -199,6 +223,7 @@ inline HeapWord* CMSBitMap::getNextMarkedWordAddress(
 
 // Return the HeapWord address corrsponding to the next "0" bit
 // (inclusive).
+// getNextUnmarkedWordAddress返回指定地址范围的第一个位等于0的地址
 inline HeapWord* CMSBitMap::getNextUnmarkedWordAddress(HeapWord* addr) const {
   return getNextUnmarkedWordAddress(addr, endWord());
 }
@@ -208,9 +233,11 @@ inline HeapWord* CMSBitMap::getNextUnmarkedWordAddress(HeapWord* addr) const {
 inline HeapWord* CMSBitMap::getNextUnmarkedWordAddress(
   HeapWord* start_addr, HeapWord* end_addr) const {
   assert_locked();
+    //找到在指定地址范围内位下一个等于0的地址
   size_t nextOffset = _bm.get_next_zero_offset(
                         heapWordToOffset(start_addr),
                         heapWordToOffset(end_addr));
+    //将BitMap中的地址转换成实际地址
   HeapWord* nextAddr = offsetToHeapWord(nextOffset);
   assert(nextAddr >= start_addr &&
          nextAddr <= end_addr, "get_next_zero postcondition");
@@ -219,17 +246,21 @@ inline HeapWord* CMSBitMap::getNextUnmarkedWordAddress(
   return nextAddr;
 }
 
+// isAllClear用于判断是否所有的标志都被清除了
 inline bool CMSBitMap::isAllClear() const {
   assert_locked();
+    //获取下一个被标记的地址，如果该地址大于等于结束地址，则认为所有的打标都清空了
   return getNextMarkedWordAddress(startWord()) >= endWord();
 }
 
+// 这两个方法都有两个重载版本，一个指定起止地址范围里，一个在整个BitMap对应的地址范围内，都是用来遍历指定地址范围内打标的位，会将这些位转换成真实地址，然后再对真实地址做必要的处理
 inline void CMSBitMap::iterate(BitMapClosure* cl, HeapWord* left,
                             HeapWord* right) {
   assert_locked();
   left = MAX2(_bmStartWord, left);
   right = MIN2(_bmStartWord + _bmWordSize, right);
   if (right > left) {
+      //遍历逻辑封装在bm里面，BitMapClosure会自动将BitMap的映射地址转换成真实地址
     _bm.iterate(cl, heapWordToOffset(left), heapWordToOffset(right));
   }
 }
@@ -508,6 +539,7 @@ inline void ModUnionClosure::do_MemRegion(MemRegion mr) {
   // we should do better than this XXX
   MemRegion mr2(mr.start(), (HeapWord*)round_to((intptr_t)mr.end(),
                  CardTableModRefBS::card_size /* bytes */));
+    // _t就是构造方法传入的CMSBitMap指针
   _t->mark_range(mr2);
 }
 

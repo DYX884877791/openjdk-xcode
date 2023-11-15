@@ -64,6 +64,7 @@ SurrogateLockerThread::SLT_msg_type
 Monitor*
      ConcurrentMarkSweepThread::_sltMonitor = NULL;
 
+// 构造方法执行时会创建一个与之关联的本地线程并启动线程的执行
 ConcurrentMarkSweepThread::ConcurrentMarkSweepThread(CMSCollector* collector)
   : ConcurrentGCThread() {
   assert(UseConcMarkSweepGC,  "UseConcMarkSweepGC should be set");
@@ -72,8 +73,10 @@ ConcurrentMarkSweepThread::ConcurrentMarkSweepThread(CMSCollector* collector)
   assert(_collector == NULL, "Collector already set");
   _collector = collector;
 
+    //设置线程名
   set_name("Concurrent Mark-Sweep GC Thread");
 
+    //创建关联的线程
   if (os::create_thread(this, os::cgc_thread)) {
     // An old comment here said: "Priority should be just less
     // than that of VMThread".  Since the VMThread runs at
@@ -87,27 +90,35 @@ ConcurrentMarkSweepThread::ConcurrentMarkSweepThread(CMSCollector* collector)
     // That won't happen on Solaris for various reasons,
     // but may well happen on non-Solaris platforms.
     int native_prio;
+      //UseCriticalCMSThreadPriority表示使用一个特殊的优先级，默认为false
     if (UseCriticalCMSThreadPriority) {
       native_prio = os::java_to_os_priority[CriticalPriority];
     } else {
       native_prio = os::java_to_os_priority[NearMaxPriority];
     }
+      //设置线程优先级
     os::set_native_priority(this, native_prio);
 
+      //DisableStartThread默认为false
     if (!DisableStartThread) {
+        //启动线程，调用其run方法
       os::start_thread(this);
     }
   }
   _sltMonitor = SLT_lock;
+    //CMSIncrementalMode表示是否开启增量收集模式，适用于单核CPU场景，默认为false
   assert(!CMSIncrementalMode || icms_is_enabled(), "Error");
 }
 
+// run方法就是ConcurrentMarkSweepThread的执行逻辑，会不断循环等待，如果需要GC了则调用CMSCollector::collect_in_background方法执行GC，然后继续下一次循环，直到_should_terminate属性为true
 void ConcurrentMarkSweepThread::run() {
   assert(this == cmst(), "just checking");
 
   initialize_in_thread();
   // From this time Thread::current() should be working.
   assert(this == Thread::current(), "just checking");
+    //BindCMSThreadToCPU表示是否将CMSThread绑定到指定的CPU核上执行，默认为false
+    //CPUForCMSThread表示绑定的CPU核，默认是0，即第一个CPU核
   if (BindCMSThreadToCPU && !os::bind_to_processor(CPUForCMSThread)) {
     warning("Couldn't bind CMS thread to processor " UINTX_FORMAT, CPUForCMSThread);
   }
@@ -115,18 +126,22 @@ void ConcurrentMarkSweepThread::run() {
   {
     CMSLoopCountWarn loopX("CMS::run", "waiting for "
                            "Universe::is_fully_initialized()", 2);
+      //获取锁
     MutexLockerEx x(CGC_lock, true);
     set_CMS_flag(CMS_cms_wants_token);
     // Wait until Universe is initialized and all initialization is completed.
+      //不断循环等待，一次200ms，直到Universe完全初始化完毕
     while (!is_init_completed() && !Universe::is_fully_initialized() &&
            !_should_terminate) {
       CGC_lock->wait(true, 200);
+        //增加循环次数，达到阈值了会打印warn日志
       loopX.tick();
     }
     // Wait until the surrogate locker thread that will do
     // pending list locking on our behalf has been created.
     // We cannot start the SLT thread ourselves since we need
     // to be a JavaThread to do so.
+      //不断循环等待SurrogateLockerThread初始化完成，由Threads::create_vm方法负责初始化
     CMSLoopCountWarn loopY("CMS::run", "waiting for SLT installation", 2);
     while (_slt == NULL && !_should_terminate) {
       CGC_lock->wait(true, 200);
@@ -136,28 +151,37 @@ void ConcurrentMarkSweepThread::run() {
   }
 
   while (!_should_terminate) {
+      //不断等待直到需要执行GC
     sleepBeforeNextCycle();
+      //如果_should_terminate为true则终止循环
     if (_should_terminate) break;
+      //获取GC的原因
     GCCause::Cause cause = _collector->_full_gc_requested ?
       _collector->_full_gc_cause : GCCause::_cms_concurrent_mark;
+      //在后台执行GC
     _collector->collect_in_background(false, cause);
   }
+    //退出循环了，校验_should_terminate为true
   assert(_should_terminate, "just checking");
   // Check that the state of any protocol for synchronization
   // between background (CMS) and foreground collector is "clean"
   // (i.e. will not potentially block the foreground collector,
   // requiring action by us).
+    //校验是否可以终止
   verify_ok_to_terminate();
   // Signal that it is terminated
   {
+      //获取锁Terminator_lock
     MutexLockerEx mu(Terminator_lock,
                      Mutex::_no_safepoint_check_flag);
     assert(_cmst == this, "Weird!");
+      //cmst置为NULL
     _cmst = NULL;
     Terminator_lock->notify();
   }
 
   // Thread destructor usually does this..
+    //去掉CMSThread同本地线程的绑定
   ThreadLocalStorage::set_thread(NULL);
 }
 
@@ -174,6 +198,7 @@ void ConcurrentMarkSweepThread::verify_ok_to_terminate() const {
 ConcurrentMarkSweepThread* ConcurrentMarkSweepThread::start(CMSCollector* collector) {
   if (!_should_terminate) {
     assert(cmst() == NULL, "start() called twice?");
+      //创建一个新的ConcurrentMarkSweepThread实例
     ConcurrentMarkSweepThread* th = new ConcurrentMarkSweepThread(collector);
     assert(cmst() == th, "Where did the just-created CMS thread go?");
     return th;
@@ -296,12 +321,14 @@ void ConcurrentMarkSweepThread::desynchronize(bool is_cms_thread) {
 
 // Wait until any cms_lock event
 void ConcurrentMarkSweepThread::wait_on_cms_lock(long t_millis) {
+    //获取锁CGC_lock
   MutexLockerEx x(CGC_lock,
                   Mutex::_no_safepoint_check_flag);
   if (_should_terminate || _collector->_full_gc_requested) {
     return;
   }
   set_CMS_flag(CMS_cms_wants_token);   // to provoke notifies
+    //等待最长t_millis，期间可能被唤醒
   CGC_lock->wait(Mutex::_no_safepoint_check_flag, t_millis);
   clear_CMS_flag(CMS_cms_wants_token);
   assert(!CMS_flag_is_set(CMS_cms_has_token | CMS_cms_wants_token),
@@ -316,9 +343,11 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
 
   GenCollectedHeap* gch = GenCollectedHeap::heap();
   double start_time_secs = os::elapsedTime();
+    //计算结束时间
   double end_time_secs = start_time_secs + (t_millis / ((double) MILLIUNITS));
 
   // Total collections count before waiting loop
+    //获取当前的垃圾收集次数
   unsigned int before_count;
   {
     MutexLockerEx hl(Heap_lock, Mutex::_no_safepoint_check_flag);
@@ -333,9 +362,11 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
 
     if(t_millis != 0) {
       // New wait limit
+        //计算需要等待的时间
       wait_time_millis = (long) ((end_time_secs - now_time) * MILLIUNITS);
       if(wait_time_millis <= 0) {
         // Wait time is over
+          //超时了退出循环
         break;
       }
     } else {
@@ -347,11 +378,13 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
     {
       MutexLockerEx x(CGC_lock, Mutex::_no_safepoint_check_flag);
 
+        //如果需要终止CMSThread或者执行full GC则退出循环
       if (_should_terminate || _collector->_full_gc_requested) {
         return;
       }
       set_CMS_flag(CMS_cms_wants_token);   // to provoke notifies
       assert(t_millis == 0 || wait_time_millis > 0, "Sanity");
+        //CGC_lock上等待最多wait_time_millis秒
       CGC_lock->wait(Mutex::_no_safepoint_check_flag, wait_time_millis);
       clear_CMS_flag(CMS_cms_wants_token);
       assert(!CMS_flag_is_set(CMS_cms_has_token | CMS_cms_wants_token),
@@ -359,12 +392,15 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
     }
 
     // Extra wait time check before entering the heap lock to get the collection count
+      //CGC_lock上等待的线程被唤醒了，如果当前时间超过结束时间了
     if(t_millis != 0 && os::elapsedTime() >= end_time_secs) {
       // Wait time is over
+        //超时终止循环
       break;
     }
 
     // Total collections count after the event
+      //获取此时的垃圾回收次数
     unsigned int after_count;
     {
       MutexLockerEx hl(Heap_lock, Mutex::_no_safepoint_check_flag);
@@ -373,10 +409,12 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
 
     if(before_count != after_count) {
       // There was a collection - success
+        //如果垃圾回收次数变了，说明已经执行过一遍GC了，终止循环
       break;
     }
 
     // Too many loops warning
+      //增加循环次数，一直不断循环可能变成负值，等于0时说明循环的次数很大了，打印warning日志
     if(++loop_count == 0) {
       warning("wait_on_cms_lock_for_scavenge() has looped %u times", loop_count - 1);
     }
@@ -386,6 +424,8 @@ void ConcurrentMarkSweepThread::wait_on_cms_lock_for_scavenge(long t_millis) {
 void ConcurrentMarkSweepThread::sleepBeforeNextCycle() {
   while (!_should_terminate) {
     if (CMSIncrementalMode) {
+        //如果开启增量模式
+        //等待重新获取CPU
       icms_wait();
       if(CMSWaitDuration >= 0) {
         // Wait until the next synchronous GC, a concurrent full gc
@@ -394,16 +434,21 @@ void ConcurrentMarkSweepThread::sleepBeforeNextCycle() {
       }
       return;
     } else {
+        //CMSWaitDuration表示CMSThread等待young gc的时间，默认值是2000
       if(CMSWaitDuration >= 0) {
         // Wait until the next synchronous GC, a concurrent full gc
         // request or a timeout, whichever is earlier.
+          //等待直到超时或者需要一次Full GC或者已经完成了一次Full GC
         wait_on_cms_lock_for_scavenge(CMSWaitDuration);
       } else {
         // Wait until any cms_lock event or check interval not to call shouldConcurrentCollect permanently
+          //CMSCheckInterval表示CMSThread检查是否应该执行GC的间隔时间，默认是1000ms
+          //跟wait_on_cms_lock_for_scavenge相比，就是不会循环等待，只等待一次
         wait_on_cms_lock(CMSCheckInterval);
       }
     }
     // Check if we should start a CMS collection cycle
+      //如果需要开始GC则终止循环
     if (_collector->shouldConcurrentCollect()) {
       return;
     }
@@ -413,36 +458,53 @@ void ConcurrentMarkSweepThread::sleepBeforeNextCycle() {
 }
 
 // Incremental CMS
+// start_icms方法用于通知CMS Thread重新开始执行
 void ConcurrentMarkSweepThread::start_icms() {
   assert(UseConcMarkSweepGC && CMSIncrementalMode, "just checking");
+    //获取锁iCMS_lock
   MutexLockerEx x(iCMS_lock, Mutex::_no_safepoint_check_flag);
   trace_state("start_icms");
+    //将_should_run置为true
   _should_run = true;
+    //唤醒所有等待的线程，判断should_run变成true了重新开始执行
   iCMS_lock->notify_all();
 }
 
+// stop_icms方法用于通知CMS Thread暂停执行，在iCMS_lock上等待
 void ConcurrentMarkSweepThread::stop_icms() {
   assert(UseConcMarkSweepGC && CMSIncrementalMode, "just checking");
+    //获取锁iCMS_lock
   MutexLockerEx x(iCMS_lock, Mutex::_no_safepoint_check_flag);
+    //_should_stop正常情况为false
   if (!_should_stop) {
     trace_state("stop_icms");
+      //将_should_stop置为true
     _should_stop = true;
     _should_run = false;
+      //增加计数器
     asynchronous_yield_request();
+      //唤醒所有在iCMS_lock上等待的线程
     iCMS_lock->notify_all();
   }
 }
 
+// icms_wait是CMS Thread使用的，会检查是否需要暂停执行
 void ConcurrentMarkSweepThread::icms_wait() {
   assert(UseConcMarkSweepGC && CMSIncrementalMode, "just checking");
+    //如果调用了stop_icms则_should_stop变成true
   if (_should_stop && icms_is_enabled()) {
+      //获取锁iCMS_lock
     MutexLockerEx x(iCMS_lock, Mutex::_no_safepoint_check_flag);
     trace_state("pause_icms");
+      //停止CMS的计时器
     _collector->stats().stop_cms_timer();
     while(!_should_run && icms_is_enabled()) {
+        //不断循环等待，直到_should_run变成true
       iCMS_lock->wait(Mutex::_no_safepoint_check_flag);
     }
+      //重新开启计时器
     _collector->stats().start_cms_timer();
+      //重置_should_stop
     _should_stop = false;
     trace_state("pause_icms end");
   }

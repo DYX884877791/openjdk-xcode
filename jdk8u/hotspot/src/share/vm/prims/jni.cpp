@@ -5359,8 +5359,12 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
 
     // Check if we should compile all classes on bootclasspath
       // 根据配置加载类路径中所有的类
-    if (CompileTheWorld) ClassLoader::compile_the_world();
-    if (ReplayCompiles) ciReplay::replay(thread);
+    if (CompileTheWorld) {
+        ClassLoader::compile_the_world();
+    }
+    if (ReplayCompiles) {
+        ciReplay::replay(thread);
+    }
 
     // Some platforms (like Win*) need a wrapper around these test
     // functions in order to properly handle error conditions.

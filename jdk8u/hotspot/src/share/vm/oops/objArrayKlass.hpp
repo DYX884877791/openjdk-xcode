@@ -32,7 +32,7 @@
 
 // ObjArrayKlass is the klass for objArrays
 
-// ObjArrayKlass是ArrayKlass的子类，用于表示数组元素是类或者数组
+// ObjArrayKlass是ArrayKlass的子类，用于表示数组元素是类或者数组，表示引用数组类的元信息
 class ObjArrayKlass : public ArrayKlass {
   friend class VMStructs;
  private:

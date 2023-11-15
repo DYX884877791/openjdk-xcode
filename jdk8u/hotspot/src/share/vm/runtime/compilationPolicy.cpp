@@ -660,7 +660,9 @@ RFrame* StackWalkCompPolicy::findTopInlinableFrame(GrowableArray<RFrame*>* stack
 
   assert( !current || !current->is_compiled(), "" );
 
-  if (TraceCompilationPolicy && msg) tty->print("(%s)\n", msg);
+  if (TraceCompilationPolicy && msg) {
+      tty->print("(%s)\n", msg);
+  }
 
   return current;
 }

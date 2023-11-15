@@ -1211,6 +1211,7 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSwapObject(JNIEnv *env, jobject unsafe, 
   oop x = JNIHandles::resolve(x_h);
   oop e = JNIHandles::resolve(e_h);
   oop p = JNIHandles::resolve(obj);
+    // 计算地址
   HeapWord* addr = (HeapWord *)index_oop_from_field_offset_long(p, offset);
   oop res = oopDesc::atomic_compare_exchange_oop(x, addr, e, true);
   jboolean success  = (res == e);

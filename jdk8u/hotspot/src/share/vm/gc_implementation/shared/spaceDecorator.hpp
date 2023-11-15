@@ -78,6 +78,7 @@ class SpaceMangler: public CHeapObj<mtGC> {
   // touched again.  Space belows this point has been allocated
   // and remangling is needed between the current top and this
   // high water mark.
+  // _top_for_allocations记录了Space中已分配出去的内存区域，在此之前的内存区域已经被分配了，之后的区域未被分配，因为之前Space初始化的时候已经执行过mangle了，所以不需要再次mangle了。
   HeapWord* _top_for_allocations;
   HeapWord* top_for_allocations() { return _top_for_allocations; }
 
@@ -122,6 +123,13 @@ class SpaceMangler: public CHeapObj<mtGC> {
 class ContiguousSpace;
 
 // For use with GenCollectedHeap's
+// GenSpaceMangler的定义在hotspot\src\share\vm\gc_implementation\shared\spaceDecorator.hpp中，
+// 是GenCollectedHeap用来给Space执行mangle动作的，所谓mangle实际就是把未使用的内存区域填充为一个特定的值，
+// 通过这种方式强制操作系统提前分配好对应内存区域的内存页，提升Space本身内存分配和对象初始化的效率，
+// 避免Space实际分配内存时或者已分配给对象的内存在实际赋值时才由操作系统分配内存页。
+//
+// 该类继承自SpaceMangler，SpaceMangler的定义也在spaceDecorator.hpp中
+// GenSpaceMangler在SpaceMangler的基础上只增加了一个属性，没有新增方法，只提供了父类的虚方法的实现。
 class GenSpaceMangler: public SpaceMangler {
   ContiguousSpace* _sp;
 
@@ -135,6 +143,7 @@ class GenSpaceMangler: public SpaceMangler {
 };
 
 // For use with ParallelScavengeHeap's.
+// MutableSpaceMangler是适用于PS算法的ParallelScavengeHeap的Space
 class MutableSpaceMangler: public SpaceMangler {
   MutableSpace* _sp;
 

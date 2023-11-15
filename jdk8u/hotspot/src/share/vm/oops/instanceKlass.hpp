@@ -1059,12 +1059,18 @@ class InstanceKlass: public Klass {
     return layout_helper_to_size_helper(layout_helper());
   }
 
+
   // This bit is initialized in classFileParser.cpp.
   // It is false under any of the following conditions:
   //  - the class is abstract (including any interface)
   //  - the class has a finalizer (if !RegisterFinalizersAtInit)
   //  - the class size is larger than FastAllocateSizeLimit
   //  - the class is java/lang/Class, which cannot be allocated directly
+  // 如果满足以下条件则不能使用快速分配的方式创建：
+  //    目标类是抽象类
+  //    目标类覆写了Object的finalizer方法
+  //    目标类大于FastAllocateSizeLimit参数的值，该参数默认是128k
+  //    目标类是java/lang/Class，不能直接分配
   bool can_be_fastpath_allocated() const {
     return !layout_helper_needs_slow_path(layout_helper());
   }

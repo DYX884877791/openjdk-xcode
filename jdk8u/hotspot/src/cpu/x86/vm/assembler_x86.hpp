@@ -185,6 +185,7 @@ class Address VALUE_OBJ_CLASS_SPEC {
   }
 
  private:
+    //
   Register         _base;
   Register         _index;
   ScaleFactor      _scale;
@@ -448,6 +449,7 @@ const int FPUStateSizeInWords = NOT_LP64(27) LP64_ONLY( 512 / wordSize);
 // is what you get. The Assembler is generating code into a CodeBuffer.
 
 // 注意 Assembler类生成的汇编代码并没有经过指令优化的，使用什么指令最终得到的就是什么指令。
+// Assembler提供了硬件相关的汇编指令集如mov(),lea(),…，Address封装内存寻址，Register封装寄存器。
 class Assembler : public AbstractAssembler  {
   friend class AbstractAssembler; // for the non-virtual hack
   friend class LIR_Assembler; // as_Address()

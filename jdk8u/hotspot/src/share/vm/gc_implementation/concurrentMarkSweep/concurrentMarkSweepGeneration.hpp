@@ -75,15 +75,24 @@ class SerialOldTracer;
 // we have _shifter == 0. and for the mod union table we have
 // shifter == CardTableModRefBS::card_shift - LogHeapWordSize.)
 // XXX 64-bit issues in BitMap?
+// CMSBitMap的定义在hotspot\src\share\vm\gc_implementation\concurrentMarkSweep\concurrentMarkSweepGeneration.hpp中，
+// 表示一个通用的CMS下的BitMap，可以用于CMS的标记BitMap和mod union table，两种场景都是使用其中的一部分方法，这个类的实现是基于BitMap类的，两种场景下的shifter属性不同。
+//
+// 结合打标方法的分析可知，BitMap的实现是基于对象地址都是按照8字节，即一个字宽大小对齐的，所谓打标就是将某个对象地址映射成BitMap内存的某个地址上的某个位，某个地址类似于HashMap中的一个槽，然后将这个位上的值置为1。
 class CMSBitMap VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
 
+  //所对应的内存区域的起始地址
   HeapWord* _bmStartWord;   // base address of range covered by map
+  //所对应的内存区域的大小，单位是字宽
   size_t    _bmWordSize;    // map size (in #HeapWords covered)
   const int _shifter;       // shifts to convert HeapWord to bit position
+  // bitMap本身使用的一段连续地址空间
   VirtualSpace _virtual_space; // underlying the bit map
+  // 依赖的BitMap    实例
   BitMap    _bm;            // the bit map itself
  public:
+  // 操作bm需要的锁
   Mutex* const _lock;       // mutex protecting _bm;
 
  public:
@@ -170,23 +179,32 @@ class CMSBitMap VALUE_OBJ_CLASS_SPEC {
 
 // Represents a marking stack used by the CMS collector.
 // Ideally this should be GrowableArray<> just like MSC's marking stack(s).
+// CMSMarkStack是一个基于可扩容数组实现的保存oop的栈，其定义同样在concurrentMarkSweepGeneration.hpp中
 class CMSMarkStack: public CHeapObj<mtGC>  {
   //
   friend class CMSCollector;   // to get at expasion stats further below
   //
 
+    // 对应的内存区域
   VirtualSpace _virtual_space;  // space for the stack
+    // oop数组的基地址
   oop*   _base;      // bottom of stack
+    //Stack中元素的个数
   size_t _index;     // one more than last occupied index
+    // 允许的最大容量
   size_t _capacity;  // max #elements
+    // 并发操作base的锁
   Mutex  _par_lock;  // an advisory lock used in case of parallel access
   NOT_PRODUCT(size_t _max_depth;)  // max depth plumbed during run
 
  protected:
+    // 记录MarkStack的容量达到最大值的次数
   size_t _hit_limit;      // we hit max stack size limit
+    // 记录MarkStack扩容失败的次数
   size_t _failed_double;  // we failed expansion before hitting limit
 
  public:
+    // 构造函数：用来初始化CMSMarkStack
   CMSMarkStack():
     _par_lock(Mutex::event, "CMSMarkStack._par_lock", true),
     _hit_limit(0),
@@ -196,17 +214,21 @@ class CMSMarkStack: public CHeapObj<mtGC>  {
 
   size_t capacity() const { return _capacity; }
 
+    // 弹出栈顶oop
   oop pop() {
     if (!isEmpty()) {
+        //index先减1，在返回减一后的index对应的oop
       return _base[--_index] ;
     }
     return NULL;
   }
 
+    // 把oop压入栈顶
   bool push(oop ptr) {
     if (isFull()) {
       return false;
     } else {
+        //先将index处的元素置为ptr，再将index加1
       _base[_index++] = ptr;
       NOT_PRODUCT(_max_depth = MAX2(_max_depth, _index));
       return true;
@@ -220,6 +242,8 @@ class CMSMarkStack: public CHeapObj<mtGC>  {
   }
 
   size_t length() { return _index; }
+
+  // par版本就是多了一步获取锁的动作
 
   // "Parallel versions" of some of the above
   oop par_pop() {
@@ -258,6 +282,7 @@ class CMSMarkStack: public CHeapObj<mtGC>  {
 class CardTableRS;
 class CMSParGCThreadState;
 
+// ModUnionClosure / ModUnionClosurePar，这两个类的定义都在concurrentMarkSweepGeneration.hpp中，用来遍历MemRegion，将其在BitMap对应的内存区域打标
 class ModUnionClosure: public MemRegionClosure {
  protected:
   CMSBitMap* _t;
@@ -274,10 +299,15 @@ class ModUnionClosurePar: public ModUnionClosure {
 
 // Survivor Chunk Array in support of parallelization of
 // Survivor Space rescan.
+//  ChunkArray表示一个保存Chunk地址的数组，其定义同样在concurrentMarkSweepGeneration.hpp中
 class ChunkArray: public CHeapObj<mtGC> {
+    //ChunkArray中包含的Chunk地址的个数
   size_t _index;
+    //ChunkArray的最大容量
   size_t _capacity;
+    //达到ChunkArray容量的次数
   size_t _overflows;
+    // 保存Chunk地址的数组基地址
   HeapWord** _array;   // storage for array
 
  public:
@@ -298,6 +328,7 @@ class ChunkArray: public CHeapObj<mtGC> {
     return _index;
   }  // exclusive
 
+    //返回索引为n的地址
   HeapWord* nth(size_t n) {
     assert(n < end(), "Out of bounds access");
     return _array[n];
@@ -314,6 +345,7 @@ class ChunkArray: public CHeapObj<mtGC> {
 
   void record_sample(HeapWord* p, size_t sz) {
     // For now we do not do anything with the size
+      //将Chunk地址p保存到数组中
     if (_index < _capacity) {
       _array[_index++] = p;
     } else {
@@ -478,6 +510,7 @@ class CMSStats VALUE_OBJ_CLASS_SPEC {
 // For objects in the CMS generation, this closure checks
 // if the object is "live" (reachable). Used in weak
 // reference processing.
+// CMSIsAliveClosure用于判断某个对象是否是存活的，底层依赖于BitMap
 class CMSIsAliveClosure: public BoolObjectClosure {
   const MemRegion  _span;
   const CMSBitMap* _bit_map;
@@ -486,7 +519,9 @@ class CMSIsAliveClosure: public BoolObjectClosure {
  public:
   CMSIsAliveClosure(MemRegion span,
                     CMSBitMap* bit_map):
+    //span表示老年代对应的内存区域
     _span(span),
+    //CMSBitMap引用
     _bit_map(bit_map) {
     assert(!span.is_empty(), "Empty span could spell trouble");
   }
@@ -1055,6 +1090,7 @@ class CMSExpansionCause : public AllStatic  {
   static const char* to_string(CMSExpansionCause::Cause cause);
 };
 
+// 表示CMS老年代
 class ConcurrentMarkSweepGeneration: public CardGeneration {
   friend class VMStructs;
   friend class ConcurrentMarkSweepThread;
@@ -1201,6 +1237,9 @@ class ConcurrentMarkSweepGeneration: public CardGeneration {
   // hack to allow the collection of the younger gen first if the flag is
   // set. This is better than using th policy's should_collect_gen0_first()
   // since that causes us to do an extra unnecessary pair of restart-&-stop-world.
+    //ConcurrentMarkSweepGeneration的实现如下
+    //UseCMSCompactAtFullCollection默认为true，表示FullGC时所使用Mark-Sweep-Compact算法
+    //CollectGen0First默认为false，表示是否在FullGC前收集年轻代
   virtual bool full_collects_younger_generations() const {
     return UseCMSCompactAtFullCollection && !CollectGen0First;
   }
@@ -1353,6 +1392,7 @@ class ConcurrentMarkSweepGeneration: public CardGeneration {
   void rotate_debug_collection_type();
 };
 
+// 支持自适应调整堆内存大小的老年代的ASConcurrentMarkSweepGeneration
 class ASConcurrentMarkSweepGeneration : public ConcurrentMarkSweepGeneration {
 
   // Return the size policy from the heap's collector

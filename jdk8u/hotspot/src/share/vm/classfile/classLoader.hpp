@@ -151,6 +151,13 @@ class PackageInfo;
 class SharedPathsMiscInfo;
 template <MEMFLAGS F> class HashtableBucket;
 
+// ClassLoader类的定义在classfile/classLoader.hpp中，ClassLoader就是传说中的用于加载Java核心类文件如rt.jar的启动类加载器的实现。
+// ClassLoader定义的方法不多，大多是统计类加载性能相关的，除此之外有以下几个方法比较重要：
+//
+//   加载zip文件读取写入等操作的动态链接库，load_zip_library方法
+//   ClassPathEntry相关的，如setup_search_path，contains_entry，add_to_list，num_classpath_entries，classpath_entry，create_class_path_entry，update_class_path_entry_list等
+//   初始化的方法，initialize
+//   根据类名加载指定类文件的方法，load_classfile
 class ClassLoader: AllStatic {
  public:
   enum SomeConstants {
@@ -160,6 +167,7 @@ class ClassLoader: AllStatic {
   friend class LazyClassPathEntry;
 
   // Performance counters
+  // ClassLoader定义的属性大都是用于统计类加载性能的计数器，如_perf_class_parse_time，PerfCounter类指针，用于统计类解析的累计耗时。
   static PerfCounter* _perf_accumulated_time;
   static PerfCounter* _perf_classes_inited;
   static PerfCounter* _perf_class_init_time;
@@ -195,12 +203,16 @@ class ClassLoader: AllStatic {
   static PerfCounter* _load_instance_class_failCounter;
 
   // First entry in linked list of ClassPathEntry instances
+  // ClassPathEntry类指针，ClassPathEntry用于表示单个classpath路径，所有的ClassPathEntry实例以链表的形式关联起来，_first_entry表示链表的第一个实例
   static ClassPathEntry* _first_entry;
   // Last entry in linked list of ClassPathEntry instances
+  // ClassPathEntry类指针，表示链表的最后一个实例
   static ClassPathEntry* _last_entry;
+  // int变量，表示ClassPathEntry链表中ClassPathEntry实例的个数
   static int _num_entries;
 
   // Hash table used to keep track of loaded packages
+  // PackageHashtable类指针，用于保存已经加载过的包名
   static PackageHashtable* _package_hash_table;
   static const char* _shared_archive;
 

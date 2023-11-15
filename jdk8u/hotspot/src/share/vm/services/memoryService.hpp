@@ -49,6 +49,7 @@ class G1CollectedHeap;
 
 // VM Monitoring and Management Support
 
+// MemoryService定义在hotspot/src/shared/vm/service/memoryService .hpp中，其定义的方法都是静态工具方法，提供MemoryPool和MemoryManager相关的统一入口方法。
 class MemoryService : public AllStatic {
 private:
   enum {
@@ -63,11 +64,15 @@ private:
     n_gens = 2
   };
 
+    //所有的MemoryPool数组
   static GrowableArray<MemoryPool*>*    _pools_list;
+    //所有的MemoryManager数组
   static GrowableArray<MemoryManager*>* _managers_list;
 
   // memory managers for minor and major GC statistics
+    //FullGC对应的GCMemoryManager
   static GCMemoryManager*               _major_gc_manager;
+    //YoungGC对应的GCMemoryManager
   static GCMemoryManager*               _minor_gc_manager;
 
   // Code heap memory pool

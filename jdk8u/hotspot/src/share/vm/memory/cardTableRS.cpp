@@ -40,6 +40,7 @@
 CardTableRS::CardTableRS(MemRegion whole_heap,
                          int max_covered_regions) :
   GenRemSet(),
+        //youngergenP1_card是一个枚举值
   _cur_youngergen_card_val(youngergenP1_card),
   _regions_to_iterate(max_covered_regions - 1)
 {
@@ -55,12 +56,16 @@ CardTableRS::CardTableRS(MemRegion whole_heap,
 #endif
   _ct_bs->initialize();
   set_bs(_ct_bs);
+    //NEW_C_HEAP_ARRAY3用于创建指定类型的数组，jbyte表示数组类型，max_gens是一个枚举值，值为10
+    //mtGC也是枚举MemoryType，CURRENT_PC返回一个NativeCallStack实例，用于回调的
   _last_cur_val_in_gen = NEW_C_HEAP_ARRAY3(jbyte, GenCollectedHeap::max_gens + 1,
                          mtGC, CURRENT_PC, AllocFailStrategy::RETURN_NULL);
   if (_last_cur_val_in_gen == NULL) {
+      //分配失败抛出异常
     vm_exit_during_initialization("Could not create last_cur_val_in_gen array.");
   }
   for (int i = 0; i < GenCollectedHeap::max_gens + 1; i++) {
+      //设置数组的初始值
     _last_cur_val_in_gen[i] = clean_card_val();
   }
   _ct_bs->set_CTRS(this);
@@ -68,10 +73,12 @@ CardTableRS::CardTableRS(MemRegion whole_heap,
 
 CardTableRS::~CardTableRS() {
   if (_ct_bs) {
+      //释放CardTableModRefBSForCTRS
     delete _ct_bs;
     _ct_bs = NULL;
   }
   if (_last_cur_val_in_gen) {
+      //释放数组
     FREE_C_HEAP_ARRAY(jbyte, _last_cur_val_in_gen, mtInternal);
   }
 }
@@ -115,6 +122,8 @@ void CardTableRS::prepare_for_younger_refs_iterate(bool parallel) {
 void CardTableRS::younger_refs_iterate(Generation* g,
                                        OopsInGenClosure* blk) {
   _last_cur_val_in_gen[g->level()+1] = cur_youngergen_card_val();
+    //年轻代该方法是空实现，老年代下底层是调用CardTableRS::younger_refs_in_space_iterate方法来遍历脏的卡表项
+    //将脏的卡表项对应的内存区域中包含的oop作为根节点
   g->younger_refs_iterate(blk);
 }
 

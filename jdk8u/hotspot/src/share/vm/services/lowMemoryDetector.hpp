@@ -63,6 +63,8 @@
 class OopClosure;
 class MemoryPool;
 
+// ThresholdSupport的定义在lowMemoryDetector.hpp中，该类没有对应的Java类，有对应的设置阈值的Java方法，
+// java.lang.management.MemoryPoolMXBean.setUsageThreshold(long threshold)和setCollectionUsageThreshold(long threshold)方法
 class ThresholdSupport : public CHeapObj<mtInternal> {
  private:
   bool            _support_high_threshold;
@@ -112,6 +114,8 @@ class ThresholdSupport : public CHeapObj<mtInternal> {
   }
 };
 
+// SensorInfo的定义位于lowMemoryDetector.hpp中，对应的Java类是sun.management.Sensor，这是一个抽象类，
+// sun.management.MemoryPoolImpl中定义了两个内部实现类，PoolSensor和CollectionSensor。
 class SensorInfo : public CHeapObj<mtInternal> {
 private:
   instanceOop     _sensor_obj;

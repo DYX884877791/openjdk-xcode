@@ -715,14 +715,19 @@ int TemplateInterpreter::TosState_as_index(TosState state) {
 
 static inline void copy_table(address* from, address* to, int size) {
   // Copy non-overlapping tables. The copy has to occur word wise for MT safety.
+    //每次复制8字节的数组，DispatchTable就是一个address二维数组，因此在不加锁的情况下也能保证解释器依然正常执行
+    //在解释器并行执行时，部分已复制的字节码走检查安全点的逻辑，未复制的字节码继续走原来的逻辑，不检查安全点
   while (size-- > 0) *to++ = *from++;
 }
 
+//  notice_safepoints用于通知解释器进入安全点了
 // 当达到安全点后，_active_table会被改成_safept_table
 void TemplateInterpreter::notice_safepoints() {
   if (!_notice_safepoints) {
     // switch to safepoint dispatch table
+      //如果_notice_safepoints为false，即未进入安全点，将_notice_safepoints置为true
     _notice_safepoints = true;
+      //将_safept_table复制到_active_table，即执行字节码时会执行_safept_table中的对应字节码的执行逻辑
     copy_table((address*)&_safept_table, (address*)&_active_table, sizeof(_active_table) / sizeof(address));
   }
 }
@@ -732,11 +737,15 @@ void TemplateInterpreter::notice_safepoints() {
 // keep the safepoint dispatch table if we are single stepping in JVMTI.
 // Note that the should_post_single_step test is exactly as fast as the
 // JvmtiExport::_enabled test and covers both cases.
+// ignore_safepoints用于通知解释器退出安全点了
 void TemplateInterpreter::ignore_safepoints() {
   if (_notice_safepoints) {
+      //如果_notice_safepoints为true，表示已经进入安全点
     if (!JvmtiExport::should_post_single_step()) {
       // switch to normal dispatch table
+        //将_notice_safepoints置为false
       _notice_safepoints = false;
+        //将_normal_table复制到_active_table
       copy_table((address*)&_normal_table, (address*)&_active_table, sizeof(_active_table) / sizeof(address));
     }
   }

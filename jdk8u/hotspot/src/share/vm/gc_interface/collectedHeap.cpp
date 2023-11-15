@@ -60,9 +60,12 @@ void GCHeapLog::log_heap(bool before) {
   double timestamp = fetch_timestamp();
   MutexLockerEx ml(&_mutex, Mutex::_no_safepoint_check_flag);
   int index = compute_log_index();
+    //_records表示一个包含多条日志信息的数组，每个元素都包含一个GCMessage实例
   _records[index].thread = NULL; // Its the GC thread so it's not that interesting.
   _records[index].timestamp = timestamp;
+    //data属性实际就是这条日志对应的GCMessage实例
   _records[index].data.is_before = before;
+    //stringStream实际将日志写入到GCMessage实例的char数组中保存
   stringStream st(_records[index].data.buffer(), _records[index].data.size());
   if (before) {
     Universe::print_heap_before_gc(&st, true);
@@ -107,6 +110,7 @@ MetaspaceSummary CollectedHeap::create_metaspace_summary() {
 }
 
 void CollectedHeap::print_heap_before_gc() {
+    //PrintHeapAtGC表示是否在每次GC前后打印出堆结构，默认为false
   if (PrintHeapAtGC) {
     Universe::print_heap_before_gc();
   }
@@ -189,6 +193,8 @@ CollectedHeap::CollectedHeap() : _n_par_threads(0)
 // vm thread. It collects the heap assuming that the
 // heap lock is already held and that we are executing in
 // the context of the vm thread.
+// collect_as_vm_thread该方法用于执行特定GCCause::Cause下的垃圾回收
+// 要求调用此方法的线程必须是JVM线程，必须已经获取了Heap_lock。GCCauseSetter是一个辅助类，通过其构造函数临时的改变当前CollectedHeap的_gc_cause， 通过析构函数将_gc_cause恢复成原来的
 void CollectedHeap::collect_as_vm_thread(GCCause::Cause cause) {
   assert(Thread::current()->is_VM_thread(), "Precondition#1");
   assert(Heap_lock->is_locked(), "Precondition#2");
@@ -439,11 +445,14 @@ CollectedHeap::fill_with_array(HeapWord* start, size_t words, bool zap)
   assert(words <= filler_array_max_size(), "too big for a single object");
 
   const size_t payload_size = words - filler_array_hdr_size();
+    //计算int数组的长度
   const size_t len = payload_size * HeapWordSize / sizeof(jint);
   assert((int)len >= 0, err_msg("size too large " SIZE_FORMAT " becomes %d", words, (int)len));
 
   // Set the length first for concurrent GC.
+    //设置数组长度
   ((arrayOop)start)->set_length((int)len);
+    //执行分配结束后的公共动作，设置对象头和对应的klass
   post_allocation_setup_common(Universe::intArrayKlassObj(), start);
   DEBUG_ONLY(zap_filler_array(start, words, zap);)
 }
@@ -453,9 +462,12 @@ CollectedHeap::fill_with_object_impl(HeapWord* start, size_t words, bool zap)
 {
   assert(words <= filler_array_max_size(), "too big for a single object");
 
+    //如果大于int数组的最低大小
   if (words >= filler_array_min_size()) {
+      //用int数组填充
     fill_with_array(start, words, zap);
   } else if (words > 0) {
+      //如果小于int数组的最低大小，则用java.lang.Object来填充，Object本身没有任何属性
     assert(words == min_fill_size(), "unaligned size");
     post_allocation_setup_common(SystemDictionary::Object_klass(), start);
   }
@@ -468,6 +480,8 @@ void CollectedHeap::fill_with_object(HeapWord* start, size_t words, bool zap)
   fill_with_object_impl(start, words, zap);
 }
 
+// fill_with_objects和fill_with_object都是内存分配结束后，往分配的内存中填充数据的，填充的目的是为了让操作系统完成真实的内存分配，
+// 两者的区别在于fill_with_objects用于填充大块内存，fill_with_object填充小块内存。
 void CollectedHeap::fill_with_objects(HeapWord* start, size_t words, bool zap)
 {
   DEBUG_ONLY(fill_args_check(start, words);)
@@ -480,6 +494,7 @@ void CollectedHeap::fill_with_objects(HeapWord* start, size_t words, bool zap)
   const size_t min = min_fill_size();
   const size_t max = filler_array_max_size();
   while (words > max) {
+      //如果words - max大于min则按照max分配，小于min则一次性分配
     const size_t cur = words - max >= min ? max : max - min;
     fill_with_array(start, cur, zap);
     start += cur;
@@ -550,29 +565,37 @@ void CollectedHeap::resize_all_tlabs() {
          !is_init_completed(),
          "should only resize tlabs at safepoint");
 
+      //重新计算各线程的TLAB的大小
     ThreadLocalAllocBuffer::resize_all_tlabs();
   }
 }
 
+// pre_full_gc_dump / post_full_gc_dump这两方法分别是在Full GC前后执行的动作
 void CollectedHeap::pre_full_gc_dump(GCTimer* timer) {
+    //HeapDumpBeforeFullGC表示执行FullGC前把当前Heap dump到文件中，默认为false
   if (HeapDumpBeforeFullGC) {
     GCTraceTime tt("Heap Dump (before full gc): ", PrintGCDetails, false, timer, GCId::create());
     // We are doing a "major" collection and a heap dump before
     // major collection has been requested.
+    // 这里的HeapDumper就是内存Dump的实现
     HeapDumper::dump_heap();
   }
+    //PrintClassHistogramBeforeFullGC表示在执行FullGC后打印当前Heap的类直方图，即统计所有已加载的类的oop的数量
   if (PrintClassHistogramBeforeFullGC) {
     GCTraceTime tt("Class Histogram (before full gc): ", PrintGCDetails, true, timer, GCId::create());
+    // VM_GC_HeapInspection就是打印类直方图的实现
     VM_GC_HeapInspection inspector(gclog_or_tty, false /* ! full gc */);
     inspector.doit();
   }
 }
 
 void CollectedHeap::post_full_gc_dump(GCTimer* timer) {
+    //同HeapDumpBeforeFullGC，不过是GC后执行
   if (HeapDumpAfterFullGC) {
     GCTraceTime tt("Heap Dump (after full gc): ", PrintGCDetails, false, timer, GCId::create());
     HeapDumper::dump_heap();
   }
+    //同PrintClassHistogramBeforeFullGC，不过是GC后执行
   if (PrintClassHistogramAfterFullGC) {
     GCTraceTime tt("Class Histogram (after full gc): ", PrintGCDetails, true, timer, GCId::create());
     VM_GC_HeapInspection inspector(gclog_or_tty, false /* ! full gc */);

@@ -130,6 +130,7 @@ class VM_CMS_Final_Remark: public VM_CMS_Operation {
 class VM_GenCollectFullConcurrent: public VM_GC_Operation {
   bool _disabled_icms;
  public:
+    // VM_GenCollectFullConcurrent要复杂点，年轻代通过do_full_collection方法执行GC，老年代通过触发CMSThread执行GC，即异步完成GC
   VM_GenCollectFullConcurrent(uint gc_count_before,
                               uint full_gc_count_before,
                               GCCause::Cause gc_cause)

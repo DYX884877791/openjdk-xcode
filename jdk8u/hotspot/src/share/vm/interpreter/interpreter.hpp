@@ -42,16 +42,14 @@
 
 //  InterpreterCodelet表示一段解释器代码，所有的解释器代码都放在InterpreterCodelet中，同时还包含了额外的用于打印和调试的信息，其定义也是在interpreter.hpp中。
 //  InterpreterCodelet继承自Stub，Stub用来表示一段代码，是一个抽象基类
-//  InterpreterCodelet添加了三个private属性：
-//  1. _size：int，InterpreterCodelet的内存大小
-//  2. _description：char*，当前InterpreterCodelet的描述字符串
-//  3. _bytecode：Bytecodes::Code，Code是Bytecodes类中定义的一个表示具体字节码指令的枚举，这里表示当前InterpreterCodelet关联的字节码
-// 除实现了Stub定义的基础方法外，InterpreterCodelet添加了4个方法
 class InterpreterCodelet: public Stub {
   friend class VMStructs;
  private:
+    // InterpreterCodelet的内存大小
   int         _size;                             // the size in bytes
+    // 当前InterpreterCodelet的描述字符串
   const char* _description;                      // a description of the codelet, for debugging & printing
+    // Code是Bytecodes类中定义的一个表示具体字节码指令的枚举，这里表示当前InterpreterCodelet关联的字节码
   Bytecodes::Code _bytecode;                     // associated bytecode if any
   DEBUG_ONLY(CodeStrings _strings;)              // Comments for annotating assembler output.
 

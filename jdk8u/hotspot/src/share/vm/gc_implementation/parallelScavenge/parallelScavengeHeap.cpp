@@ -44,6 +44,7 @@
 #include "runtime/vmThread.hpp"
 #include "services/memTracker.hpp"
 #include "utilities/vmError.hpp"
+#include "utilities/slog.hpp"
 
 PSYoungGen*  ParallelScavengeHeap::_young_gen = NULL;
 PSOldGen*    ParallelScavengeHeap::_old_gen = NULL;
@@ -53,6 +54,7 @@ ParallelScavengeHeap* ParallelScavengeHeap::_psh = NULL;
 GCTaskManager* ParallelScavengeHeap::_gc_task_manager = NULL;
 
 jint ParallelScavengeHeap::initialize() {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/parallelScavengeHeap.cpp中的ParallelScavengeHeap::initialize函数...");
   CollectedHeap::pre_initialize();
 
   // Initialize collector policy
@@ -661,9 +663,9 @@ void ParallelScavengeHeap::print_heap_change(size_t prev_used) {
                         "("  SIZE_FORMAT ")",
                         prev_used, used(), capacity());
   } else {
-    gclog_or_tty->print(" "  SIZE_FORMAT "K"
-                        "->" SIZE_FORMAT "K"
-                        "("  SIZE_FORMAT "K)",
+    gclog_or_tty->print(" GC之前堆内存占用:"  SIZE_FORMAT "K"
+                        "->GC之前堆内存占用:" SIZE_FORMAT "K"
+                        "(堆内存容量:"  SIZE_FORMAT "K)",
                         prev_used / K, used() / K, capacity() / K);
   }
 }

@@ -31,6 +31,14 @@
 #define hrt_assert_is_valid(tag) \
   assert(is_valid((tag)), err_msg("invalid HR type: %u", (uint) (tag)))
 
+// 分区（HR）是G1堆空间的最小管理单位
+// G1的分区类型大概可以分为5类：
+//
+//  1. 自由分区 FHR
+//  2. 新生代分区 YHR，细分为eden分区和survivor分区
+//  3. 大对象分区 HHR，细分为大对象头分区和大对象连续分区，当对象size超过region_size一半时，即被认为是大对象
+//  4. 老年代分区 OHR
+//  5. 归档分区 AHR，细分为开放归档分区和关闭归档分区，区别在于是否允许引用堆外对象。
 class HeapRegionType VALUE_OBJ_CLASS_SPEC {
 private:
   // We encode the value of the heap region type so the generation can be

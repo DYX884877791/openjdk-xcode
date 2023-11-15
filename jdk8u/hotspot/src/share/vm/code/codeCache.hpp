@@ -46,7 +46,7 @@ class DepChange;
 /**
  * CodeCache就是用于缓存不同类型的生成的汇编代码，如热点方法编译后的代码，各种运行时的调用入口Stub等，所有的汇编代码在CodeCache中都是以CodeBlob及其子类的形式存在的。
  * 通常CodeBlob会对应一个CodeBuffer，负责生成汇编代码的生成器会通过CodeBuffer将汇编代码写入到CodeBlob中，参考MacroAssembler类的说明。
- * CodeCache的定义位于hotspot src/share/vm/code/codeCache.hpp中，包含的属性和方法都是静态的。
+ * CodeCache的定义位于hotspot/src/share/vm/code/codeCache.hpp中，包含的属性和方法都是静态的。
  *
  * CodeCache定义的关键方法主要有以下几种：
  *

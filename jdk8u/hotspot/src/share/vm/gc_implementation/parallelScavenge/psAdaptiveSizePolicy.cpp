@@ -192,6 +192,7 @@ void PSAdaptiveSizePolicy::major_collection_end(size_t amount_live,
   _major_timer.start();
 }
 
+//如果晋升到老年代的平均大小大于老年代的剩余大小，则认为要进行一次full gc
 // If the remaining free space in the old generation is less that
 // that expected to be needed by the next collection, do a full
 // collection now.

@@ -4292,6 +4292,7 @@ JVM_ENTRY(jstring, JVM_InternString(JNIEnv *env, jstring str))
   JvmtiVMObjectAllocEventCollector oam;
   if (str == NULL) return NULL;
   oop string = JNIHandles::resolve_non_null(str);
+    // 调用StringTable的intern方法
   oop result = StringTable::intern(string, CHECK_NULL);
   return (jstring) JNIHandles::make_local(env, result);
 JVM_END

@@ -830,7 +830,7 @@ char* Universe::preferred_heap_base(size_t heap_size, size_t alignment, NARROW_O
 jint Universe::initialize_heap() {
 
   if (UseParallelGC) {
-      //如果使用ParallelGC
+      // 1. 如果使用ParallelGC，如果JVM使用了并行收集器（-XX:+UseParallelGC），则将堆初始化为ParallelScavengeHeap类型，即并行收集堆
 #if INCLUDE_ALL_GCS
     Universe::_collectedHeap = new ParallelScavengeHeap();
 #else  // INCLUDE_ALL_GCS
@@ -838,7 +838,7 @@ jint Universe::initialize_heap() {
 #endif // INCLUDE_ALL_GCS
 
   } else if (UseG1GC) {
-      //如果使用G1GC
+      // 2. 如果使用G1GC，如果JVM使用了G1收集器（-XX:+UseG1GC），则将堆初始化为G1CollectedHeap类型，即G1堆。同时设置GC策略为G1专用的G1CollectorPolicy。
 #if INCLUDE_ALL_GCS
     G1CollectorPolicyExt* g1p = new G1CollectorPolicyExt();
     g1p->initialize_all();
@@ -854,8 +854,11 @@ jint Universe::initialize_heap() {
 
       //不同的回收策略
     if (UseSerialGC) {
+        // 3. 如果没有选择以上两种收集器，就继续检查是否使用了串行收集器（-XX:+UseSerialGC），如是，设置GC策略为MarkSweepPolicy，即标记-清除。
       gc_policy = new MarkSweepPolicy();
     } else if (UseConcMarkSweepGC) {
+        // 4. 再检查到如果使用了CMS收集器（-XX:+UseConcMarkSweepGC），就根据是否启用自适应开关（-XX:+UseAdaptiveSizePolicy），
+        // 设置GC策略为自适应的ASConcurrentMarkSweepPolicy，或者标准的ConcurrentMarkSweepPolicy。
 #if INCLUDE_ALL_GCS
       if (UseAdaptiveSizePolicy) {
         gc_policy = new ASConcurrentMarkSweepPolicy();
@@ -866,17 +869,19 @@ jint Universe::initialize_heap() {
     fatal("UseConcMarkSweepGC not supported in this VM.");
 #endif // INCLUDE_ALL_GCS
     } else { // default old generation
+        // 5. 如果以上情况都没有配置，就采用默认的GC策略为MarkSweepPolicy。
       gc_policy = new MarkSweepPolicy();
     }
     gc_policy->initialize_all();
 
+    // 对于步骤3~5的所有情况，都会将堆初始化为GenCollectedHeap类型，即分代收集堆。调用各堆实现类对应的initialize()方法执行堆的初始化操作。
     Universe::_collectedHeap = new GenCollectedHeap(gc_policy);
   }
 
     //设置TLAB的最大值
   ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
 
-    //初始化collectedHeap
+    //初始化collectedHeap，调用各堆实现类对应的initialize()方法执行堆的初始化操作。
   jint status = Universe::heap()->initialize();
   if (status != JNI_OK) {
     return status;
@@ -1419,12 +1424,15 @@ void Universe::print_heap_at_SIGBREAK() {
 }
 
 void Universe::print_heap_before_gc(outputStream* st, bool ignore_extended) {
+    //Universe最终是调用heap的方法，invocations=后的数字表示的是总的GC次数，full后的数字则是其中full GC的次数
   st->print_cr("{Heap before GC invocations=%u (full %u):",
                heap()->total_collections(),
                heap()->total_full_collections());
+    //PrintHeapAtGCExtended表示是否打印额外的更详细的有关堆结构的信息，当PrintHeapAtGC为true时使用
   if (!PrintHeapAtGCExtended || ignore_extended) {
     heap()->print_on(st);
   } else {
+      //打印额外的GC信息
     heap()->print_extended_on(st);
   }
 }

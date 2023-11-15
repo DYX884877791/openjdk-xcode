@@ -258,6 +258,7 @@ void Dictionary::always_strong_classes_do(KlassClosure* closure) {
 
 
 //   Just the classes from defining class loaders
+// Dictionary::classes_do用于遍历所有已加载的Klass，那这个Klass是哪来的了？参考与之对应的add_klass方法实现
 void Dictionary::classes_do(void f(Klass*)) {
   for (int index = 0; index < table_size(); index++) {
     for (DictionaryEntry* probe = bucket(index);
@@ -351,9 +352,13 @@ void Dictionary::add_klass(Symbol* class_name, ClassLoaderData* loader_data,
   assert(obj()->name() == class_name, "sanity check on name");
   assert(loader_data != NULL, "Must be non-NULL");
 
+    //计算hash值，Dictionary用于保存DictionaryEntry的数据结构跟Java中的HashMap是一样的
   unsigned int hash = compute_hash(class_name, loader_data);
+    //计算保存该Klass的数组索引
   int index = hash_to_index(hash);
+    //创建一个新的key-value键值对对象
   DictionaryEntry* entry = new_entry(hash, obj(), loader_data);
+    //将其加入到数组中
   add_entry(index, entry);
 }
 

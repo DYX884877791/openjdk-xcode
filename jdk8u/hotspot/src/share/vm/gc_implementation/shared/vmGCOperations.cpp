@@ -206,6 +206,7 @@ static bool is_full_gc(int max_level) {
   return (max_level == (GenCollectedHeap::heap()->n_gens() - 1));
 }
 
+// VM_GenCollectFull比较简单，就是调用do_full_collection方法
 VM_GenCollectFull::VM_GenCollectFull(uint gc_count_before,
                                      uint full_gc_count_before,
                                      GCCause::Cause gc_cause,

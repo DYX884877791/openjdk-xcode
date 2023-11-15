@@ -2380,7 +2380,7 @@ JVM_ENTRY(void, jmm_GetThreadCpuTimesWithKind(JNIEnv *env, jlongArray ids,
 JVM_END
 
 
-
+// jmm_interface就是JVM提供的用于获取内存使用情况，Java线程运行等的接口，是 java.lang.management API在JVM层的具体实现
 #if INCLUDE_MANAGEMENT
 const struct jmmInterface_1_ jmm_interface = {
   NULL,

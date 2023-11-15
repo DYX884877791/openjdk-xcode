@@ -94,7 +94,7 @@
 
 
 /**
- * StubRoutines是一个包含一系列编译程序或者JVM运行时系统使用的关键函数的地址的Holder类，其定义在hotspot src/share/vm/runtime/stubRoutines.hpp中。
+ * StubRoutines是一个包含一系列编译程序或者JVM运行时系统使用的关键函数的地址的Holder类，其定义在hotspot/src/share/vm/runtime/stubRoutines.hpp中。
  * 可以通过StubRoutines获取这些函数的内存地址，然后通过指针的方式调用目标函数
  */
 class StubRoutines: AllStatic {
@@ -294,7 +294,7 @@ class StubRoutines: AllStatic {
    * call_stub()函数返回一个函数指针，指向依赖于操作系统和CPU架构的特定的函数，原因很简单，要执行native代码，得看看是什么CPU架构以便确定寄存器，看看什么OS以便确定ABI。
    * 其中CAST_TO_FN_PTR是宏，hotspot/src/share/vm/utilities/globalDefinitions.hpp
    * #define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
-   * 通过CAST_TO_FN_PTR将_call_stub_entry转换为指针函数CallStub，并传递8个参数给_call_stub_entry代表的调用点
+   * 通过CAST_TO_FN_PTR将_call_stub_entry转换为指针函数CallStub(实际上是一个函数指针)，并传递8个参数给_call_stub_entry代表的调用点
    *
    * CallStub的源代码位置：openjdk/hotspot/src/share/vm/runtime/stubRoutines.hpp
    *

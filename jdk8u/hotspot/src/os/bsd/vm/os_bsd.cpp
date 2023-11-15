@@ -974,12 +974,16 @@ void os::free_thread(OSThread* osthread) {
 // to null and we will not be called again. If detachCurrentThread is never
 // called we could loop forever depending on the pthread implementation.
 static void restore_thread_pointer(void* p) {
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::thread_local_storage_at_put函数...");
   Thread* thread = (Thread*) p;
   os::thread_local_storage_at_put(ThreadLocalStorage::thread_index(), thread);
 }
 
 int os::allocate_thread_local_storage() {
   pthread_key_t key;
+  /**
+   * pthread_key_create的第二个参数是析构函数，用以在线程退出时自动调用。。。
+   */
   int rslt = pthread_key_create(&key, restore_thread_pointer);
   assert(rslt == 0, "cannot allocate thread local storage");
   return (int)key;
@@ -2450,6 +2454,7 @@ bool os::protect_memory(char* addr, size_t bytes, ProtType prot,
 }
 
 bool os::guard_memory(char* addr, size_t size) {
+    //PROT_NONE表示让指定的内存页不可访问，如果其他线程访问了，则内核线程会终止执行，并给用户线程发送SIGSEGV信号
   return bsd_mprotect(addr, size, PROT_NONE);
 }
 
@@ -3164,12 +3169,15 @@ bool os::is_interrupted(Thread* thread, bool clear_interrupted) {
   assert(Thread::current() == thread || Threads_lock->owned_by_self(),
     "possibility of dangling Thread pointer");
 
+    //获取关联的原生线程
   OSThread* osthread = thread->osthread();
 
+    //获取其是否被中断
   bool interrupted = osthread->interrupted();
 
   if (interrupted && clear_interrupted) {
       //如果需要清除interrupted标识
+      //清除被中断标识
     osthread->set_interrupted(false);
     // consider thread->_SleepEvent->reset() ... optional optimization
   }

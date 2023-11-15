@@ -55,6 +55,7 @@
 #include "utilities/vmError.hpp"
 #include "utilities/workgroup.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/concurrentMarkSweep/concurrentMarkSweepThread.hpp"
 #include "gc_implementation/concurrentMarkSweep/vmCMSOperations.hpp"
@@ -67,6 +68,7 @@ GenCollectedHeap* GenCollectedHeap::_gch;
 NOT_PRODUCT(size_t GenCollectedHeap::_skip_header_HeapWords = 0;)
 
 // The set of potentially parallel tasks in root scanning.
+// 表示并行执行任务的序号的枚举GCH_strong_roots_tasks
 enum GCH_strong_roots_tasks {
   GCH_PS_Universe_oops_do,
   GCH_PS_JNIHandles_oops_do,
@@ -83,6 +85,7 @@ enum GCH_strong_roots_tasks {
 };
 
 GenCollectedHeap::GenCollectedHeap(GenCollectorPolicy *policy) :
+  // 调用父类的构造方法...
   SharedHeap(policy),
   _gen_policy(policy),
   _process_strong_tasks(new SubTasksDone(GCH_PS_NumElements)),
@@ -95,6 +98,7 @@ jint GenCollectedHeap::initialize() {
   CollectedHeap::pre_initialize();
 
   int i;
+    //_n_gens表示有多少代，通常是2代，年轻代和老年代
   _n_gens = gen_policy()->number_of_generations();
 
   // While there are no constraints in the GC code that HeapWordSize
@@ -111,6 +115,7 @@ jint GenCollectedHeap::initialize() {
 
   // Make sure the sizes are all aligned.
   for (i = 0; i < _n_gens; i++) {
+      //将内存的初始值和最大值按照内存分配粒度对齐
     _gen_specs[i]->align(gen_alignment);
   }
 
@@ -123,10 +128,12 @@ jint GenCollectedHeap::initialize() {
 
   size_t heap_alignment = collector_policy()->heap_alignment();
 
+    //根据各GenerationSpec的最大大小计算总的需要保留的内存空间，然后申请指定大小的连续内存空间
   heap_address = allocate(heap_alignment, &total_reserved,
                           &n_covered_regions, &heap_rs);
 
   if (!heap_rs.is_reserved()) {
+      //申请失败
     vm_shutdown_during_initialization(
       "Could not reserve enough space for object heap");
     return JNI_ENOMEM;
@@ -137,27 +144,32 @@ jint GenCollectedHeap::initialize() {
 
   // It is important to do this in a way such that concurrent readers can't
   // temporarily think somethings in the heap.  (Seen this happen in asserts.)
+    //设置_reserved相关属性
   _reserved.set_word_size(0);
   _reserved.set_start((HeapWord*)heap_rs.base());
   size_t actual_heap_size = heap_rs.size();
   _reserved.set_end((HeapWord*)(heap_rs.base() + actual_heap_size));
 
+    //初始化GenRemSet
   _rem_set = collector_policy()->create_rem_set(_reserved, n_covered_regions);
   set_barrier_set(rem_set()->bs());
 
   _gch = this;
 
   for (i = 0; i < _n_gens; i++) {
+      //初始化各Generation
     ReservedSpace this_rs = heap_rs.first_part(_gen_specs[i]->max_size(), false, false);
     _gens[i] = _gen_specs[i]->init(this_rs, i, rem_set());
     heap_rs = heap_rs.last_part(_gen_specs[i]->max_size());
   }
+    //将_incremental_collection_failed置为false
   clear_incremental_collection_failed();
 
 #if INCLUDE_ALL_GCS
   // If we are running CMS, create the collector responsible
   // for collecting the CMS generations.
   if (collector_policy()->is_concurrent_mark_sweep_policy()) {
+      //如果是CMS则创建CMSCollector
     bool success = create_cms_collector();
     if (!success) return JNI_ENOMEM;
   }
@@ -182,6 +194,7 @@ char* GenCollectedHeap::allocate(size_t alignment,
 
   assert(alignment % pageSize == 0, "Must be");
 
+    //遍历所有的_gen_specs，累加各GenerationSpec的max_size和n_covered_regions
   for (int i = 0; i < _n_gens; i++) {
     total_reserved += _gen_specs[i]->max_size();
     if (total_reserved < _gen_specs[i]->max_size()) {
@@ -189,18 +202,23 @@ char* GenCollectedHeap::allocate(size_t alignment,
     }
     n_covered_regions += _gen_specs[i]->n_covered_regions();
   }
+    //校验累加后的total_reserved已经是内存对齐的
   assert(total_reserved % alignment == 0,
          err_msg("Gen size; total_reserved=" SIZE_FORMAT ", alignment="
                  SIZE_FORMAT, total_reserved, alignment));
 
   // Needed until the cardtable is fixed to have the right number
   // of covered regions.
+    //加2是为卡表保留的
   n_covered_regions += 2;
 
+    //赋值
   *_total_reserved = total_reserved;
   *_n_covered_regions = n_covered_regions;
 
+    //申请指定大小的连续内存空间
   *heap_rs = Universe::reserve_heap(total_reserved, alignment);
+    //返回基地址
   return heap_rs->base();
 }
 
@@ -210,6 +228,7 @@ void GenCollectedHeap::post_initialize() {
   TwoGenerationCollectorPolicy *policy =
     (TwoGenerationCollectorPolicy *)collector_policy();
   guarantee(policy->is_two_generation_policy(), "Illegal policy type");
+    //校验Generation被正确的设置了
   DefNewGeneration* def_new_gen = (DefNewGeneration*) get_gen(0);
   assert(def_new_gen->kind() == Generation::DefNew ||
          def_new_gen->kind() == Generation::ParNew ||
@@ -222,6 +241,7 @@ void GenCollectedHeap::post_initialize() {
          old_gen->kind() == Generation::MarkSweepCompact,
     "Wrong generation kind");
 
+    //初始化TwoGenerationCollectorPolicy
   policy->initialize_size_policy(def_new_gen->eden()->capacity(),
                                  old_gen->capacity(),
                                  def_new_gen->from()->capacity());
@@ -231,6 +251,7 @@ void GenCollectedHeap::post_initialize() {
 void GenCollectedHeap::ref_processing_init() {
   SharedHeap::ref_processing_init();
   for (int i = 0; i < _n_gens; i++) {
+      //初始化各代的ReferenceProcessor
     _gens[i]->ref_processor_init();
   }
 }
@@ -245,6 +266,7 @@ size_t GenCollectedHeap::capacity() const {
 
 size_t GenCollectedHeap::used() const {
   size_t res = 0;
+    //遍历各Generation累加内存使用量
   for (int i = 0; i < _n_gens; i++) {
     res += _gens[i]->used();
   }
@@ -273,6 +295,7 @@ unsigned int GenCollectedHeap::update_full_collections_completed() {
   MonitorLockerEx ml(FullGCCount_lock, Mutex::_no_safepoint_check_flag);
   assert(_full_collections_completed <= _total_full_collections,
          "Can't complete more collections than were started");
+    //获取锁FullGCCount_lock，更新_full_collections_completed属性
   _full_collections_completed = _total_full_collections;
   ml.notify_all();
   return _full_collections_completed;
@@ -342,6 +365,7 @@ HeapWord* GenCollectedHeap::attempt_allocation(size_t size,
 
 HeapWord* GenCollectedHeap::mem_allocate(size_t size,
                                          bool* gc_overhead_limit_was_exceeded) {
+    // 根据策略来分配
   return collector_policy()->mem_allocate_work(size,
                                                false /* is_tlab */,
                                                gc_overhead_limit_was_exceeded);
@@ -352,46 +376,61 @@ bool GenCollectedHeap::must_clear_all_soft_refs() {
 }
 
 bool GenCollectedHeap::should_do_concurrent_full_gc(GCCause::Cause cause) {
+    //UseConcMarkSweepGC表示使用CMS GC算法
+    //GCLockerInvokesConcurrent的默认值为false
+    //ExplicitGCInvokesConcurrent的默认值也是false
   return UseConcMarkSweepGC &&
          ((cause == GCCause::_gc_locker && GCLockerInvokesConcurrent) ||
           (cause == GCCause::_java_lang_system_gc && ExplicitGCInvokesConcurrent));
 }
 
+// do_collection是GenCollectedHeap执行垃圾回收的核心方法，其底层核心就是各Genaration的collect方法
 void GenCollectedHeap::do_collection(bool  full,
                                      bool   clear_all_soft_refs,
                                      size_t size,
                                      bool   is_tlab,
                                      int    max_level) {
+  slog_debug("进入hotspot/src/share/vm/memory/genCollectedHeap.cpp中的GenCollectedHeap::do_collection函数,该函数是GenCollectedHeap执行垃圾回收的核心方法...");
   bool prepared_for_verification = false;
   ResourceMark rm;
   DEBUG_ONLY(Thread* my_thread = Thread::current();)
 
+    //校验处于安全点上
   assert(SafepointSynchronize::is_at_safepoint(), "should be at safepoint");
+    //校验调用线程是VMThread 或者CMS Thread
   assert(my_thread->is_VM_thread() ||
          my_thread->is_ConcurrentGC_thread(),
          "incorrect thread type capability");
+    //校验获取了Heap_lock锁
   assert(Heap_lock->is_locked(),
          "the requesting thread should have the Heap_lock");
   guarantee(!is_gc_active(), "collection is not reentrant");
   assert(max_level < n_gens(), "sanity check");
 
+    //检查是否有线程处于JNI关键区，check_active_before_gc返回true表示有，则终止当前GC，等待线程退出
+    //最后一个退出的线程会负责执行GC
     // 检查是否已经GC锁是否已经激活，并设置需要进行GC的标志为true，这时，通过is_active_and_needs_gc()就可以判断是否已经有线程触发了GC。
   if (GC_locker::check_active_before_gc()) {
     return; // GC is disabled (e.g. JNI GetXXXCritical operation)
   }
 
+    //是否需要清除软引用
     // 检查是否需要回收所有的软引用。
   const bool do_clear_all_soft_refs = clear_all_soft_refs ||
                           collector_policy()->should_clear_all_soft_refs();
 
+    //ClearedAllSoftRefs通过析构函数设置CollectorPolicy的_all_soft_refs_clear属性
   ClearedAllSoftRefs casr(do_clear_all_soft_refs, collector_policy());
 
+    //获取元空间已使用内存
     // 记录永久代已经使用的内存空间大小。
   const size_t metadata_prev_used = MetaspaceAux::used_bytes();
 
+    //打印GC的堆内存使用情况
   print_heap_before_gc();
 
   {
+      //临时设置_is_gc_active为true，表示GC开始了
     FlagSetting fl(_is_gc_active, true);
 
       // 确定回收类型是否是FullGC以及gc触发类型(GC/Full GC(system)/Full GC，用作Log输出)。
@@ -402,10 +441,13 @@ void GenCollectedHeap::do_collection(bool  full,
     // so we can assume here that the next GC id is what we want.
     GCTraceTime t(GCCauseString(gc_cause_prefix, gc_cause()), PrintGCDetails, false, NULL, GCId::peek());
 
+      //遍历各Generation执行GC准备工作
     gc_prologue(complete);
+      //增加GC次数
       // gc计数加1操作(包括总GC计数和FullGC计数)。
     increment_total_collections(complete);
 
+      //统计总的内存使用量
       // 统计堆已被使用的空间大小。
     size_t gch_prev_used = used();
 
@@ -418,7 +460,9 @@ void GenCollectedHeap::do_collection(bool  full,
     if (full) {
       // Search for the oldest generation which will collect all younger
       // generations, and start collection loop there.
+        //找到老年代对应的level
       for (int i = max_level; i >= 0; i--) {
+          //DefNewGeneration采用父类Generation的默认实现，返回false
         if (_gens[i]->full_collects_younger_generations()) {
           starting_level = i;
           break;
@@ -433,11 +477,16 @@ void GenCollectedHeap::do_collection(bool  full,
     for (int i = starting_level; i <= max_level; i++) {
         // should_collect()将根据该内存代GC条件返回是否应该对该内存代进行GC。若当前回收的内存代是最老的内存代，如果本次gc不是FullGC，将调用increment_total_full_collections()修正之前的FulllGC计数值。
       if (_gens[i]->should_collect(full, size, is_tlab)) {
+          //如果需要垃圾回收
         if (i == n_gens() - 1) {  // a major collection is to happen
+            //如果是老年代
           if (!complete) {
             // The full_collections increment was missed above.
+              //increment_total_collections方法只有在complete为true时才会增加_total_full_collections计数
+              //此处complete为false，但还是老年代的GC，所以增加计数
             increment_total_full_collections();
           }
+            //根据参数配置dump
           pre_full_gc_dump(NULL);    // do any pre full gc dumps
         }
         // Timer for individual generations. Last argument is false: no CR
@@ -450,12 +499,14 @@ void GenCollectedHeap::do_collection(bool  full,
         TraceMemoryManagerStats tmms(_gens[i]->kind(),gc_cause());
 
         size_t prev_used = _gens[i]->used();
+          //增加计数
         _gens[i]->stat_record()->invocations++;
         _gens[i]->stat_record()->accumulated_time.start();
 
         // Must be done anew before each collection because
         // a previous collection will do mangling and will
         // change top of some spaces.
+          //记录各Generation的Space的top指针，生产版本为空实现
         record_gen_tops_before_GC();
 
         if (PrintGC && Verbose) {
@@ -482,12 +533,14 @@ void GenCollectedHeap::do_collection(bool  full,
         COMPILER2_PRESENT(DerivedPointerTable::clear());
 
         if (!must_restore_marks_for_biased_locking &&
+             //这里的DefNewGeneration返回false，ConcurrentMarkSweepGeneration采用父类默认实现返回true
             _gens[i]->performs_in_place_marking()) {
           // We perform this mark word preservation work lazily
           // because it's only at this point that we know whether we
           // absolutely have to do it; we want to avoid doing it for
           // scavenge-only collections where it's unnecessary
           must_restore_marks_for_biased_locking = true;
+            //将各线程的持有偏向锁的oop的对象头保存起来
           BiasedLocking::preserve_marks();
         }
 
@@ -521,14 +574,19 @@ void GenCollectedHeap::do_collection(bool  full,
             rp->setup_policy(do_clear_all_soft_refs);
           } else {
             // collect() below will enable discovery as appropriate
+              //collect方法会调用enable_discovery方法
           }
+            //执行垃圾回收
             // 由各内存代完成gc
           _gens[i]->collect(full, do_clear_all_soft_refs, size, is_tlab);
             // 将不可触及的引用对象加入到Reference的pending链表
             // 其中enqueue_discovered_references根据是否使用压缩指针选择不同的enqueue_discovered_ref_helper()模板函数
           if (!rp->enqueuing_is_done()) {
+              //enqueuing_is_done为false
+              //将处理后剩余的References实例加入到pending-list中
             rp->enqueue_discovered_references();
           } else {
+              //enqueuing_is_done为true，已经加入到pending-list中了，将其恢复成默认值
             rp->set_enqueuing_is_done(false);
           }
           rp->verify_no_references_recorded();
@@ -548,6 +606,7 @@ void GenCollectedHeap::do_collection(bool  full,
 
         _gens[i]->stat_record()->accumulated_time.stop();
 
+          //更新各Generation的GC统计信息
         update_gc_stats(i, full);
 
         if (VerifyAfterGC && i >= VerifyGCLevel &&
@@ -561,15 +620,17 @@ void GenCollectedHeap::do_collection(bool  full,
           _gens[i]->print_heap_change(prev_used);
         }
       }
-    }
+    } //for循环结束
 
     // Update "complete" boolean wrt what actually transpired --
     // for instance, a promotion failure could have led to
     // a whole heap collection.
+      //是否Full GC
     complete = complete || (max_level_collected == n_gens() - 1);
 
     if (complete) { // We did a "major" collection
       // FIXME: See comment at pre_full_gc_dump call
+        //根据配置dump
       post_full_gc_dump(NULL);   // do any post full gc dumps
     }
 
@@ -584,19 +645,23 @@ void GenCollectedHeap::do_collection(bool  full,
 
     for (int j = max_level_collected; j >= 0; j -= 1) {
       // Adjust generation sizes.
+        //调整各Generation的容量
       _gens[j]->compute_new_size();
     }
 
     if (complete) {
       // Delete metaspaces for unloaded class loaders and clean up loader_data graph
+        //删掉被卸载的ClassLoader实例及其相关元数据
       ClassLoaderDataGraph::purge();
       MetaspaceAux::verify_metrics();
       // Resize the metaspace capacity after full collections
+        //重置元空间大小
       MetaspaceGC::compute_new_size();
       update_full_collections_completed();
     }
 
     // Track memory usage and detect low memory after GC finishes
+      //跟踪GC后的内存使用
     MemoryService::track_memory_usage();
 
     gc_epilogue(complete);
@@ -647,6 +712,7 @@ void GenCollectedHeap::process_roots(bool activate_scope,
                                      CLDClosure* strong_cld_closure,
                                      CLDClosure* weak_cld_closure,
                                      CodeBlobToOopClosure* code_roots) {
+    //修改SharedHeap的_strong_roots_parity属性
   StrongRootsScope srs(this, activate_scope);
 
   // General roots.
@@ -657,7 +723,9 @@ void GenCollectedHeap::process_roots(bool activate_scope,
   // could be trying to change the termination condition while the task
   // is executing in another GC worker.
 
+    //如果这个任务还未执行
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_ClassLoaderDataGraph_oops_do)) {
+      //遍历所有的ClassLoaderData，如果ClassLoaderData的keep_alive为true则使用strong_cld_closure处理，否则使用weak_cld_closure
     ClassLoaderDataGraph::roots_cld_do(strong_cld_closure, weak_cld_closure);
   }
 
@@ -665,25 +733,31 @@ void GenCollectedHeap::process_roots(bool activate_scope,
   // Don't process them if they will be processed during the ClassLoaderDataGraph phase.
   CLDClosure* roots_from_clds_p = (strong_cld_closure != weak_cld_closure) ? strong_cld_closure : NULL;
   // Only process code roots from thread stacks if we aren't visiting the entire CodeCache anyway
+    //so & SO_AllCodeCache为true即so等于SO_AllCodeCache或者SO_ScavengeCodeCache
   CodeBlobToOopClosure* roots_from_code_p = (so & SO_AllCodeCache) ? NULL : code_roots;
 
+    //遍历所有JavaThread和VMThread中包含的oop，包含通过JNI创建的oop和栈上的oop
   Threads::possibly_parallel_oops_do(strong_roots, roots_from_clds_p, roots_from_code_p);
 
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_Universe_oops_do)) {
+      //遍历Universe中包含的oop
     Universe::oops_do(strong_roots);
   }
   // Global (strong) JNI handles
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_JNIHandles_oops_do)) {
+      //遍历JNI全局引用中的oop
     JNIHandles::oops_do(strong_roots);
   }
 
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_ObjectSynchronizer_oops_do)) {
+      //遍历ObjectSynchronizer即synchronize关键字的实现中包含的oop，主要是锁对象
     ObjectSynchronizer::oops_do(strong_roots);
   }
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_FlatProfiler_oops_do)) {
     FlatProfiler::oops_do(strong_roots);
   }
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_Management_oops_do)) {
+      //遍历MemoryService和ThreadService中的oop
     Management::oops_do(strong_roots);
   }
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_jvmti_oops_do)) {
@@ -691,11 +765,13 @@ void GenCollectedHeap::process_roots(bool activate_scope,
   }
 
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_SystemDictionary_oops_do)) {
+      //遍历SystemDictionary系统字典中的oop
     SystemDictionary::roots_oops_do(strong_roots, weak_roots);
   }
 
   // All threads execute the following. A specific chunk of buckets
   // from the StringTable are the individual tasks.
+    //所有线程都要执行一遍StringTable的oop遍历
   if (weak_roots != NULL) {
     if (CollectedHeap::use_parallel_gc_threads()) {
       StringTable::possibly_parallel_oops_do(weak_roots);
@@ -705,10 +781,12 @@ void GenCollectedHeap::process_roots(bool activate_scope,
   }
 
   if (!_process_strong_tasks->is_task_claimed(GCH_PS_CodeCache_oops_do)) {
+      //SO_AllCodeCache是包含SO_ScavengeCodeCache的，所以如果是SO_ScavengeCodeCache也会执行此逻辑
     if (so & SO_ScavengeCodeCache) {
       assert(code_roots != NULL, "must supply closure for code cache");
 
       // We only visit parts of the CodeCache when scavenging.
+        //遍历nmethods
       CodeCache::scavenge_root_nmethods_do(code_roots);
     }
     if (so & SO_AllCodeCache) {
@@ -716,6 +794,7 @@ void GenCollectedHeap::process_roots(bool activate_scope,
 
       // CMSCollector uses this to do intermediate-strength collections.
       // We scan the entire code cache, since CodeCache::do_unloading is not called.
+        // 遍历整个CodeBlob
       CodeCache::blobs_do(code_roots);
     }
     // Verify that the code cache contents are not subject to
@@ -726,6 +805,8 @@ void GenCollectedHeap::process_roots(bool activate_scope,
 
 }
 
+//  gen_process_roots用于遍历处理ClassLoaderDataGraph，Threads，Universe等组件中包含的oop，将这些oop作为根节点遍历其所引用的其他oop，
+//  根据参数还能遍历年轻代和老年代中的所有oop，遍历脏的卡表项对应的内存区域中包含的oop。
 void GenCollectedHeap::gen_process_roots(int level,
                                          bool younger_gens_as_roots,
                                          bool activate_scope,
@@ -739,20 +820,30 @@ void GenCollectedHeap::gen_process_roots(int level,
   bool is_moving_collection = false;
   if (level == 0 || is_adjust_phase) {
     // young collections are always moving
+      //is_moving_collection表示垃圾回收过程中是否会移动对象
     is_moving_collection = true;
   }
 
+    //is_moving_collection实际对应_fix_relocations属性，如果为true，则遍历nmethod完后，会调用
+    //其fix_oop_relocations方法用于让nmethod中的oop指向对象移动后的地址
   MarkingCodeBlobClosure mark_code_closure(not_older_gens, is_moving_collection);
+    //weak_roots主要用于遍历StringTable中保存的String对象和SystemDictionary中保存的ProtectionDomain对象，这些对象如果不遍历且不被其他存活对象引用则会被回收掉
   OopsInGenClosure* weak_roots = only_strong_roots ? NULL : not_older_gens;
+    //weak_cld_closure用来遍历keep_live属性为false的ClassLoaderData，同上，如果不遍历则会被回收掉
   CLDClosure* weak_cld_closure = only_strong_roots ? NULL : cld_closure;
 
+    //处理ClassLoaderDataGraph，Threads，Universe等组件中包含的oop，这些都作为根节点
   process_roots(activate_scope, so,
                 not_older_gens, weak_roots,
                 cld_closure, weak_cld_closure,
                 &mark_code_closure);
 
   if (younger_gens_as_roots) {
+      //younger_gens_as_roots为true，表示需要遍历年轻代中的所有对象，将其作为根节点
+      //is_task_claimed返回false表示这个任务还未执行
     if (!_process_strong_tasks->is_task_claimed(GCH_PS_younger_gens)) {
+        //因为是i小于level，所以对年轻代而言，即使younger_gens_as_roots为true，也不会执行
+        //只有老年代，level=1时才会进入此分支
       for (int i = 0; i < level; i++) {
         not_older_gens->set_generation(_gens[i]);
         _gens[i]->oop_iterate(not_older_gens);
@@ -762,20 +853,26 @@ void GenCollectedHeap::gen_process_roots(int level,
   }
   // When collection is parallel, all threads get to cooperate to do
   // older-gen scanning.
+    //level最低是0，即年轻代GC会调用老年代的younger_refs_iterate方法，如果level是1则不做任何处理，即老年代GC不会执行此逻辑
   for (int i = level+1; i < _n_gens; i++) {
     older_gens->set_generation(_gens[i]);
+      //younger_refs_iterate支持并行遍历，注意年轻代的该方法是一个空实现
     rem_set()->younger_refs_iterate(_gens[i], older_gens);
     older_gens->reset_generation();
   }
 
+    //标识当前线程执行完成
   _process_strong_tasks->all_tasks_completed();
 }
 
 
+// gen_process_weak_roots用于遍历JNI弱引用和Reference弱引用实例。
 void GenCollectedHeap::gen_process_weak_roots(OopClosure* root_closure) {
+    //遍历JNI弱引用
   JNIHandles::weak_oops_do(root_closure);
   JFR_ONLY(Jfr::weak_oops_do(root_closure));
   for (int i = 0; i < _n_gens; i++) {
+      //遍历所有的Reference实例
     _gens[i]->ref_processor()->weak_oops_do(root_closure);
   }
 }
@@ -796,6 +893,7 @@ ALL_SINCE_SAVE_MARKS_CLOSURES(GCH_SINCE_SAVE_MARKS_ITERATE_DEFN)
 #undef GCH_SINCE_SAVE_MARKS_ITERATE_DEFN
 
 bool GenCollectedHeap::no_allocs_since_save_marks(int level) {
+    //如果level为0，则处理年轻代和老年代，如果level为1则只处理老年代
   for (int i = level; i < _n_gens; i++) {
     if (!_gens[i]->no_allocs_since_save_marks()) return false;
   }
@@ -816,6 +914,7 @@ HeapWord** GenCollectedHeap::end_addr() const {
 
 // public collection interfaces
 
+// collect方法是对JVM外部如JNI接口使用的触发垃圾回收的方法
 void GenCollectedHeap::collect(GCCause::Cause cause) {
   if (should_do_concurrent_full_gc(cause)) {
 #if INCLUDE_ALL_GCS
@@ -872,7 +971,9 @@ void GenCollectedHeap::collect_locked(GCCause::Cause cause, int max_level) {
   }
 
   {
+      //获取Heap_lock锁
     MutexUnlocker mu(Heap_lock);  // give up heap lock, execute gets it back
+      //底层还是调用do_full_collection
     VM_GenCollectFull op(gc_count_before, full_gc_count_before,
                          cause, max_level);
     VMThread::execute(&op);
@@ -911,12 +1012,14 @@ void GenCollectedHeap::collect_mostly_concurrent(GCCause::Cause cause) {
   unsigned int gc_count_before      = total_collections();
   {
     MutexUnlocker mu(Heap_lock);
+      //底层调用do_full_collection
     VM_GenCollectFullConcurrent op(gc_count_before, full_gc_count_before, cause);
     VMThread::execute(&op);
   }
 }
 #endif // INCLUDE_ALL_GCS
 
+// do_full_collection有两个重载版本，用来执行年轻代或者老年代的“full gc”，即底层调用do_collection方法时，full参数是true
 void GenCollectedHeap::do_full_collection(bool clear_all_soft_refs) {
    do_full_collection(clear_all_soft_refs, _n_gens - 1);
 }
@@ -932,12 +1035,14 @@ void GenCollectedHeap::do_full_collection(bool clear_all_soft_refs,
   // Hack XXX FIX ME !!!
   // A scavenge may not have been attempted, or may have
   // been attempted and failed, because the old gen was too full
+    //如果只执行年轻代的GC，但是因为老年满了导致GC失败，则重试
   if (gc_cause() == GCCause::_gc_locker && incremental_collection_failed()) {
     if (PrintGCDetails) {
       gclog_or_tty->print_cr("GC locker: Trying a full collection "
                              "because scavenge failed");
     }
     // This time allow the old gen to be collected as well
+      //会执行老年代和年轻代的GC
     do_collection(true                 /* full */,
                   clear_all_soft_refs  /* clear_all_soft_refs */,
                   0                    /* size */,
@@ -1163,6 +1268,7 @@ void GenCollectedHeap::prepare_for_verify() {
 }
 
 
+// old_to_young决定了遍历的顺序，如果为true则先遍历老年代再遍历年轻代
 void GenCollectedHeap::generation_iterate(GenClosure* cl,
                                           bool old_to_young) {
   if (old_to_young) {
@@ -1311,10 +1417,13 @@ void GenCollectedHeap::gc_prologue(bool full) {
 
   always_do_update_barrier = false;
   // Fill TLAB's and such
+    //收集GC前的TLAB的统计数据
   CollectedHeap::accumulate_statistics_all_tlabs();
+    //遍历各Generation执行ensure_parsability
   ensure_parsability(true);   // retire TLABs
 
   // Walk generations
+    //遍历各Generation执行gc_prologue
   GenGCPrologueClosure blk(full);
   generation_iterate(&blk, false);  // not old-to-young.
 };
@@ -1336,15 +1445,20 @@ void GenCollectedHeap::gc_epilogue(bool full) {
   guarantee(actual_gap > (size_t)FastAllocateSizeLimit, "inline allocation wraps");
 #endif /* COMPILER2 */
 
+    //重新计算各线程的TLAB的分配大小
   resize_all_tlabs();
 
+    //遍历各Generation执行gc_epilogue方法
   GenGCEpilogueClosure blk(full);
   generation_iterate(&blk, false);  // not old-to-young.
 
+    //CleanChunkPoolAsync默认为false
   if (!CleanChunkPoolAsync) {
+      //清理ChunkPool
     Chunk::clean_chunk_pool();
   }
 
+    //更新计数器
   MetaspaceCounters::update_performance_counters();
   CompressedClassSpaceCounters::update_performance_counters();
 

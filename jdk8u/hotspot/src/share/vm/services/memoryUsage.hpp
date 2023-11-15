@@ -44,11 +44,16 @@
 //     memory for memory management could be less than the amount of
 //     committed memory.  Its value may be undefined.
 
+// MemoryUsage的定义在hotspot/src/shared/vm/service/memoryUsage.hpp中， 对应Java类是java.lang.management.MemoryUsage，两者的属性是一一对应
 class MemoryUsage VALUE_OBJ_CLASS_SPEC {
 private:
+    // initSize表示初始大小
   size_t _initSize;
+    // used表示已经使用的大小
   size_t _used;
+    // committed表示已经分配内存可以被JVM直接利用的空间大小，committed会随着时间变化而变化，但肯定大于used
   size_t _committed;
+    // maxSize表示能够使用的最大的空间大小
   size_t _maxSize;
 
 public:

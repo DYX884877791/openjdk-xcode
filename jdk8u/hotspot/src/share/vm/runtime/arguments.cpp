@@ -44,6 +44,7 @@
 #include "utilities/macros.hpp"
 #include "utilities/stringUtils.hpp"
 #include "utilities/taskqueue.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_JFR
 #include "jfr/jfr.hpp"
 #endif
@@ -1232,6 +1233,7 @@ static void disable_adaptive_size_policy(const char* collector_name) {
 }
 
 void Arguments::set_parnew_gc_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_parnew_gc_flags函数...");
   assert(!UseSerialGC && !UseParallelOldGC && !UseParallelGC && !UseG1GC,
          "control point invariant");
   assert(UseParNewGC, "Error");
@@ -1281,6 +1283,7 @@ void Arguments::set_parnew_gc_flags() {
 // further optimization and tuning efforts, and would almost
 // certainly gain from analysis of platform and environment.
 void Arguments::set_cms_and_parnew_gc_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_cms_and_parnew_gc_flags函数...");
   assert(!UseSerialGC && !UseParallelOldGC && !UseParallelGC, "Error");
   assert(UseConcMarkSweepGC, "CMS is expected to be on here");
 
@@ -1592,6 +1595,7 @@ void Arguments::set_use_compressed_klass_ptrs() {
 }
 
 void Arguments::set_conservative_max_heap_alignment() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_conservative_max_heap_alignment函数...");
   // The conservative maximum required alignment for the heap is the maximum of
   // the alignments imposed by several sources: any requirements from the heap
   // itself, the collector policy and the maximum page size we may run the VM
@@ -1611,6 +1615,7 @@ void Arguments::set_conservative_max_heap_alignment() {
 }
 
 void Arguments::select_gc_ergonomically() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::select_gc_ergonomically函数...");
   if (os::is_server_class_machine()) {
     if (should_auto_select_low_pause_collector()) {
       FLAG_SET_ERGO(bool, UseConcMarkSweepGC, true);
@@ -1658,6 +1663,7 @@ void Arguments::set_ergonomics_flags() {
 }
 
 void Arguments::set_parallel_gc_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_parallel_gc_flags函数...");
   assert(UseParallelGC || UseParallelOldGC, "Error");
   // Enable ParallelOld unless it was explicitly disabled (cmd line or rc file).
   if (FLAG_IS_DEFAULT(UseParallelOldGC)) {
@@ -1756,6 +1762,7 @@ void Arguments::set_g1_gc_flags() {
 #if !INCLUDE_ALL_GCS
 #ifdef ASSERT
 static bool verify_serial_gc_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的verify_serial_gc_flags函数...");
   return (UseSerialGC &&
         !(UseParNewGC || (UseConcMarkSweepGC || CMSIncrementalMode) || UseG1GC ||
           UseParallelGC || UseParallelOldGC));
@@ -1763,7 +1770,83 @@ static bool verify_serial_gc_flags() {
 #endif // ASSERT
 #endif // INCLUDE_ALL_GCS
 
+/**
+ * 垃圾回收器常用组合:(括号中是GC日志中的别名)
+ *
+ *
+ * 1. serial old其实表示的是一种说法，老年代单线程回收。在不同的垃圾回收器中实现各不相同，现在有以下几种实现g1MarkSweep，psMarkSweep，genMarkSweep。
+ * 2. gc日志里的老年代名称有时候会变，其实是老年代回收器不一样。
+ *      老年代回收器为psMarkSweep的是叫PSOldGen。
+ *      老年代回收器为psParallelCompact的是叫ParOldGen。
+ *
+ * 新生代	                        老年代	                    JDK7参数	                        JDK8参数
+ * Serial(DefNew)	                Serial Old(PSOldGen)	    -XX:+UseSerialGC	            -XX:+UseSerialGC
+ * ParNew(ParNew)	                Serial Old(PSOldGen)	    -XX:+UseParNewGC	            -XX:+UseParNewGC
+ * Parallel Scavenge(PSYoungGen)	Serial Old(PSOldGen)	    默认 或者 -XX:+UseParallelGC	    -XX:-UseParallelOldGC
+ * Parallel Scavenge(PSYoungGen)	Parallel Old(ParOldGen)	    -XX:+UseParallelOldGC	        默认 或者 -XX:+UseParallelGC 或者 -XX:+UseParallelOldGC（默认开启一个，另一个也会被开启，二者相互激活）
+ * ParNew(ParNew)	                CMS(CMS)	                -XX:+UseConcMarkSweepGC	        -XX:+UseConcMarkSweepGC(Serial Old收集器将作为CMS收集器出现Concurrent Mode Failure失败时的后备收集器使用)
+ * G1	                            G1	                        -XX:+UseG1GC	                -XX:+UseG1GC（JDK9默认）
+ *
+ * 可以使用jinfo命令查看垃圾收集器参数使用情况：
+ * jinfo -flag UseParallelOldGC ${java应用进程号}
+ *
+ *
+ * Serial GC和Serial Old(串行回收)
+ *   Serial GC作为HopSpot客户端(Client)模式下的默认新生代垃圾收集器，使用的是复制算法、串行回收、STW。
+ *   Serial Old GC是运行在Client模式下默认的老年代垃圾收集器。采用的是标记-压缩算法、串行回收和STW机制
+ *      Serial Old GC在Server模式下主要有两个作用：
+ *          1. 与Parallel GC新生代垃圾收集器组合使用
+ *          2. 作为老年代CMS收集器的后备垃圾收集方案
+ * 优势：简单而高效(在单线程中和其它收集器相比)，对于单个cpu环境，没有线程交互的开销，可以获得更高的单线程收集效率
+ * 开启Serial GC(新生代和老年代都使用串行收集器)：-XX:+UseSerialGC
+ *
+ *
+ * ParNew(并行回收)
+ *  可以看作是Serial的多线程版本，几乎没有任何区别。新生代的垃圾收集器，采用的也是复制算法和STW机制。是很多JVM默认的新生代垃圾收集器。
+ *  除了在单CPU的环境下，其它的环境都比Serial效率高。
+ *   -XX:+UseParNewGC：开启PerNew GC(设置新生代并行收集器，不影响老年代)
+ *   -XX:ParallelGCThreads：设置并行的垃圾回收线程数量，默认开启和CPU核心相同的线程数
+ *
+ *
+ * Parallel GC和Parallel Old GC(吞吐量优先)
+ *  Parallel
+ *      Parallel和ParNew差不多都是使用的复制算法、STW机制。
+ * 适用于与用户交互比较少的场景(吞吐量优先，更关注吞吐量，每次STW相对较长)，比如批量处理、订单处理、科学计算等
+ * 那为什么还需要Parallel，还在JDK8中把Parallel和Parallel Old设置为默认的垃圾收集器呢？
+ *  Parallel和ParNew的区别
+ *      1. 相对于ParNew更关注的是吞吐量
+ *      2. 提供了自适应的策略，通过-XX:+UseAdaptiveSizePolicy开启，默认是开启的：自适应调整 新生代大小、eden 和 survivor 比例，以及晋升老年代对象年龄等参数
+ *      3. 在JDK1.6及之后提供了Parallel Old组合使用，在此之前只能搭配Serial Old使用
+ *      4. ParNew可以搭配CMS使用。也可以搭配Serial Old使用。(注意版本变化导致组合的变化)
+ *
+ * Parallel Old
+ *      使用的也是标记-压缩算法，为了取代Serial Old垃圾收集器在JDK1.6版本加入
+ *
+ *
+ * CMS
+ * CMS 是一款 低停顿 的 老年代 垃圾收集器。一般与 Serial, ParNew 新生代收集器一起工作，默认是 ParNew。
+ * 工作流程细化为以下几个步骤：
+ *  1. 初始化标记（stop the world）
+ *      标记老年代 GC Root 对象，标记新生代引用老年代的对象
+ *  2. 并发标记
+ *      与应用线程并发执行，从上一步标记的节点顺着引用链路往下标记
+ *      并发标记过程中，老年代会产生新的对象、老年代引用会变更等等。为了提高重新标记的效率，这些对象所在的 card 会被标记为 dirty。
+ *      这一阶段，可能会导致 concurrent mode failure
+ *  3. 预清理
+ *      与应用线程并发执行，处理上一个阶段被标记为 dirty 的对象。该阶段为了减少 重新标记 产生的停顿时间，有可能会等待一次 ygc
+ *  4. 重新标记（stop the world）
+ *      从 dirty 和 root 继续往下标记可达对象
+ *  5. 并发清理
+ *      与应用线程并发执行
+ *      采用 标记-清除 算法将垃圾清除
+ *      这一阶段，也可能会导致 concurrent mode failure：原因如下：
+ *          因为在并发标记和并发清除的阶段，用户线程是持续运行的，那程序自然会有新的垃圾产生，但这一部分垃圾对象是出现在标记阶段之后，所以CMS无法在当次集中清理它们，
+ *          只能留到下一次垃圾收集清理，这一部分垃圾就叫“浮动垃圾”。在JDK5的时候老年代默认的的阈值是68%，达到这个阈值就会激活CMS进行垃圾收集。
+ *          到JDK6的时候这个阈值被调整到92%。过低可能导致频繁GC，过高可能出现“并发失败”而启动后备方案，使用 Serial Old 垃圾收集器触发一次 Full GC
+ *  6. 并发重置状态等待下次 CMS 触发
+ */
 void Arguments::set_gc_specific_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_gc_specific_flags函数...");
 #if INCLUDE_ALL_GCS
   // Set per-collector flags
   if (UseParallelGC || UseParallelOldGC) {
@@ -1947,6 +2030,7 @@ void Arguments::set_heap_size() {
 // intensive jobs.  It is intended for machines with large
 // amounts of cpu and memory.
 jint Arguments::set_aggressive_heap_flags() {
+  slog_debug("进入hotspot/src/share/vm/runtime/arguments.cpp中的Arguments::set_aggressive_heap_flags函数...");
   // initHeapSize is needed since _initial_heap_size is 4 bytes on a 32 bit
   // VM, but we may not be able to represent the total physical memory
   // available (like having 8gb of memory on a box but using a 32bit VM).
@@ -3262,12 +3346,15 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
 #endif
       }
     // -Xint
+        // 以解释器Interpreter模式运行(关闭C1, C2)
     } else if (match_option(option, "-Xint", &tail)) {
           set_mode_flags(_int);
     // -Xmixed
+        // 刚开始的时候使用解释器慢慢解释执行，后来让JIT及时编译器根据程序运行的情况，有选择地将某些热点代码提前编译并缓存在本地，在执行的时候效率就非常高了
     } else if (match_option(option, "-Xmixed", &tail)) {
           set_mode_flags(_mixed);
     // -Xcomp
+        // JVM在第一次使用时会把所有的字节码编译成本地代码，然后再执行
     } else if (match_option(option, "-Xcomp", &tail)) {
       // for testing the compiler; turn off all flags that inhibit compilation
           set_mode_flags(_comp);

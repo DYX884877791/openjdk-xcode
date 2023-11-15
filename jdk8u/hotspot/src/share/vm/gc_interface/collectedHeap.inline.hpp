@@ -116,11 +116,15 @@ void CollectedHeap::post_allocation_setup_array(KlassHandle klass,
   // non-NULL klass field indicates that the object is parsable by
   // concurrent GC.
   assert(length >= 0, "length should be non-negative");
+    //设置数组长度
   ((arrayOop)obj_ptr)->set_length(length);
+    //设置对象头和klass
   post_allocation_setup_common(klass, obj_ptr);
   oop new_obj = (oop)obj_ptr;
+    //校验obj是数组
   assert(new_obj->is_array(), "must be an array");
   // notify jvmti and dtrace (must be after length is set for dtrace)
+    //发布JVMTI事件，打印dtrace日志
   post_allocation_notify(klass, new_obj, new_obj->size());
 }
 
@@ -222,10 +226,12 @@ void CollectedHeap::init_obj(HeapWord* obj, size_t size) {
   assert(size >= hs, "unexpected object size");
     //设置GC分代年龄
   ((oop)obj)->set_klass_gap(0);
+    //将请求头以外的地方填充
     //将分配的对象内存全部初始化为0
   Copy::fill_to_aligned_words(obj + hs, size - hs);
 }
 
+// 对象创建的核心逻辑
 oop CollectedHeap::obj_allocate(KlassHandle klass, int size, TRAPS) {
   debug_only(check_for_valid_allocation_state());
     //检查Java堆是否正在gc
@@ -242,6 +248,8 @@ oop CollectedHeap::obj_allocate(KlassHandle klass, int size, TRAPS) {
   return (oop)obj;
 }
 
+// array_allocate是与之对应的用来分配某个Klass的oop数组的
+// 注意这里的size就是已经计算过的目标数组需要的内存大小
 oop CollectedHeap::array_allocate(KlassHandle klass,
                                   int size,
                                   int length,
@@ -249,12 +257,16 @@ oop CollectedHeap::array_allocate(KlassHandle klass,
   debug_only(check_for_valid_allocation_state());
   assert(!Universe::heap()->is_gc_active(), "Allocation during gc not allowed");
   assert(size >= 0, "int won't convert to size_t");
+    //跟obj_allocate调用一样的方法申请指定大小的内存，如果klass未完成初始化则初始化klass
   HeapWord* obj = common_mem_allocate_init(klass, size, CHECK_NULL);
+    //跟obj_allocate不一样，obj_allocate调用的是post_allocation_setup_obj
   post_allocation_setup_array(klass, obj, length);
   NOT_PRODUCT(Universe::heap()->check_for_bad_heap_word_value(obj, size));
   return (oop)obj;
 }
 
+// array_allocate_nozero方法的实现array_allocate基本一致，最大的区别在于array_allocate_nozero申请到的内存是未完成初始化的，
+// 即还未完成实际的内存分配，更适合一些大数组的分配，在数组元素的填充即实际的使用过程中再逐步完成实际内存的分配
 oop CollectedHeap::array_allocate_nozero(KlassHandle klass,
                                          int size,
                                          int length,
@@ -278,6 +290,8 @@ inline void CollectedHeap::oop_iterate_no_header(OopClosure* cl) {
 }
 
 
+//  align_allocation_or_fail表示将某个地址按照内存分配的粒度向上对齐
+//  addr就是待对齐的地址，alignment_in_bytes是内存分配的粒度，end表示向上对齐时允许的内存最大地址
 inline HeapWord* CollectedHeap::align_allocation_or_fail(HeapWord* addr,
                                                          HeapWord* end,
                                                          unsigned short alignment_in_bytes) {
@@ -285,19 +299,25 @@ inline HeapWord* CollectedHeap::align_allocation_or_fail(HeapWord* addr,
     return addr;
   }
 
+    //校验addr已经按照HeapWordSize对齐了
   assert(is_ptr_aligned(addr, HeapWordSize),
     err_msg("Address " PTR_FORMAT " is not properly aligned.", p2i(addr)));
+    //校验alignment_in_bytes是按照HeapWordSize取整过了
   assert(is_size_aligned(alignment_in_bytes, HeapWordSize),
     err_msg("Alignment size %u is incorrect.", alignment_in_bytes));
 
+    //将addr按照alignment_in_bytes向上对齐，地址变大
   HeapWord* new_addr = (HeapWord*) align_pointer_up(addr, alignment_in_bytes);
+    //获取新地址和原来地址的差异
   size_t padding = pointer_delta(new_addr, addr);
 
+    //如果已经对齐则返回
   if (padding == 0) {
     return addr;
   }
 
   if (padding < CollectedHeap::min_fill_size()) {
+      //如果padding过小则加上一段，方便下面填充
     padding += alignment_in_bytes / HeapWordSize;
     assert(padding >= CollectedHeap::min_fill_size(),
       err_msg("alignment_in_bytes %u is expect to be larger "
@@ -308,6 +328,7 @@ inline HeapWord* CollectedHeap::align_allocation_or_fail(HeapWord* addr,
   assert(new_addr > addr, err_msg("Unexpected arithmetic overflow "
     PTR_FORMAT " not greater than " PTR_FORMAT, p2i(new_addr), p2i(addr)));
   if(new_addr < end) {
+      //对齐后在end的范围内则填充，否则返回NULL
     CollectedHeap::fill_with_object(addr, padding);
     return new_addr;
   } else {

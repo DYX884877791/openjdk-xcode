@@ -221,8 +221,10 @@ class Klass : public Metadata {
   JFR_ONLY(DEFINE_TRACE_ID_FIELD;)
 
   // Remembered sets support for the oops in the klasses.
-  jbyte _modified_oops;             // Card Table Equivalent (YC/CMS support)
-  jbyte _accumulated_modified_oops; // Mod Union Equivalent (CMS support)
+    // Klass本身保存了一个属于这个类的java.lang.Class实例的oop，因为Klass是保存在Metaspace元空间中，不是在堆里面，所以当这个oop发生修改了，
+    // 无法通过Card Table标记Klass的oop发生了修改，于是在Klass中添加了两个jbyte属性来标记Klass的oop发生了修改
+  jbyte _modified_oops;             // Card Table Equivalent (YC/CMS support)    _modified_oops是相当于Card Table中的打标
+  jbyte _accumulated_modified_oops; // Mod Union Equivalent (CMS support)       _accumulated_modified_oops相当于Mod Union Table中的打标
 
 private:
   // This is an index into FileMapHeader::_classpath_entry_table[], to
@@ -332,13 +334,16 @@ protected:
   ClassLoaderData* class_loader_data() const               { return _class_loader_data; }
   void set_class_loader_data(ClassLoaderData* loader_data) {  _class_loader_data = loader_data; }
 
+  // Klass配套定义了6个方法来读写_modified_oops、_accumulated_modified_oops这两个属性:
   // The Klasses are not placed in the Heap, so the Card Table or
   // the Mod Union Table can't be used to mark when klasses have modified oops.
   // The CT and MUT bits saves this information for the individual Klasses.
+  //因为Klass在元空间中不能使用卡表或者BitMap来记录其引用的oop发生修改的情形，所以借助此字段记录
   void record_modified_oops()            { _modified_oops = 1; }
   void clear_modified_oops()             { _modified_oops = 0; }
   bool has_modified_oops()               { return _modified_oops == 1; }
 
+    // 从其实现可知只有_modified_oops为1的时候，才能把_accumulated_modified_oops置为1
   void accumulate_modified_oops()        { if (has_modified_oops()) _accumulated_modified_oops = 1; }
   void clear_accumulated_modified_oops() { _accumulated_modified_oops = 0; }
   bool has_accumulated_modified_oops()   { return _accumulated_modified_oops == 1; }

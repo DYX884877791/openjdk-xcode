@@ -40,18 +40,24 @@
 GCNotificationRequest *GCNotifier::first_request = NULL;
 GCNotificationRequest *GCNotifier::last_request = NULL;
 
+// pushNotification用于创建一个GC通知消息，将其放入队列中
 void GCNotifier::pushNotification(GCMemoryManager *mgr, const char *action, const char *cause) {
   // Make a copy of the last GC statistics
   // GC may occur between now and the creation of the notification
   int num_pools = MemoryService::num_memory_pools();
   // stat is deallocated inside GCNotificationRequest
+    //创建一个新的GCStatInfo
   GCStatInfo* stat = new(ResourceObj::C_HEAP, mtGC) GCStatInfo(num_pools);
+    //将上一次GC的GCStatInfo复制到这个新的实例中
   mgr->get_last_gc_stat(stat);
+    //创建一个新的GC通知
   GCNotificationRequest *request = new GCNotificationRequest(os::javaTimeMillis(),mgr,action,cause,stat);
+    //添加到缓存队列中
   addRequest(request);
  }
 
 void GCNotifier::addRequest(GCNotificationRequest *request) {
+    //获取Service_lock
   MutexLockerEx ml(Service_lock, Mutex::_no_safepoint_check_flag);
   if(first_request == NULL) {
     first_request = request;
@@ -65,6 +71,7 @@ void GCNotifier::addRequest(GCNotificationRequest *request) {
 GCNotificationRequest *GCNotifier::getRequest() {
   MutexLockerEx ml(Service_lock, Mutex::_no_safepoint_check_flag);
   GCNotificationRequest *request = first_request;
+    //更新first_request，即按照添加的顺序依次处理
   if(first_request != NULL) {
     first_request = first_request->next;
   }
@@ -203,14 +210,18 @@ public:
   }
 };
 
+// sendNotificationInternal用于从队列中获取并发送GC通知消息，由内部线程ServiceThread不断执行
 void GCNotifier::sendNotificationInternal(TRAPS) {
   ResourceMark rm(THREAD);
   HandleMark hm(THREAD);
+    //获取待发送的一个GC通知消息
   GCNotificationRequest *request = getRequest();
   if (request != NULL) {
     NotificationMark nm(request);
+      //创建一个com_sun_management_GcInfo类实例
     Handle objGcInfo = createGcInfo(request->gcManager, request->gcStatInfo, CHECK);
 
+      //初始化其他的方法参数
     Handle objName = java_lang_String::create_from_str(request->gcManager->name(), CHECK);
     Handle objAction = java_lang_String::create_from_str(request->gcAction, CHECK);
     Handle objCause = java_lang_String::create_from_str(request->gcCause, CHECK);
@@ -220,6 +231,7 @@ void GCNotifier::sendNotificationInternal(TRAPS) {
 
     instanceOop gc_mbean = request->gcManager->get_memory_manager_instance(THREAD);
     instanceHandle gc_mbean_h(THREAD, gc_mbean);
+      //校验gc_mbean必须是sun_management_GarbageCollectorImpl实例
     if (!gc_mbean_h->is_a(k)) {
       THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
                 "This GCMemoryManager doesn't have a GarbageCollectorMXBean");
@@ -227,12 +239,14 @@ void GCNotifier::sendNotificationInternal(TRAPS) {
 
     JavaValue result(T_VOID);
     JavaCallArguments args(gc_mbean_h);
+      //设置方法参数
     args.push_long(request->timestamp);
     args.push_oop(objName);
     args.push_oop(objAction);
     args.push_oop(objCause);
     args.push_oop(objGcInfo);
 
+      //调用sun_management_GarbageCollectorImpl的createGCNotification方法
     JavaCalls::call_virtual(&result,
                             gc_mbean_klass,
                             vmSymbols::createGCNotification_name(),

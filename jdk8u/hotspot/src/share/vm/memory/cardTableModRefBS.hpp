@@ -46,6 +46,10 @@ class OopsInGenClosure;
 class DirtyCardToOopClosure;
 class ClearNoncleanCardWrapper;
 
+// CardTableModRefBS继承自ModRefBarrierSet，表示一个在卡表（Card Table）下使用的ModRefBarrierSet
+// CardTableModRefBS在ModRefBarrierSet的基础上增加了不少跟卡表本身相关的方法
+// 在CardTableModRefBS当前的实现下，当某个对象o的引用类型字段发生了修改，包含了对象o的对象头的卡表项被标记为脏的，而不是包含了这个被修改的字段的卡表项；
+// 当对象数组的某个元素发生修改了，只有包含了这个被修改元素的卡表项被标记为脏的。用来遍历查找脏的卡表项的MemRegionClosures的实现必须考虑上述问题。
 class CardTableModRefBS: public ModRefBarrierSet {
   // Some classes get to look at some private stuff.
   friend class BytecodeInterpreter;
@@ -59,6 +63,7 @@ class CardTableModRefBS: public ModRefBarrierSet {
 #endif
  protected:
 
+    // 卡表项的取值用枚举CardValues表示，其中dirty_card和precleaned_card被认为是脏的，参考card_is_dirty_wrt_gen_iter方法的实现
   enum CardValues {
     clean_card                  = -1,
     // The mask contains zeros in places for all other values.
@@ -95,17 +100,25 @@ class CardTableModRefBS: public ModRefBarrierSet {
 
   // The declaration order of these const fields is important; see the
   // constructor before changing.
+    //卡表对应的堆内存区域
   const MemRegion _whole_heap;       // the region covered by the card table
+    //卡表中最后一个元素的索引
   size_t          _guard_index;      // index of very last element in the card
                                      // table; it is set to a guard value
                                      // (last_card) and should never be modified
+    //卡表中最后一个有效元素的索引
   size_t          _last_valid_index; // index of the last valid element
+    //映射_byte_map时的内存页大小
   const size_t    _page_size;        // page size used when mapping _byte_map
+    //_byte_map的字节数，即元素个数
   size_t          _byte_map_size;    // in bytes
+    //用于标记的卡表字节数组
   jbyte*          _byte_map;         // the card marking array
 
+    //当前的MemRegion在_covered数组的索引
   int _cur_covered_regions;
   // The covered regions should be in address order.
+    //卡表映射的内存区域
   MemRegion* _covered;
   // The committed regions correspond one-to-one to the covered regions.
   // They represent the card-table memory that has been committed to service
@@ -113,11 +126,13 @@ class CardTableModRefBS: public ModRefBarrierSet {
   // one covered region corresponds to a larger region because of page-size
   // roundings.  Thus, a committed region for one covered region may
   // actually extend onto the card-table space for the next covered region.
+    //与_covered中的MemRegion一一对应，表示对应的卡表项内存区域，当_covered中的元素内存扩容或者缩容时，_committed中对应的卡表项内存会跟着扩容或者缩容
   MemRegion* _committed;
 
   // The last card is a guard card, and we commit the page for it so
   // we can use the card for verification purposes. We make sure we never
   // uncommit the MemRegion for that page.
+    //位于_guard_index的卡表项对应的一个内存页
   MemRegion _guard_region;
 
  protected:
@@ -156,12 +171,16 @@ class CardTableModRefBS: public ModRefBarrierSet {
   MemRegion committed_unique_to_self(int self, MemRegion mr) const;
 
   // Mapping from address to card marking array entry
+    //将某个地址映射到卡表的字节数组元素
   jbyte* byte_for(const void* p) const {
+      //校验这个地址位于堆内存中
     assert(_whole_heap.contains(p),
            err_msg("Attempt to access p = " PTR_FORMAT " out of bounds of "
                    " card marking array's _whole_heap = [" PTR_FORMAT "," PTR_FORMAT ")",
                    p2i(p), p2i(_whole_heap.start()), p2i(_whole_heap.end())));
+      //此处的计算相当于_byte_map - (uintptr_t(low_bound) >> card_shift)+ (uintptr_t(p) >> card_shift)
     jbyte* result = &byte_map_base[uintptr_t(p) >> card_shift];
+      //校验result没有超过数组的范围
     assert(result >= _byte_map && result < _byte_map + _byte_map_size,
            "out of bounds accessor for card marking array");
     return result;
@@ -212,8 +231,10 @@ class CardTableModRefBS: public ModRefBarrierSet {
   // covered region.  Each entry of these arrays is the lowest non-clean
   // card of the corresponding chunk containing part of an object from the
   // previous chunk, or else NULL.
+    // CardArr是一个jbyte*的指针的别名
   typedef jbyte*  CardPtr;
   typedef CardPtr* CardArr;
+    //下列四个数组的长度都跟_covered数组保持一致，为了支持并行的扫描卡表
   CardArr* _lowest_non_clean;
   size_t*  _lowest_non_clean_chunk_size;
   uintptr_t* _lowest_non_clean_base_chunk_index;
@@ -266,6 +287,7 @@ class CardTableModRefBS: public ModRefBarrierSet {
 
 public:
   // Constants
+  // 每个卡表项对应的内存块card_size的大小通过枚举SomePublicConstants定义
   enum SomePublicConstants {
     card_shift                  = 9,
     card_size                   = 1 << card_shift,
@@ -290,6 +312,7 @@ public:
   virtual void initialize();
 
   // *** Barrier set functions.
+    // 其补充的描述其支持的动作类型的方法的实现如下:
 
   bool has_write_ref_pre_barrier() { return false; }
 
@@ -304,6 +327,8 @@ public:
 
   bool has_write_ref_array_opt() { return true; }
   bool has_write_region_opt() { return true; }
+
+  // 下面四个inline方法就是BarrierSet中内联方法调用的子类方法，其实现都是将某个地址或者一段连续的内存地址对应的卡表项标记为脏的
 
   inline void inline_write_region(MemRegion mr) {
     dirty_MemRegion(mr);
@@ -332,7 +357,9 @@ public:
   template <class T> inline void inline_write_ref_field_pre(T* field, oop newVal) {}
 
   template <class T> inline void inline_write_ref_field(T* field, oop newVal, bool release) {
+      //获取该字段的内存地址对应的卡表项
     jbyte* byte = byte_for((void*)field);
+      //将卡表项标记为脏的
     if (release) {
       // Perform a releasing store if requested.
       OrderAccess::release_store((volatile jbyte*) byte, dirty_card);
@@ -359,6 +386,7 @@ public:
   // This would be the 0th element of _byte_map, if the heap started at 0x0.
   // But since the heap starts at some higher address, this points to somewhere
   // before the beginning of the actual _byte_map.
+    //用于计算某个地址映射到卡表字节数组的基地址
   jbyte* byte_map_base;
 
   // Return true if "p" is at the start of a card.
@@ -397,6 +425,11 @@ public:
   // *decreasing* address order.  (This order aids with imprecise card
   // marking, where a dirty card may cause scanning, and summarization
   // marking, of objects that extend onto subsequent cards.)
+    // mod_card_iterate /dirty_card_iterate /dirty_card_range_after_reset
+    // 这三个方法都是用来查找遍历脏的卡片，mod_card_iterate有两个重载版本，区别在于两者遍历的卡表项范围不同，一个是遍历整个堆内存对应的MemRegion，
+    // 一个是遍历指定的MemRegion对应的卡表项，遍历的时候都是按照地址降序的顺序遍历，将找到的多个连续的脏的卡表项对应的内存块合并成一个MemRegion交给MemRegionClosure处理。
+    // dirty_card_iterate与mod_card_iterate最大的不同是dirty_card_iterate是按照地址升序的方式遍历。dirty_card_range_after_reset跟dirty_card_iterate类似，
+    // 区别在于dirty_card_range_after_reset支持将找到的脏的卡表项重置成指定的值，并且在找到连续的多个脏的卡表项就返回这些卡表项对应的MemRegion，不继续遍历了。
   void mod_card_iterate(MemRegionClosure* cl) {
     non_clean_card_iterate_serial(_whole_heap, cl);
   }
@@ -430,6 +463,7 @@ public:
   }
 
   // Mapping from card marking array entry to address of first word
+  //获取卡表项地址对应的内存地址
   HeapWord* addr_for(const jbyte* p) const {
     assert(p >= _byte_map && p < _byte_map + _byte_map_size,
            "out of bounds access to card marking array");
@@ -476,6 +510,7 @@ public:
 class CardTableRS;
 
 // A specialization for the CardTableRS gen rem set.
+// CardTableModRefBSForCTRS的定义和CardTableModRefBS在同一个cardTableModRefBS.hpp中
 class CardTableModRefBSForCTRS: public CardTableModRefBS {
   CardTableRS* _rs;
 protected:

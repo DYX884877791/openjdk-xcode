@@ -239,6 +239,7 @@ class entryVFrame: public externalVFrame {
 // A MonitorInfo is a ResourceObject that describes a the pair:
 // 1) the owner of the monitor
 // 2) the monitor lock
+// MonitorInfo是一个用来保存BasicObjectLock重要属性的数据结构
 class MonitorInfo : public ResourceObj {
  private:
   oop        _owner; // the object owning the monitor

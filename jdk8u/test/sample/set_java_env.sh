@@ -1,7 +1,7 @@
 #!/bin/bash
-set -ex
-
-. ../set_base_env.sh
+set -e
+CUR_DIR=`cd $(dirname $0) && pwd`
+. ${CUR_DIR}/../set_base_env.sh
 # 得到shell脚本文件所在目录的完整路径（绝对路径） $( dirname “$0“ ) 不推荐使用--> 是有缺陷的，例如：脚本A source 了另一个⽬目录下的脚本B, 然后脚本B尝试使⽤用此法获取路路径时得到的是A的路路径
 # ${BASH_SOURCE[0]} 推荐使用 --> BASH_SOURCE[0] - 等价于 BASH_SOURCE ,取得当前执行的 shell 文件所在的路径及文件名
 # $0 获取的是脚本文件名，而 ${BASH_SOURCE[0]} 获取的是被引用的文件名。
@@ -19,16 +19,11 @@ if test ! -e $java_target_dir ; then
 	mkdir $java_target_dir
 fi
 
-java_main_class=Sample
-if test -z $java_main_class ; then
-	echo "java_main_class is empty!"
-	exit 1
-fi
 
 
 export cur_dir
 
 export java_dir
 export java_target_dir
-export java_main_class
+
 

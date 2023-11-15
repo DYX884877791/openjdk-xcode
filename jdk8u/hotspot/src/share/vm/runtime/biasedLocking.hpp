@@ -108,8 +108,10 @@
 // again, a bulk heap sweep.
 
 // Biased locking counters
+// 保存各项跟偏向锁有关的统计数据的数据结构
 class BiasedLockingCounters VALUE_OBJ_CLASS_SPEC {
  private:
+    // 这些统计数据主要是为了打印日志使用，如果PrintBiasedLockingStatistics为true就会打印该数据结构中的数据，默认为false
   int _total_entry_count;
   int _biased_lock_entry_count;
   int _anonymously_biased_lock_entry_count;
@@ -145,6 +147,7 @@ class BiasedLockingCounters VALUE_OBJ_CLASS_SPEC {
 };
 
 
+//  BiasedLocking的定义位于hotspot\src\share\vm\runtime\biasedLocking.hpp中，该类定义的属性和方法都是静态的，其中属性只有一个
 class BiasedLocking : AllStatic {
 private:
   static BiasedLockingCounters _counters;
@@ -158,9 +161,13 @@ public:
   static int* fast_path_entry_count_addr();
   static int* slow_path_entry_count_addr();
 
+  // 描述当前偏向锁的状态
   enum Condition {
+      // NOT_BIASED表示该对象没有持有偏向锁
     NOT_BIASED = 1,
+      // BIAS_REVOKED表示该对象的偏向锁已经被撤销了，即其对象头已经恢复成默认的不开启偏向锁时的状态
     BIAS_REVOKED = 2,
+      // BIAS_REVOKED_AND_REBIASED表示当前线程重新获取了该偏向锁
     BIAS_REVOKED_AND_REBIASED = 3
   };
 

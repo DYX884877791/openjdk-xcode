@@ -888,6 +888,19 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     // we might end up throwing IE from link/symbol resolution sites
     // that aren't expected to throw.  This would wreak havoc.  See 6320309.
       //如果正在初始化则等待初始化完成
+      /**
+       * https://heapdump.cn/article/558410
+       * 当我们第一次主动调用某个类的静态方法就会触发这个类的初始化，当然还有其他的触发情况，类的初始化说白了就是在类加载起来之后，
+       * 在某个合适的时机执行这个类的clinit方法，clinit方法是什么？
+       *
+       * 比如我们在类里声明一段static代码块，或者有静态属性，javac会将这些代码都统一放到一个叫做clinit的方法里，在类初始化的时候来执行这个方法，
+       * 但是JVM必须要保证这个方法只能被执行一次，如果有其他线程并发调用触发了这个类的多次初始化，那只能让一个线程真正执行clinit方法，其他线程都必须等待，
+       * 当clinit方法执行完之后，然后再唤醒其他等待这里的线程继续操作，当然不会再让它们有机会再执行clinit方法，因为每个类都有一个状态，这个状态可以保证这一点。
+       *
+       * 当有个线程正在执行这个类的clinit方法的时候，就会设置这个类的状态为being_initialized，当正常执行完之后就马上设置为fully_initialized，
+       * 然后才唤醒其他也在等着对其做初始化的线程继续往下走，在继续走下去之前，会先判断这个类的状态，
+       * 如果已经是fully_initialized了说明有线程已经执行完了clinit方法，因此不会再执行clinit方法了。
+       */
     while(this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(self)) {
         wait = true;
       ol.waitUninterruptibly(CHECK);
@@ -1165,6 +1178,7 @@ bool InstanceKlass::is_same_or_direct_interface(Klass *k) const {
   return false;
 }
 
+// 该方法的参数n表示维度，常见的一维数组就传1，二维数组传2。
 objArrayOop InstanceKlass::allocate_objArray(int n, int length, TRAPS) {
   if (length < 0) THROW_0(vmSymbols::java_lang_NegativeArraySizeException());
   if (length > arrayOopDesc::max_array_length(T_OBJECT)) {

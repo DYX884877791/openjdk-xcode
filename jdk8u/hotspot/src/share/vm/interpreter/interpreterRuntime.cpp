@@ -154,7 +154,7 @@ IRT_END
 /**
  * Java程序通过new操作符来创建一个对象，该函数就是HotSpot中new操作符的实现函数
  *
- * 在Hotspot中使用二分模型Klass / oop 来表示类和对象，而类是对象的模板。比如，在main方法中 new A对象，所以需要确保类A已经被加载、解析完毕，生成好对应的Klass。
+ * 在Hotspot中使用二分模型Klass/oop 来表示类和对象，而类是对象的模板。比如，在main方法中 new A对象，所以需要确保类A已经被加载、解析完毕，生成好对应的Klass。
  * 而生成好Klass类对象后，需要对类做初始化过程，也即链接类中所有的方法和调用父类以及本身的<clinit>方法（也即A类的static块）。
  *
  * 当类加载、解析、初始化完毕后，会调用klass->allocate_instance 方法尝试在Java堆内存中开辟对象。
@@ -653,6 +653,7 @@ IRT_END
 //
 // 对比lock_obj方法可知，两者获取轻量级锁或者处理锁嵌套情形时的代码是一样的，monitorenter方法增加了一步撤销偏向锁和轻量级锁膨胀成重量级锁的逻辑，
 // 这是为了兼容UseHeavyMonitors参数为true或者UseBiasedLocking为false时的处理逻辑。
+// 基于monitorenter为入口，沿着无锁态->偏向锁->轻量级锁->重量级锁的路径来分析synchronized的实现过程：
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, BasicObjectLock* elem))
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
@@ -666,10 +667,12 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, Ba
   assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
          "must be NULL or an object");
     //如果使用偏向锁，走快速enter
+    // 如果启动了偏向锁，会执行 ObjectSynchronizer::fast_enter的逻辑，而如果没有开启偏向锁，则执行 ObjectSynchronizer::slow_enter逻辑，绕过偏向锁，直接进入轻量级锁。
   if (UseBiasedLocking) {
     // Retry fast entry if bias is revoked to avoid unnecessary inflation
     ObjectSynchronizer::fast_enter(h_obj, elem->lock(), true, CHECK);
   } else {
+      // 轻量级锁获取是调用 ::slow_enter方法
     ObjectSynchronizer::slow_enter(h_obj, elem->lock(), CHECK);
   }
   assert(Universe::heap()->is_in_reserved_or_null(elem->obj()),

@@ -240,6 +240,7 @@ unsigned int SymbolTable::hash_symbol(const char* s, int len) {
 // entries in the symbol table during normal execution (only during
 // safepoints).
 
+// 根据描述符字符串查找对应Symbol实例
 Symbol* SymbolTable::lookup(const char* name, int len, TRAPS) {
     //计算hash值
   unsigned int hashValue = hash_symbol(name, len);
@@ -766,14 +767,17 @@ oop StringTable::lookup(jchar* name, int len) {
 oop StringTable::intern(Handle string_or_null, jchar* name,
                         int len, TRAPS) {
     // StringTable就是一张hash表。所以这里计算下标。
+    // 获取字符串的hash code
   unsigned int hashValue = hash_string(name, len);
   int index = the_table()->hash_to_index(hashValue);
+    // 根据hash code、char数组、长度在哈希表中查找是否已经存在
   oop found_string = the_table()->lookup(index, name, len, hashValue);
 
   // Found
     // 命中缓存，直接返回
   if (found_string != NULL) {
     ensure_string_alive(found_string);
+      // 如在哈希表中已经存在则直接返回
     return found_string;
   }
 

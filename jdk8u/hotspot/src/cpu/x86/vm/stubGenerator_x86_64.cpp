@@ -48,7 +48,7 @@
 // For a more detailed description of the stub routine structure
 // see the comment in stubRoutines.hpp
 
-// __是_masm->的别名，masm是StubCodeGenerator中的属性，MacroAssembler*，表示汇编代码的生成器
+// __是_masm->的别名，_masm是StubCodeGenerator中的属性，MacroAssembler*，表示汇编代码的生成器
 #define __ _masm->
 #define TIMES_OOP (UseCompressedOops ? Address::times_4 : Address::times_8)
 #define a__ ((Assembler*)_masm)->
@@ -278,6 +278,7 @@ class StubGenerator: public StubCodeGenerator {
         //根据各项的偏移量计算各项的存储位置
     // same as in generate_catch_exception()!
         //以栈基rbp为准计算入参在栈中的位置
+        // 声明rsp_after_call、call_wrapper、result、result_type等变量。
     const Address rsp_after_call(rbp, rsp_after_call_off * wordSize);
 
     const Address call_wrapper  (rbp, call_wrapper_off   * wordSize);
@@ -287,6 +288,7 @@ class StubGenerator: public StubCodeGenerator {
         //entry_point就是解释器的调用入口
     const Address entry_point   (rbp, entry_point_off    * wordSize);
     const Address parameters    (rbp, parameters_off     * wordSize);
+        //parameter_size变量指向rbp栈基地址向高地址偏移parameter_size_off个字长的位置...
     const Address parameter_size(rbp, parameter_size_off * wordSize);
 
     // same as in generate_catch_exception()!
@@ -298,8 +300,13 @@ class StubGenerator: public StubCodeGenerator {
     const Address r12_save(rbp, r12_off * wordSize);
     const Address rbx_save(rbp, rbx_off * wordSize);
 
+        // 注意：这些看似汇编指令的函数并不是在运行时被真正调用的函数，它们的作用只不过是往代码空间中写入具有相同作用的机器码
         // 开辟新的栈帧
     // stub code
+        // 以x86为例，在hotspot/src/cpu/x86/vm/macroAssembler_x86.cpp中，enter函数的实现是
+        // push(rbp);
+        //  mov(rbp, rsp);
+        // 而这两个函数都调用emit，向代码空间写入机器码。
         // 这两段代码直接生成机器指令，不过为了查看机器指令，我们可以借助HSDB工具将其反编译为可读性更强的汇编指令。
         // push   %rbp
         // mov    %rsp,%rbp

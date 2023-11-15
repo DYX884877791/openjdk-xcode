@@ -33,7 +33,7 @@ class klassVtable;
 
 // ArrayKlass is the abstract baseclass for all array classes
 
-// ArrayKlass继承自Klass，是所有数组类的抽象基类
+// ArrayKlass继承自Klass，是所有数组类的抽象基类，表示的是数组类的元信息
 class ArrayKlass: public Klass {
   friend class VMStructs;
  private:

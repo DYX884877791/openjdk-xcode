@@ -57,6 +57,7 @@
 #else
 
   // Interpreter-specific registers
+    // bcp ---> bytecode pointer
   void save_bcp() {
     movptr(Address(rbp, frame::interpreter_frame_bcx_offset * wordSize), r13);
   }

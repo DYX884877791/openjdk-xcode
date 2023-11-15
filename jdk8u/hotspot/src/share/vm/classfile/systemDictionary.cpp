@@ -1367,6 +1367,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
 }
 #endif // INCLUDE_CDS
 
+// 当类加载器oop为空的时候会调用load_classfile方法，即当其他的Java类加载器无法加载特定类的时候将类加载请求委托给启动类加载器加载
 // 实际调用加载的地方，由ClassLoader去加载类
 instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Handle class_loader, TRAPS) {
   instanceKlassHandle nh = instanceKlassHandle(); // null Handle

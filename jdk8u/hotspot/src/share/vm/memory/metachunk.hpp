@@ -32,6 +32,7 @@ class VirtualSpaceNode;
 
 // Super class of Metablock and Metachunk to allow them to
 // be put on the FreeList and in the BinaryTreeDictionary.
+// Metabase抽象了Metachunk和Metablock添加到空闲链表或者空闲二叉树表（BinaryTreeDictionary）时需要的操作前后节点的相关属性和方法，其定义和实现都比较简单
 template <class T>
 class Metabase VALUE_OBJ_CLASS_SPEC {
   size_t _word_size;
@@ -94,16 +95,24 @@ class Metabase VALUE_OBJ_CLASS_SPEC {
 //            |              |             |         |
 //            +--------------+ <- bottom --+       --+
 
+//  Metachunk表示从一段连续的内存空间Virtualspace中分配的一小块内存，当Metachunk不在使用时会被添加到空闲链表中，从而被重新使用而不是释放其占用的内存。
+//  Metachunk和SpaceManager的关联关系不是固定的，即当Metachunk被重新使用时可能分配给一个新的SpaceManager。
+//  Metachunk的定义在hotspot/src/shared/vm/memory/metachunk.hpp中
+// Metachunk在Metabase的基础上新增了两个属性
 class Metachunk : public Metabase<Metachunk> {
   friend class TestMetachunk;
   // The VirtualSpaceNode containing this chunk.
+    // _container表示包含这个Metachunk的VirtualSpaceNode，即从哪个VirtualSpaceNode中分配的
   VirtualSpaceNode* _container;
 
   // Current allocation top.
+    // MetaWord的定义和HeapWord的定义相同，top属性表示已经未分配内存区域的起始地址，注意这里是以字段为单位，而不是字节。
+    // 其内存示意图如上，其中bottom就是Metachunk本身this的地址，end的地址根据Metachunk的大小计算而来。
   MetaWord* _top;
 
   DEBUG_ONLY(bool _is_tagged_free;)
 
+    //返回除去保存Metachunk自身属性的那部分内存，可用于分配内存的起始地址
   MetaWord* initial_top() const { return (MetaWord*)this + overhead(); }
   MetaWord* top() const         { return _top; }
 
@@ -160,6 +169,9 @@ class Metachunk : public Metabase<Metachunk> {
 // the Metachunk it is a part of will be deallocated when it's
 // associated class loader is collected.
 
+// Metablock直接继承自Metabase，没有添加新的方法或者属性。
+// Metablock是从Metachunk中分配内存的单位，即从Metachunk中分配出去的内存块都是以Metablock的形式存在，
+// Metablock可以被负责管理它的SpaceManager重复利用，并且与Metachunk不同的是，Metablock与SpaceManager的关联关系不会改变。
 class Metablock : public Metabase<Metablock> {
   friend class VMStructs;
  public:

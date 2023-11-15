@@ -123,6 +123,7 @@ class NoHeaderExtendedOopClosure : public ExtendedOopClosure {
                                  _wrapped_closure->do_oop(p);}
 };
 
+// KlassClosure继承自Closure表示遍历Klass时对Klass执行的某个动作，跟KlassClosure类似的还有多个，参考Closure的类继承关系
 class KlassClosure : public Closure {
  public:
   virtual void do_klass(Klass* k) = 0;
@@ -165,6 +166,7 @@ class CLDToOopClosure : public CLDClosure {
   void do_cld(ClassLoaderData* cld);
 };
 
+// CLDToKlassAndOopClosure与FastScanClosure，KlassScanClosure配合使用，用来遍历一个ClassLoader实例加载的所有类的Class实例及其关联的依赖，常量池引用等。
 class CLDToKlassAndOopClosure : public CLDClosure {
   friend class SharedHeap;
   friend class G1CollectedHeap;
@@ -175,7 +177,7 @@ class CLDToKlassAndOopClosure : public CLDClosure {
  public:
   CLDToKlassAndOopClosure(KlassClosure* klass_closure,
                           OopClosure* oop_closure,
-                          bool must_claim_cld) :
+                          bool must_claim_cld) : //DefNewGeneration调用时传入false，因为是单线程GC的，多线程GC时通常传入true
                               _oop_closure(oop_closure),
                               _klass_closure(klass_closure),
                               _must_claim_cld(must_claim_cld) {}

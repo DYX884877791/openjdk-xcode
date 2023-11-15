@@ -31,7 +31,7 @@
 // A TypeArrayKlass is the klass of a typeArray
 // It contains the type and size of the elements
 
-// TypeArrayKlass是ArrayKlass的子类，用于表示数组元素是基本类型的数组
+// TypeArrayKlass是ArrayKlass的子类，用于表示数组元素是基本类型的数组，表示基本数组类的元信息
 /**
  * 数组类和普通类不同，数组类没有对应的Class文件，所以数组类是直接被虚拟机创建的。HotSpot在初始化时就会创建好8个基本类型的一维数组对象TypeArrayKlass。
  * 之前在HotSpot启动时，调用initializeJVM()方法初始化HotSpot，这个方法会最终调用到Universe::genesis()方法，在这个方法中初始化基本类型的一维数组对象TypeArrayKlass。

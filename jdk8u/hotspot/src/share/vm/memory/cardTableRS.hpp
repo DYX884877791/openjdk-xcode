@@ -35,6 +35,7 @@ class OopsInGenClosure;
 // This kind of "GenRemSet" uses a card table both as shared data structure
 // for a mod ref barrier set and for the rem set information.
 
+// CardTableRS继承自GenRemSet，整体上CardTableRS只是一层皮而已，核心方法的实现都在相关的子类中
 class CardTableRS: public GenRemSet {
   friend class VMStructs;
   // Below are private classes used in impl.
@@ -54,12 +55,16 @@ class CardTableRS: public GenRemSet {
     return CardTableModRefBS::card_is_dirty_wrt_gen_iter(cv);
   }
 
+  // CardTableRS在GenRemSet的基础上增加了如下属性：
+
+    //卡表的实现类
   CardTableModRefBSForCTRS* _ct_bs;
 
   virtual void younger_refs_in_space_iterate(Space* sp, OopsInGenClosure* cl);
 
   void verify_space(Space* s, HeapWord* gen_start);
 
+    // CardTableRS为了支持引用遍历，增加了一些扩展的CardValue
   enum ExtendedCardValue {
     youngergen_card   = CardTableModRefBS::CT_MR_BS_last_reserved + 1,
     // These are for parallel collection.
@@ -79,10 +84,13 @@ class CardTableRS: public GenRemSet {
   // portion of the table.  (The perm gen is index 0; other gens are at
   // their level plus 1.  They youngest gen is in the table, but will
   // always have the value "clean_card".)
+    //一个数组，用来记录所有的Generation的状态
   jbyte* _last_cur_val_in_gen;
 
+    //引用遍历时使用，表示当前遍历的有效card val
   jbyte _cur_youngergen_card_val;
 
+    //记录_last_cur_val_in_gen中有效元素的个数
   int _regions_to_iterate;
 
   jbyte cur_youngergen_card_val() {

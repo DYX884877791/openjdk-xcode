@@ -248,6 +248,7 @@ class CompileReplay : public StackObj {
   }
 
   // Look for the tag 'tag' followed by an
+   // 这里的参数int& length是引用传递的方式...
   bool parse_tag_and_count(const char* tag, int& length) {
     const char* t = parse_string();
     if (t == NULL) {

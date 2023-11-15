@@ -84,7 +84,7 @@ class Handle VALUE_OBJ_CLASS_SPEC {
 
   // General access
   oop     operator () () const                   { return obj(); }
-    // oop和klass被handle封装之后,JVM内部大部分堆oop和klass的函数调用都要经过Handle一次中间寻址,因此重载了-> 运算符
+    // oop和klass被handle封装之后,JVM内部大部分堆oop和klass的函数调用都要经过Handle一次中间寻址,因此重载了-> 运算符，调用non_null_obj函数，而non_null_obj函数直接返回了oop指针
   oop     operator -> () const                   { return non_null_obj(); }
   bool    operator == (oop o) const              { return obj() == o; }
   bool    operator == (const Handle& h) const          { return obj() == h.obj(); }
@@ -199,6 +199,73 @@ DEF_HANDLE(typeArray        , is_typeArray        )
 
 DEF_METADATA_HANDLE(method, Method)
 DEF_METADATA_HANDLE(constantPool, ConstantPool)
+// 宏扩展出来如下：
+// class methodHandle;
+//  class methodHandle : public StackObj {
+//    Method*     _value;
+//    Thread*   _thread;
+//   protected:
+//    Method*        obj() const                     { return _value; }
+//    Method*        non_null_obj() const            { assert(_value != NULL, "resolving NULL _value"); return _value; }
+//
+//   public:
+//    /* Constructors */
+//    methodHandle () : _value(NULL), _thread(NULL) {}
+//    methodHandle (Method* obj);
+//    methodHandle (Thread* thread, Method* obj);
+//
+//    methodHandle (const methodHandle &h);
+//    methodHandle& operator=(const methodHandle &s);
+//
+//    /* Destructor */
+//    ~methodHandle ();
+//    void remove();
+//
+//    /* Operators for ease of use */
+//    Method*        operator () () const            { return obj(); }
+//    Method*        operator -> () const            { return non_null_obj(); }
+//
+//    bool    operator == (Method* o) const          { return obj() == o; }
+//    bool    operator == (const methodHandle& h) const  { return obj() == h.obj(); }
+//
+//    /* Null checks */
+//    bool    is_null() const                      { return _value == NULL; }
+//    bool    not_null() const                     { return _value != NULL; }
+//  };
+//
+// class constantPoolHandle;
+//  class constantPoolHandle : public StackObj {
+//    ConstantPool*     _value;
+//    Thread*   _thread;
+//   protected:
+//    ConstantPool*        obj() const                     { return _value; }
+//    ConstantPool*        non_null_obj() const            { assert(_value != NULL, "resolving NULL _value"); return _value; }
+//
+//   public:
+//    /* Constructors */
+//    constantPoolHandle () : _value(NULL), _thread(NULL) {}
+//    constantPoolHandle (ConstantPool* obj);
+//    constantPoolHandle (Thread* thread, ConstantPool* obj);
+//
+//    constantPoolHandle (const constantPoolHandle &h);
+//    constantPoolHandle& operator=(const constantPoolHandle &s);
+//
+//    /* Destructor */
+//    ~constantPoolHandle ();
+//    void remove();
+//
+//    /* Operators for ease of use */
+//    ConstantPool*        operator () () const            { return obj(); }
+//    ConstantPool*        operator -> () const            { return non_null_obj(); }
+//
+//    bool    operator == (ConstantPool* o) const          { return obj() == o; }
+//    bool    operator == (const constantPoolHandle& h) const  { return obj() == h.obj(); }
+//
+//    /* Null checks */
+//    bool    is_null() const                      { return _value == NULL; }
+//    bool    not_null() const                     { return _value != NULL; }
+//  };
+//
 
 // Writing this class explicitly, since DEF_METADATA_HANDLE(klass) doesn't
 // provide the necessary Klass* <-> Klass* conversions. This Klass

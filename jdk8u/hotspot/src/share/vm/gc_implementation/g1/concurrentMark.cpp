@@ -2654,6 +2654,10 @@ private:
     if (entry < hr->next_top_at_mark_start()) {
       // Until we get here, we don't know whether entry refers to a valid
       // object; it could instead have been a stale reference.
+      /**
+       * https://zhuanlan.zhihu.com/p/628471622
+       * static_cast c++中类型转换之一
+       */
       oop obj = static_cast<oop>(entry);
       assert(obj->is_oop(true /* ignore mark word */),
              err_msg("Invalid oop in SATB buffer: " PTR_FORMAT, p2i(obj)));

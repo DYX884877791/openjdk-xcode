@@ -85,10 +85,13 @@ struct ScratchBlock {
 };
 
 
+// Generation表示分代内存中的一个“代”对应的内存区域，是各种分代内存实现的抽象类
 class Generation: public CHeapObj<mtGC> {
   friend class VMStructs;
  private:
+    //记录上一次GC的发生时间
   jlong _time_of_last_gc; // time when last gc on this generation happened (ms)
+    //在GC过程中的某个特殊时点使用的，用于记录某个值
   MemRegion _prev_used_region; // for collectors that want to "remember" a value for
                                // used region at some specific point during collection.
 
@@ -97,21 +100,26 @@ class Generation: public CHeapObj<mtGC> {
   // committed) for generation.
   // Used by card marking code. Must not overlap with address ranges of
   // other generations.
+  //为当前Generation保留的一段连续的内存地址空间，注意不能跟其他的Generation的地址空间有交叉
   MemRegion _reserved;
 
   // Memory area reserved for generation
   VirtualSpace _virtual_space;
 
   // Level in the generation hierarchy.
+  //当前Generation在类继承关系中的级别
   int _level;
 
   // ("Weak") Reference processing support
+  //用于处理Reference实例的处理器
   ReferenceProcessor* _ref_processor;
 
   // Performance Counters
+  //用于GC性能跟踪
   CollectorCounters* _gc_counters;
 
   // Statistics for garbage collection
+  //收集GC的统计数据
   GCStats* _gc_stats;
 
   // Returns the next generation in the configuration, or else NULL if this
@@ -130,6 +138,7 @@ class Generation: public CHeapObj<mtGC> {
 
  public:
   // The set of possible generation kinds.
+  // Generation定义了一个枚举Name来描述各子类
   enum Name {
     ASParNew,
     ASConcurrentMarkSweep,
@@ -156,6 +165,7 @@ class Generation: public CHeapObj<mtGC> {
     _ref_processor = rp;
   }
 
+  // 通过kind方法获取当前Generation实例的类型
   virtual Generation::Name kind() { return Generation::Other; }
   GenerationSpec* spec();
 
@@ -603,6 +613,7 @@ class Generation: public CHeapObj<mtGC> {
       accumulated_time(elapsedTimer()) {}
   };
 private:
+    //用于GC性能跟踪
   StatRecord _stat_record;
 public:
   StatRecord* stat_record() { return &_stat_record; }
@@ -622,23 +633,30 @@ public:
 // class BlockOffsetArrayContigSpace;
 class BlockOffsetSharedArray;
 
+// CardGeneration表示一个使用卡表来标记对象修改，使用BlockOffsetArray来记录内存块的起始位置的generation，继承自Generation，定义在generation.hpp中
 class CardGeneration: public Generation {
   friend class VMStructs;
  protected:
   // This is shared with other generations.
+  //与其他Generation实例共享的卡表实现实例
   GenRemSet* _rs;
   // This is local to this generation.
+  //当前Generation独享的BlockOffsetArray实现
   BlockOffsetSharedArray* _bts;
 
   // current shrinking effect: this damps shrinking when the heap gets empty.
+  //老年代内存缩容的百分比，第一次是0，第二次是10，第三次是40，第四次是100，中间有一次扩容了则被重置为0，重新开始累加，避免频繁的缩容与扩容。
   size_t _shrink_factor;
 
+    //老年代内存扩展或者缩容时的最低内存值
   size_t _min_heap_delta_bytes;   // Minimum amount to expand.
 
   // Some statistics from before gc started.
   // These are gathered in the gc_prologue (and should_collect)
   // to control growing/shrinking policy in spite of promotions.
+  //GC开始时的内存容量
   size_t _capacity_at_prologue;
+    //GC开始时的内存使用量
   size_t _used_at_prologue;
 
   CardGeneration(ReservedSpace rs, size_t initial_byte_size, int level,

@@ -39,6 +39,7 @@
 #include <time.h>
 
 #include <pthread.h>
+
 #ifdef __linux__
 #include <syscall.h>
 #include <bits/syscall.h>
@@ -61,8 +62,7 @@
  * Prints error message and exits if the memory could not be allocated.
  */
 void *
-JLI_MemAlloc(size_t size)
-{
+JLI_MemAlloc(size_t size) {
     void *p = malloc(size);
     if (p == 0) {
         perror("malloc");
@@ -76,8 +76,7 @@ JLI_MemAlloc(size_t size)
  * Prints error message and exits if the memory could not be reallocated.
  */
 void *
-JLI_MemRealloc(void *ptr, size_t size)
-{
+JLI_MemRealloc(void *ptr, size_t size) {
     void *p = realloc(ptr, size);
     if (p == 0) {
         perror("realloc");
@@ -91,8 +90,7 @@ JLI_MemRealloc(void *ptr, size_t size)
  * could not be allocated.
  */
 char *
-JLI_StringDup(const char *s1)
-{
+JLI_StringDup(const char *s1) {
     char *s = strdup(s1);
     if (s == NULL) {
         perror("strdup");
@@ -106,8 +104,7 @@ JLI_StringDup(const char *s1)
  * Here to maintain pairing with the above routines.
  */
 void
-JLI_MemFree(void *ptr)
-{
+JLI_MemFree(void *ptr) {
     free(ptr);
 }
 
@@ -117,39 +114,34 @@ JLI_MemFree(void *ptr)
 static jboolean _launcher_debug = JNI_FALSE;
 
 void
-JLI_TraceLauncher(const char* fmt, ...)
-{
+JLI_TraceLauncher(const char *fmt, ...) {
     va_list vl;
     if (_launcher_debug != JNI_TRUE) return;
     va_start(vl, fmt);
-    vprintf(fmt,vl);
+    vprintf(fmt, vl);
     va_end(vl);
 }
 
 void
-JLI_SetTraceLauncher()
-{
-   if (getenv(JLDEBUG_ENV_ENTRY) != 0) {
+JLI_SetTraceLauncher() {
+    if (getenv(JLDEBUG_ENV_ENTRY) != 0) {
         _launcher_debug = JNI_TRUE;
         JLI_TraceLauncher("----%s----\n", JLDEBUG_ENV_ENTRY);
-   }
+    }
 }
 
 jboolean
-JLI_IsTraceLauncher()
-{
-   return _launcher_debug;
+JLI_IsTraceLauncher() {
+    return _launcher_debug;
 }
 
 int
-JLI_StrCCmp(const char *s1, const char* s2)
-{
-   return JLI_StrNCmp(s1, s2, JLI_StrLen(s2));
+JLI_StrCCmp(const char *s1, const char *s2) {
+    return JLI_StrNCmp(s1, s2, JLI_StrLen(s2));
 }
 
 int
-JLI_StrRCCmp(const char *s1, const char* s2)
-{
+JLI_StrRCCmp(const char *s1, const char *s2) {
     unsigned int len1 = JLI_StrLen(s1);
     unsigned int len2 = JLI_StrLen(s2);
     if (len1 < len2) {
@@ -164,9 +156,9 @@ JLI_StrRCCmp(const char *s1, const char* s2)
 }
 
 typedef struct slog {
-    unsigned int nTdSafe:1;
+    unsigned int nTdSafe: 1;
     pthread_mutex_t mutex;
-    slog_config_t* config;
+    slog_config_t *config;
 } slog_t;
 
 typedef struct XLogCtx {
@@ -175,10 +167,10 @@ typedef struct XLogCtx {
     slog_date_t date;
 } slog_context_t;
 
-static slog_t * g_slog;
+static slog_t *g_slog;
 
 static void slog_sync_init(slog_t *pSlog) {
-    if (!pSlog->nTdSafe ) {
+    if (!pSlog->nTdSafe) {
         return;
     }
     pthread_mutexattr_t mutexAttr;
@@ -187,8 +179,7 @@ static void slog_sync_init(slog_t *pSlog) {
         pthread_mutexattr_settype(&mutexAttr, PTHREAD_MUTEX_RECURSIVE) ||
         pthread_mutex_init(&pSlog->mutex, &mutexAttr) ||
         pthread_mutexattr_destroy(&mutexAttr)) {
-        printf("<%s:%d> %s: [ERROR] Can not initialize mutex: %d\n",
-               __FILE__, __LINE__, __func__, errno);
+        printf("<%s:%d> %s: [ERROR] Can not initialize mutex: %d\n", __FILE__, __LINE__, __func__, errno);
 
         exit(EXIT_FAILURE);
     }
@@ -197,22 +188,18 @@ static void slog_sync_init(slog_t *pSlog) {
 static void slog_lock(slog_t *pSlog) {
     if (pSlog->nTdSafe && pthread_mutex_lock(&pSlog->mutex)) {
         printf("<%s:%d> %s: [ERROR] Can not lock mutex: %d\n", __FILE__, __LINE__, __func__, errno);
-
         exit(EXIT_FAILURE);
     }
 }
 
-static void slog_unlock(slog_t *pSlog)
-{
-    if (pSlog->nTdSafe && pthread_mutex_unlock(&pSlog->mutex))
-    {
+static void slog_unlock(slog_t *pSlog) {
+    if (pSlog->nTdSafe && pthread_mutex_unlock(&pSlog->mutex)) {
         printf("<%s:%d> %s: [ERROR] Can not unlock mutex: %d\n", __FILE__, __LINE__, __func__, errno);
         exit(EXIT_FAILURE);
     }
 }
 
-static const char *slog_get_indent(slog_flag_t eFlag)
-{
+static const char *slog_get_indent(slog_flag_t eFlag) {
     slog_config_t *pCfg = g_slog->config;
     if (!pCfg->nIndent) {
         return SLOG_EMPTY;
@@ -227,59 +214,70 @@ static const char *slog_get_indent(slog_flag_t eFlag)
             return SLOG_SPACE;
         case SLOG_ERROR:
         case SLOG_FATAL:
-        default: break;
+        default:
+            break;
     }
 
     return SLOG_EMPTY;
 }
 
-static const char* slog_get_tag(slog_flag_t eFlag)
-{
-    switch (eFlag)
-    {
-        case SLOG_ALL: return "ALL";
-        case SLOG_TRACE: return "TRACE";
-        case SLOG_DEBUG: return "DEBUG";
-        case SLOG_INFO: return "INFO";
-        case SLOG_WARN: return "WARN";
-        case SLOG_ERROR: return "ERROR";
-        case SLOG_FATAL: return "FATAL";
-        case SLOG_NONE: return "NONE";
-        default: break;
+static const char *slog_get_tag(slog_flag_t eFlag) {
+    switch (eFlag) {
+        case SLOG_ALL:
+            return "ALL";
+        case SLOG_TRACE:
+            return "TRACE";
+        case SLOG_DEBUG:
+            return "DEBUG";
+        case SLOG_INFO:
+            return "INFO";
+        case SLOG_WARN:
+            return "WARN";
+        case SLOG_ERROR:
+            return "ERROR";
+        case SLOG_FATAL:
+            return "FATAL";
+        case SLOG_NONE:
+            return "NONE";
+        default:
+            break;
     }
 
     return NULL;
 }
 
-const char* slog_get_all_levels() {
+const char *slog_get_all_levels() {
     return "ALL,TRACE,DEBUG,INFO,WARN,ERROR,FATAL,NONE";
 }
 
-static const char* slog_get_color(slog_flag_t eFlag)
-{
-    switch (eFlag)
-    {
-        case SLOG_TRACE: return SLOG_COLOR_CYAN;
-        case SLOG_DEBUG: return SLOG_COLOR_BLUE;
-        case SLOG_INFO: return SLOG_COLOR_GREEN;
-        case SLOG_WARN: return SLOG_COLOR_YELLOW;
-        case SLOG_ERROR: return SLOG_COLOR_RED;
-        case SLOG_FATAL: return SLOG_COLOR_MAGENTA;
-        default: break;
+static const char *slog_get_color(slog_flag_t eFlag) {
+    switch (eFlag) {
+        case SLOG_TRACE:
+            return SLOG_COLOR_CYAN;
+        case SLOG_DEBUG:
+            return SLOG_COLOR_BLUE;
+        case SLOG_INFO:
+            return SLOG_COLOR_GREEN;
+        case SLOG_WARN:
+            return SLOG_COLOR_YELLOW;
+        case SLOG_ERROR:
+            return SLOG_COLOR_RED;
+        case SLOG_FATAL:
+            return SLOG_COLOR_MAGENTA;
+        default:
+            break;
     }
 
     return SLOG_EMPTY;
 }
 
-uint16_t slog_get_usec()
-{
+uint16_t slog_get_usec() {
     struct timeval tv;
     if (gettimeofday(&tv, NULL) < 0) return 0;
-    return (uint16_t)(tv.tv_usec / 1000);
+    return (uint16_t) (tv.tv_usec / 1000);
 }
 
-void slog_get_date(slog_date_t *pDate)
-{
+void slog_get_date(slog_date_t *pDate) {
     struct tm timeinfo;
     time_t rawtime = time(NULL);
 #ifdef WIN32
@@ -304,17 +302,15 @@ void slog_get_date(slog_date_t *pDate)
  * http://javagoo.com/linux/gettid2.html
  * https://cloud.tencent.com/developer/article/2064467
  */
-static size_t slog_get_tid()
-{
-    return (size_t)pthread_self();
+static size_t slog_get_tid() {
+    return (size_t) pthread_self();
 }
 
 /**
  * 获取内核级线程ID
  * @return
  */
-static size_t slog_get_kernel_tid()
-{
+static size_t slog_get_kernel_tid() {
     /**
      * 也可以使用SYS_gettid宏
      * SYS_gettid：在<bits/syscall.h>中有以下内容：#define SYS_gettid __NR_gettid
@@ -325,17 +321,15 @@ static size_t slog_get_kernel_tid()
 #if defined(LINUX)
     return (size_t)syscall(__NR_gettid);
 #elif defined(__APPLE__)
-    return (size_t)pthread_mach_thread_np(pthread_self());
+    return (size_t) pthread_mach_thread_np(pthread_self());
 #endif
 }
 
-static size_t slog_get_pid()
-{
-    return (size_t)getpid();
+static size_t slog_get_pid() {
+    return (size_t) getpid();
 }
 
-static void slog_create_tag(char *pOut, size_t nSize, slog_flag_t eFlag, const char *pColor)
-{
+static void slog_create_tag(char *pOut, size_t nSize, slog_flag_t eFlag, const char *pColor) {
     slog_config_t *pCfg = g_slog->config;
     pOut[0] = SLOG_NUL;
 
@@ -354,8 +348,7 @@ static void slog_create_tag(char *pOut, size_t nSize, slog_flag_t eFlag, const c
     }
 }
 
-static void slog_create_pid(char *pOut, int nSize, uint8_t nTracePid)
-{
+static void slog_create_pid(char *pOut, int nSize, uint8_t nTracePid) {
     if (!nTracePid) {
         pOut[0] = SLOG_NUL;
     } else {
@@ -363,15 +356,13 @@ static void slog_create_pid(char *pOut, int nSize, uint8_t nTracePid)
     }
 }
 
-static void slog_create_tid(char *pOut, int nSize, uint8_t nTraceTid)
-{
+static void slog_create_tid(char *pOut, int nSize, uint8_t nTraceTid) {
     if (!nTraceTid) {
         pOut[0] = SLOG_NUL;
     } else {
         snprintf(pOut, nSize, "[user-thread-id:0x%zx,kernel-thread-id:0x%lx] ", slog_get_tid(), slog_get_kernel_tid());
     }
 }
-
 
 
 static void slog_display_message(const slog_context_t *pCtx, const char *pInfo, int nInfoLen, const char *pInput) {
@@ -408,7 +399,8 @@ static void slog_display_message(const slog_context_t *pCtx, const char *pInfo, 
     const slog_date_t *pDate = &pCtx->date;
 
     char sFilePath[SLOG_PATH_MAX + SLOG_NAME_MAX + SLOG_DATE_MAX];
-    snprintf(sFilePath, sizeof(sFilePath), "%s/%s-%04d-%02d-%02d.log", pCfg->sFilePath, pCfg->sFileName, pDate->nYear, pDate->nMonth, pDate->nDay);
+    snprintf(sFilePath, sizeof(sFilePath), "%s/%s-%04d-%02d-%02d.log", pCfg->sFilePath, pCfg->sFileName, pDate->nYear,
+             pDate->nMonth, pDate->nDay);
 
     FILE *pFile = fopen(sFilePath, "a");
     if (pFile == NULL) {
@@ -420,22 +412,17 @@ static void slog_display_message(const slog_context_t *pCtx, const char *pInfo, 
 }
 
 
-
-static int slog_create_info(const slog_context_t *pCtx, char* pOut, size_t nSize)
-{
+static int slog_create_info(const slog_context_t *pCtx, char *pOut, size_t nSize) {
     slog_config_t *pCfg = g_slog->config;
     const slog_date_t *pDate = &pCtx->date;
 
     char sDate[SLOG_DATE_MAX + SLOG_NAME_MAX];
     sDate[0] = SLOG_NUL;
 
-    if (pCfg->eDateControl == SLOG_TIME_ONLY)
-    {
+    if (pCfg->eDateControl == SLOG_TIME_ONLY) {
         snprintf(sDate, sizeof(sDate), "%02d:%02d:%02d.%03d ",
-                 pDate->nHour,pDate->nMin, pDate->nSec, pDate->nUsec);
-    }
-    else if (pCfg->eDateControl == SLOG_DATE_FULL)
-    {
+                 pDate->nHour, pDate->nMin, pDate->nSec, pDate->nUsec);
+    } else if (pCfg->eDateControl == SLOG_DATE_FULL) {
         snprintf(sDate, sizeof(sDate), "%04d-%02d-%02d %02d:%02d:%02d,%03d ",
                  pDate->nYear, pDate->nMonth, pDate->nDay, pDate->nHour,
                  pDate->nMin, pDate->nSec, pDate->nUsec);
@@ -454,8 +441,7 @@ static int slog_create_info(const slog_context_t *pCtx, char* pOut, size_t nSize
     return snprintf(pOut, nSize, "%s%s%s%s%s", pColor, sDate, sPid, sTid, sTag);
 }
 
-static void slog_display_heap(const slog_context_t *pCtx, va_list args)
-{
+static void slog_display_heap(const slog_context_t *pCtx, va_list args) {
     size_t nBytes = 0;
     char *pMessage = NULL;
     char sLogInfo[SLOG_INFO_MAX];
@@ -463,9 +449,9 @@ static void slog_display_heap(const slog_context_t *pCtx, va_list args)
     nBytes += vasprintf(&pMessage, pCtx->pFormat, args);
     va_end(args);
 
-    if (pMessage == NULL)
-    {
-        printf("<%s:%d> %s<error>%s %s: Can not allocate memory for input: errno(%d)\n", __FILE__, __LINE__, SLOG_COLOR_RED, SLOG_COLOR_RESET, __func__, errno);
+    if (pMessage == NULL) {
+        printf("<%s:%d> %s<error>%s %s: Can not allocate memory for input: errno(%d)\n", __FILE__, __LINE__,
+               SLOG_COLOR_RED, SLOG_COLOR_RESET, __func__, errno);
 
         return;
     }
@@ -477,8 +463,7 @@ static void slog_display_heap(const slog_context_t *pCtx, va_list args)
     }
 }
 
-static void slog_display_stack(const slog_context_t *pCtx, va_list args)
-{
+static void slog_display_stack(const slog_context_t *pCtx, va_list args) {
     char sMessage[SLOG_MESSAGE_MAX];
     char sLogInfo[SLOG_INFO_MAX];
 
@@ -487,8 +472,7 @@ static void slog_display_stack(const slog_context_t *pCtx, va_list args)
     slog_display_message(pCtx, sLogInfo, nLength, sMessage);
 }
 
-void slog_display(slog_flag_t eFlag, const char *pFormat, ...)
-{
+void slog_display(slog_flag_t eFlag, const char *pFormat, ...) {
 
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
@@ -503,49 +487,50 @@ void slog_display(slog_flag_t eFlag, const char *pFormat, ...)
         return;
     }
 
-    if ((SLOG_FLAGS_CHECK(g_slog->config->nFlags, eFlag)) &&
-        (g_slog->config->nToScreen || g_slog->config->nToFile))
-    {
+    if ((SLOG_FLAGS_CHECK(g_slog->config->nFlags, eFlag)) && (g_slog->config->nToScreen || g_slog->config->nToFile)) {
+        slog_lock(g_slog);
+
         slog_context_t ctx;
         slog_get_date(&ctx.date);
 
         ctx.eFlag = eFlag;
         ctx.pFormat = pFormat;
 
-        void(*slog_display_args)(const slog_context_t *pCtx, va_list args);
+        void (*slog_display_args)(const slog_context_t *pCtx, va_list args);
         slog_display_args = g_slog->config->nUseHeap ? slog_display_heap : slog_display_stack;
 
         va_list args;
         va_start(args, pFormat);
         slog_display_args(&ctx, args);
         va_end(args);
-    }
 
-    slog_unlock(g_slog);
+        slog_unlock(g_slog);
+    }
 }
 
-size_t slog_version(char *pDest, size_t nSize, uint8_t nMin)
-{
+size_t slog_version(char *pDest, size_t nSize, uint8_t nMin) {
     size_t nLength = 0;
 
     /* Version short */
-    if (nMin) nLength = snprintf(pDest, nSize, "%d.%d.%d",
-                                 SLOG_VERSION_MAJOR, SLOG_VERSION_MINOR, SLOG_BUILD_NUM);
+    if (nMin)
+        nLength = snprintf(pDest, nSize, "%d.%d.%d",
+                           SLOG_VERSION_MAJOR, SLOG_VERSION_MINOR, SLOG_BUILD_NUM);
 
         /* Version long */
-    else nLength = snprintf(pDest, nSize, "%d.%d build %d (%s)",
-                            SLOG_VERSION_MAJOR, SLOG_VERSION_MINOR, SLOG_BUILD_NUM, __DATE__);
+    else
+        nLength = snprintf(pDest, nSize, "%d.%d build %d (%s)",
+                           SLOG_VERSION_MAJOR, SLOG_VERSION_MINOR, SLOG_BUILD_NUM, __DATE__);
 
     return nLength;
 }
 
-slog_config_t * slog_config_get() {
+slog_config_t *slog_config_get() {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
         return NULL;
     }
     slog_lock(g_slog);
-    slog_config_t* pCfg = g_slog->config;
+    slog_config_t *pCfg = g_slog->config;
     slog_unlock(g_slog);
     return pCfg;
 }
@@ -582,14 +567,14 @@ slog_flag_t slog_parse_flag(const char *flag) {
     return SLOG_UNKNOWN;
 }
 
-void slog_flag_set(slog_flag_t eFlag)
-{
+void slog_flag_set(slog_flag_t eFlag) {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
         return;
     }
     if (slog_get_tag(eFlag) == NULL) {
-        fprintf(stderr, "Slog do not determine level correctly, support one of following levels:[%s]!\n", slog_get_all_levels());
+        fprintf(stderr, "Slog do not determine level correctly, support one of following levels:[%s]!\n",
+                slog_get_all_levels());
         return;
     }
     slog_lock(g_slog);
@@ -608,8 +593,7 @@ void slog_separator_set(const char *pFormat, ...) {
     va_list args;
     va_start(args, pFormat);
 
-    if (vsnprintf(pCfg->sSeparator, sizeof(pCfg->sSeparator), pFormat, args) <= 0)
-    {
+    if (vsnprintf(pCfg->sSeparator, sizeof(pCfg->sSeparator), pFormat, args) <= 0) {
         pCfg->sSeparator[0] = ' ';
         pCfg->sSeparator[1] = '\0';
     }
@@ -618,8 +602,7 @@ void slog_separator_set(const char *pFormat, ...) {
     slog_unlock(g_slog);
 }
 
-void slog_indent(uint8_t nEnable)
-{
+void slog_indent(uint8_t nEnable) {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
         return;
@@ -629,8 +612,7 @@ void slog_indent(uint8_t nEnable)
     slog_unlock(g_slog);
 }
 
-void slog_new_line(uint8_t nEnable)
-{
+void slog_new_line(uint8_t nEnable) {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
         return;
@@ -640,8 +622,7 @@ void slog_new_line(uint8_t nEnable)
     slog_unlock(g_slog);
 }
 
-void slog_callback_set(slog_cb_t callback, void *pContext)
-{
+void slog_callback_set(slog_cb_t callback, void *pContext) {
     if (g_slog == NULL) {
         fprintf(stderr, "Slog do not initialized correctly, please call slog_init first!!!\n");
         return;
@@ -653,8 +634,7 @@ void slog_callback_set(slog_cb_t callback, void *pContext)
     slog_unlock(g_slog);
 }
 
-void slog_init(const char* pName, uint16_t nFlags, uint8_t nTdSafe)
-{
+void slog_init(const char *pName, uint16_t nFlags, uint8_t nTdSafe) {
 
     /* Set up default values */
     g_slog = malloc(sizeof(slog_t));

@@ -33,6 +33,16 @@ class ConcurrentMarkSweepGeneration;
 class CMSCollector;
 
 // The Concurrent Mark Sweep GC Thread
+//  ConcurrentMarkSweepThread表示CMS并行标记清理的线程，其定义在hotspot\src\share\vm\gc_implementation\concurrentMarkSweep\concurrentMarkSweepThread.hpp中
+//
+// ConcurrentMarkSweepThread在执行过程中如果收到请求会让出CPU的使用权限（yield动作），从而保证业务线程优先执行。
+// 有两种请求方式，一种是同步的，适用于年轻代垃圾收集和老年代的内存分配，请求方会在执行业务逻辑前把_pending_yields加1，在执行业务逻辑后把_pending_yields减1，
+// ConcurrentMarkSweepThread在执行相关GC逻辑时会判断_pending_yields是否大于0，如果大于0则会让当前线程休眠1ms，会不断循环直到_pending_yields等于0为止；
+// 另一种是异步的，在iCMS模式下使用，请求方通过调用stop_icms方法通知CMS Thread暂停执行，在iCMS_lock上等待，当请求方执行完相关逻辑会调用start_icms唤醒CMS Thread继续执行，
+// 注意请求方调用stop_icms方法后并不会像第一种同步的请求方式立即通知CMS Thread业务操作执行完成。
+//
+// 通过CMSSynchronousYieldRequest的构造和析构函数实现第一种同步请求；asynchronous_yield_request方法用于增加_pending_yields和_pending_decrements计数，
+// acknowledge_yield_request用于减少_pending_yields和_pending_decrements计数，两者都是通过原子指令操作；should_yield方法判断当前CMS Thread是否需要让出CPU使用权限
 class ConcurrentMarkSweepThread: public ConcurrentGCThread {
   friend class VMStructs;
   friend class ConcurrentMarkSweepGeneration;   // XXX should remove friendship
@@ -41,22 +51,30 @@ class ConcurrentMarkSweepThread: public ConcurrentGCThread {
   virtual void run();
 
  private:
+    //全局的ConcurrentMarkSweepThread实例
   static ConcurrentMarkSweepThread*     _cmst;
+    //关联的CMSCollector
   static CMSCollector*                  _collector;
+    //关联的SurrogateLockerThread
   static SurrogateLockerThread*         _slt;
+    //设置SurrogateLockerThread的buffer属性
   static SurrogateLockerThread::SLT_msg_type _sltBuffer;
   static Monitor*                       _sltMonitor;
 
+    //初始为fase，当前线程是否应该终止
   static bool _should_terminate;
 
   enum CMS_flag_type {
+      // NoBits的值就是0
     CMS_nil             = NoBits,
+      // nth_bit就是把1右移多少位，即不同的flag Type对应不同位，所以不同的flag Type可以共存。
     CMS_cms_wants_token = nth_bit(0),
     CMS_cms_has_token   = nth_bit(1),
     CMS_vm_wants_token  = nth_bit(2),
     CMS_vm_has_token    = nth_bit(3)
   };
 
+    //初始为CMS_nil，实际就是0，_CMS_flag的取值是一个枚举CMS_flag_type
   static int _CMS_flag;
 
   static bool CMS_flag_is_set(int b)        { return (_CMS_flag & b) != 0;   }
@@ -66,16 +84,23 @@ class ConcurrentMarkSweepThread: public ConcurrentGCThread {
 
   // CMS thread should yield for a young gen collection, direct allocation,
   // and iCMS activity.
+    // 用来避免高速缓存的缓存行共享问题，ConcurrentMarkSweepThread未使用
   static char _pad_1[64 - sizeof(jint)];    // prevent cache-line sharing
+    //下面两个属性用来判断GC线程是否应该让出CPU的使用权，_pending_yields大于0则应该让出CPU使用权
   static volatile jint _pending_yields;
+    //注意_pending_decrements是只在iCMS模式下使用
   static volatile jint _pending_decrements; // decrements to _pending_yields
+    // 同上(_pad_1)
   static char _pad_2[64 - sizeof(jint)];    // prevent cache-line sharing
 
   // Tracing messages, enabled by CMSTraceThreadState.
   static inline void trace_state(const char* desc);
 
+    // 跟踪iCMS模式开启和关闭的计数器
   static volatile int _icms_disabled;   // a counter to track #iCMS disable & enable
+    //初始为false
   static volatile bool _should_run;     // iCMS may run
+    //初始为true
   static volatile bool _should_stop;    // iCMS should stop
 
   // debugging
@@ -184,17 +209,22 @@ class ConcurrentMarkSweepThread: public ConcurrentGCThread {
   }
   static void asynchronous_yield_request() {
     assert(CMSIncrementalMode, "Currently only used w/iCMS");
+      //同时原子的增加_pending_yields和_pending_decrements
     increment_pending_yields();
     Atomic::inc(&_pending_decrements);
     assert(_pending_decrements >= 0, "can't be negative");
   }
   static void acknowledge_yield_request() {
+      //获取当值的值
     jint decrement = _pending_decrements;
     if (decrement > 0) {
+        //decrement大于0说明开启了iCMS模式
       assert(CMSIncrementalMode, "Currently only used w/iCMS");
       // Order important to preserve: _pending_yields >= _pending_decrements
+        //注意 _pending_yields >= _pending_decrements，这里相当于将decrement重置成0，_pending_decrements不一定是0
       Atomic::add(-decrement, &_pending_decrements);
       Atomic::add(-decrement, &_pending_yields);
+        //在并发环境下decrement也可能不等于0
       assert(_pending_decrements >= 0, "can't be negative");
       assert(_pending_yields >= 0, "can't be negative");
     }

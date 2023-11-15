@@ -39,10 +39,15 @@ inline ClassLoaderData* ClassLoaderData::class_loader_data(oop loader) {
 }
 
 
+//  find_or_create用于查找某个java/lang/ClassLoader实例对应的ClassLoaderData，如果不存在则为该实例创建一个新的ClassLoaderData实例并添加到ClassLoaderDataGraph管理的ClassLoaderData链表中。
+//  注意ClassLoaderData指针的保存位置比较特殊，不是在ClassLoader实例的内存中，而是内存外，内存上方的8字节处，为什么这8字节在没有保存ClassLoaderData指针时是NULL了？因为Java对象创建的时候会保证对象间有8字节的空隙。
 inline ClassLoaderData *ClassLoaderDataGraph::find_or_create(Handle loader, TRAPS) {
+    //校验loader必须是一个oop
   guarantee(loader() != NULL && loader()->is_oop(), "Loader must be oop");
   // Gets the class loader data out of the java/lang/ClassLoader object, if non-null
   // it's already in the loader_data, so no need to add
+    //根据java/lang/ClassLoader对象的地址获取ClassLoaderData的指针，如果不为空说明这个ClassLoader对象
+    //已经添加到ClassLoaderDataGraph中了，否则需要添加
   ClassLoaderData* loader_data= java_lang_ClassLoader::loader_data(loader());
   if (loader_data) {
      return loader_data;

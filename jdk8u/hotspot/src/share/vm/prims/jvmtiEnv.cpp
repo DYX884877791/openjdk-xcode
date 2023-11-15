@@ -214,6 +214,9 @@ JvmtiEnv::IsModifiableClass(oop k_mirror, jboolean* is_modifiable_class_ptr) {
 
 // class_count - pre-checked to be greater than or equal to 0
 // classes - pre-checked for NULL
+// RetransformClasses函数主要干了两件事：
+//  1. 根据java层的Class对象，找到JVM层的类实例InstanceKlass，并获取类的字节码，存放在class_definitions数组中。因为可以一次替换多个类，所以这里加了一个循环体，遍历每个要修改的类。
+//  2. 调用VMThread::execute(&op)，进入下一步。
 jvmtiError
 JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
 //TODO: add locking
@@ -278,6 +281,9 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
     class_definitions[index].klass              = jcls;
   }
   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_retransform);
+   /**
+    * VMThread::execute(&op) 中会调用到VM_RedefineClasses::doit_prologue()，最终调用到VM_RedefineClasses::load_new_class_versions（）
+    */
   VMThread::execute(&op);
   return (op.check_error());
 } /* end RetransformClasses */

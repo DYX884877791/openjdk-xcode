@@ -110,7 +110,9 @@ import java.util.regex.PatternSyntaxException;
 
 public final class String
     implements java.io.Serializable, Comparable<String>, CharSequence {
-    /** The value is used for character storage. */
+    // String类包含了两个私有的变量，int hash用于缓存hash值，char数组用于储存数据。
+    // 由于字符串是运行时大量使用的对象，JVM针对字符串进行了大量的优化，主要有String.intern()方法和G1的字符串去重。
+    /** The value is used for character storage. Java运行时，char按UTF-16编码，一个char需要占用两个字节（生僻字除外）*/
     private final char value[];
 
     /** Cache the hash code for the string */
@@ -3142,6 +3144,7 @@ public final class String
     }
 
     /**
+     * Java引用了String.intern()方法来解决字符串冗余的问题。开发者需要显式调用该方法，该方法会将字符串对象存储到一个StringTable哈希表中。
      * Returns a canonical representation for the string object.
      * <p>
      * A pool of strings, initially empty, is maintained privately by the

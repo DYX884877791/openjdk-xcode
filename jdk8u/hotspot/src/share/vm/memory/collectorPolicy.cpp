@@ -665,6 +665,7 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
     HandleMark hm; // discard any handles allocated in each iteration
 
     // First allocation attempt is lock-free.
+      // 新生代
     Generation *gen0 = gch->get_gen(0);
     assert(gen0->supports_inline_contig_alloc(),
       "Otherwise, must do alloc within heap lock");
@@ -672,12 +673,15 @@ HeapWord* GenCollectorPolicy::mem_allocate_work(size_t size,
       // 需要满足条件：
       // 1、如果创建的对象大于年轻代的大小阈值，会直接去其他代创建
       // 2、如果eden空间不足够开辟当前对象的话会去其他代创建
+      // 新生代是否允许分配　DefNewGeneration::should_allocate:262  空间未满  && 字节数>0  && ( is_tlab=true || PretenureSizeThreshold非0 || 小对象)
     if (gen0->should_allocate(size, is_tlab)) {
         // 尝试在eden开辟对象
         // 如果因为eden空间不够了，会尝试去其他代创建此对象
       result = gen0->par_allocate(size, is_tlab);
+        // 首先判断是否可以在Young区分配空间，如果可以，那么就在Young区域分配，如果分配成功了，那么就可以结束这次内存分配之旅了
       if (result != NULL) {
         assert(gch->is_in_reserved(result), "result not in heap");
+          // 先在eden分配
         return result;
       }
     }

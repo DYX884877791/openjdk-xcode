@@ -73,6 +73,7 @@ ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool is_anonymous, Depen
   // An anonymous class loader data doesn't have anything to keep
   // it from being unloaded during parsing of the anonymous class.
   // The null-class-loader should always be kept alive.
+  // _keep_ailve属性的值是根据_is_anonymous以及当前类加载器是不是bootstrapClassLoader来的。
   _keep_alive(is_anonymous || h_class_loader.is_null()),
   _metaspace(NULL), _unloading(false), _klasses(NULL),
   _claimed(0), _jmethod_ids(NULL), _handles(), _deallocate_list(NULL),
@@ -142,6 +143,7 @@ bool ClassLoaderData::claim() {
 }
 
 void ClassLoaderData::oops_do(OopClosure* f, KlassClosure* klass_closure, bool must_claim) {
+    //claim方法用于判断当前ClassLoaderData是否遍历过
   if (must_claim && !claim()) {
     return;
   }
@@ -150,6 +152,7 @@ void ClassLoaderData::oops_do(OopClosure* f, KlassClosure* klass_closure, bool m
   _dependencies.oops_do(f);
   _handles.oops_do(f);
   if (klass_closure != NULL) {
+      //遍历该ClassLoaderData加载的所有Klass
     classes_do(klass_closure);
   }
 }
@@ -343,9 +346,11 @@ void ClassLoaderData::unload() {
   _unloading = true;
 
   // Tell serviceability tools these classes are unloading
+    //遍历所有加载的Klass，通知即将被卸载
   classes_do(InstanceKlass::notify_unload_class);
 
   if (TraceClassLoaderData) {
+      //打印日志
     ResourceMark rm;
     tty->print("[ClassLoaderData: unload loader data " INTPTR_FORMAT, p2i(this));
     tty->print(" for instance " INTPTR_FORMAT " of %s", p2i((void *)class_loader()),
@@ -363,6 +368,7 @@ oop ClassLoaderData::keep_alive_object() const {
 }
 
 bool ClassLoaderData::is_alive(BoolObjectClosure* is_alive_closure) const {
+    //启动类加载器和未使用完的匿名类类加载器的ClassLoaderData的keep_alive返回true
   bool alive = keep_alive() // null class loader and incomplete anonymous klasses.
       || is_alive_closure->do_object_b(keep_alive_object());
 
@@ -569,11 +575,13 @@ bool ClassLoaderDataGraph::_should_purge = false;
 
 // Add a new class loader data node to the list.  Assign the newly created
 // ClassLoaderData into the java/lang/ClassLoader object as a hidden field
+// 创建一个新的ClassLoaderData实例，然后将其作为java/lang/ClassLoader的隐藏属性保存在ClassLoader实例中
 ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool is_anonymous, TRAPS) {
   // We need to allocate all the oops for the ClassLoaderData before allocating the
   // actual ClassLoaderData object.
   ClassLoaderData::Dependencies dependencies(CHECK_NULL);
 
+    //通过No_Safepoint_Verifier的构造方法校验当前不在安全点上，没有进行GC
   No_Safepoint_Verifier no_safepoints; // we mustn't GC until we've installed the
                                        // ClassLoaderData in the graph since the CLD
                                        // contains unhandled oops
@@ -581,11 +589,15 @@ ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool is_anonymous, TRA
   ClassLoaderData* cld = new ClassLoaderData(loader, is_anonymous, dependencies);
 
 
+    //如果不是匿名类
   if (!is_anonymous) {
+      //获取相对ClassLoader地址偏移为-1的地址，即在ClassLoader实例内存上方的8字节
     ClassLoaderData** cld_addr = java_lang_ClassLoader::loader_data_addr(loader());
     // First, Atomically set it
+      //将ClassLoaderData的地址原子的保存进去
     ClassLoaderData* old = (ClassLoaderData*) Atomic::cmpxchg_ptr(cld, cld_addr, NULL);
     if (old != NULL) {
+        //不等于NULL说明有其他线程完成了保存动作，因此将创建的ClassLoaderData释放掉，返回其他线程已经保存的ClassLoaderData
       delete cld;
       // Returns the data.
       return old;
@@ -594,14 +606,18 @@ ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool is_anonymous, TRA
 
   // We won the race, and therefore the task of adding the data to the list of
   // class loader data
+    //设置成功，将新创建的ClassLoaderData加入到链表中
   ClassLoaderData** list_head = &_head;
   ClassLoaderData* next = _head;
 
   do {
     cld->set_next(next);
+      //原子的修改链表头，如果因为并发修改失败则不断重试
     ClassLoaderData* exchanged = (ClassLoaderData*)Atomic::cmpxchg_ptr(cld, list_head, next);
     if (exchanged == next) {
+        //修改成功
       if (TraceClassLoaderData) {
+          //打印日志
         ResourceMark rm;
         tty->print("[ClassLoaderData: ");
         tty->print("create class loader data " INTPTR_FORMAT, p2i(cld));
@@ -611,6 +627,7 @@ ClassLoaderData* ClassLoaderDataGraph::add(Handle loader, bool is_anonymous, TRA
       }
       return cld;
     }
+      //链表头被其他线程修改了，重置next
     next = exchanged;
   } while (true);
 
@@ -655,7 +672,10 @@ void ClassLoaderDataGraph::cld_unloading_do(CLDClosure* cl) {
 }
 
 void ClassLoaderDataGraph::roots_cld_do(CLDClosure* strong, CLDClosure* weak) {
+    //从最后一个创建的classloader到bootstrapClassloader
   for (ClassLoaderData* cld = _head;  cld != NULL; cld = cld->_next) {
+      //如果是ygc，那weak和strong是一样的，对所有的类加载器都做扫描，保证它们都是活的
+      //如果是cms initmark阶段，如果要unload_classes了(should_unload_classes()返回true)，则weak为null，那就只遍历bootstrapclassloader以及正在做匿名类加载的类加载
     CLDClosure* closure = cld->keep_alive() ? strong : weak;
     if (closure != NULL) {
       closure->do_cld(cld);
@@ -750,24 +770,31 @@ bool ClassLoaderDataGraph::contains_loader_data(ClassLoaderData* loader_data) {
 
 // Move class loader data from main list to the unloaded list for unloading
 // and deallocation later.
+// do_unloading用于遍历所有的活跃ClassLoaderData，判断其是否活跃，如果不再活跃则将其从活跃链表中移除，加入到不活跃的ClassLoaderData链表中，并通知该ClassLoaderData加载的所有Klass类加载器被卸载。
 bool ClassLoaderDataGraph::do_unloading(BoolObjectClosure* is_alive_closure, bool clean_alive) {
   ClassLoaderData* data = _head;
   ClassLoaderData* prev = NULL;
+    //seen_dead_loader表示找到了需要卸载的ClassLoaderData
   bool seen_dead_loader = false;
 
   // Save previous _unloading pointer for CMS which may add to unloading list before
   // purging and we don't want to rewalk the previously unloaded class loader data.
   _saved_unloading = _unloading;
 
+    //从_head开始遍历
   while (data != NULL) {
+      //如果是活跃的，不能被GC回收，则跳到下一个
     if (data->is_alive(is_alive_closure)) {
       prev = data;
       data = data->next();
       continue;
     }
+      //需要被垃圾回收
     seen_dead_loader = true;
     ClassLoaderData* dead = data;
+      //执行ClassLoaderData卸载
     dead->unload();
+      //将其从活跃链表中移除
     data = data->next();
     // Remove from loader list.
     // This class loader data will no longer be found
@@ -778,12 +805,14 @@ bool ClassLoaderDataGraph::do_unloading(BoolObjectClosure* is_alive_closure, boo
       assert(dead == _head, "sanity check");
       _head = data;
     }
+      //将其加入到待卸载链表中
     dead->set_next(_unloading);
     _unloading = dead;
   }
 
   if (clean_alive) {
     // Clean previous versions and the deallocate list.
+      //清理之前版本的Klass和ClassLoaderData的_deallocate_list
     ClassLoaderDataGraph::clean_metaspaces();
   }
 
@@ -801,25 +830,31 @@ void ClassLoaderDataGraph::clean_metaspaces() {
     // class loader, we need to first clean weak method links for all
     // class loaders here. Below, we can then free redefined methods
     // for all class loaders.
+      // 发生了类的重定义，通知所有已加载的Klass清理之前版本的Klass的常量池和弱方法引用等
     for (ClassLoaderData* data = _head; data != NULL; data = data->next()) {
       data->classes_do(InstanceKlass::purge_previous_versions);
     }
   }
 
   // Need to purge the previous version before deallocating.
+    //遍历所有的ClassLoaderData释放_deallocate_list保存的待释放内存
   free_deallocate_lists();
 }
 
+// purge方法用于释放需要被卸载掉的ClassLoaderData，触发unloading链表中所有ClassLoaderData的内存释放
 void ClassLoaderDataGraph::purge() {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at safepoint!");
   ClassLoaderData* list = _unloading;
   _unloading = NULL;
   ClassLoaderData* next = list;
+    //遍历待释放的ClassLoaderData列表
   while (next != NULL) {
     ClassLoaderData* purge_me = next;
     next = purge_me->next();
+      //删除ClassLoaderData，调用其析构方法
     delete purge_me;
   }
+    //释放Metaspace中所有空闲的VirtualSpaceNode
   Metaspace::purge();
 }
 

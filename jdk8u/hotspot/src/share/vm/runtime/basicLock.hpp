@@ -32,6 +32,9 @@
 class BasicLock VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
  private:
+    // displaced_header属性用于保存锁对象oop的原始对象头，即无锁状态下的对象头，但是在synchronized嵌套的情形下displaced_header为NULL，
+    // 因为外层synchronized对应的BasicObjectLock已经保存了原始对象头了，此处不需要再保存；
+    // 另外，如果某个轻量级锁膨胀成重量级锁了，则displaced_header会被置为unused_mark，因为重量级锁本身会保存锁对象oop的原始对象头。
   volatile markOop _displaced_header;
  public:
   markOop      displaced_header() const               { return _displaced_header; }
@@ -57,7 +60,9 @@ class BasicLock VALUE_OBJ_CLASS_SPEC {
 class BasicObjectLock VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
  private:
+    // lock属性的地址用于实现轻量级锁，即所谓的Thread ID
   BasicLock _lock;                                    // the lock, must be double word aligned
+    // obj属性用于保存关联的锁对象oop
   oop       _obj;                                     // object holds the lock;
 
  public:

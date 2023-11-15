@@ -154,6 +154,7 @@ IRScope::IRScope(Compilation* compilation, IRScope* caller, int caller_bci, ciMe
   assert(method->holder()->is_loaded() , "method holder must be loaded");
 
   // build graph if monitor pairing is ok
+    //构建CFG流程图
   if (create_graph && monitor_pairing_ok()) _start = build_graph(compilation, osr_bci);
 }
 

@@ -240,6 +240,9 @@ bool PSScavenge::invoke() {
     counters->update_full_follows_scavenge(ffs_val);
   }
 
+    // 这里如果成立，会执行【_adaptive_size_policy】类型的gc
+    // 通过查看【const char* GCCause::to_string(GCCause::Cause cause)】方法得知，
+    // 这个类型就是 Ergonomics
   if (need_full_gc) {
     GCCauseSetter gccs(heap, GCCause::_adaptive_size_policy);
     CollectorPolicy* cp = heap->collector_policy();

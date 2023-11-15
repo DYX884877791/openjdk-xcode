@@ -63,13 +63,17 @@ class BitMap VALUE_OBJ_CLASS_SPEC {
  protected:
   // Return the position of bit within the word that contains it (e.g., if
   // bitmap words are 32 bits, return a number 0 <= n <= 31).
+    //BitsPerWord在64位下是64，这里实际是bit对64取余
   static idx_t bit_in_word(idx_t bit) { return bit & (BitsPerWord - 1); }
 
   // Return a mask that will select the specified bit, when applied to the word
   // containing the bit.
+    //返回的值实际是2的整数倍，就64位中只有1位是1，其他的都是0
   static bm_word_t bit_mask(idx_t bit) { return (bm_word_t)1 << bit_in_word(bit); }
 
   // Return the index of the word containing the specified bit.
+    //将偏移量进一步右移6位，LogBitsPerByte在64位下都是3，LogBitsPerWord是6
+    //右移6位丢失的精度通过bit_mask补回来
   static idx_t word_index(idx_t bit)  { return bit >> LogBitsPerWord; }
 
   // Return the bit number of the first bit in the specified word.
@@ -80,6 +84,7 @@ class BitMap VALUE_OBJ_CLASS_SPEC {
   bm_word_t  map(idx_t word) const { return _map[word]; }
 
   // Return a pointer to the word containing the specified bit.
+  //返回在BitMap中对应的映射地址，64位下一个地址有8字节，64位，类似于HashMap中的一个槽位
   bm_word_t* word_addr(idx_t bit) const { return map() + word_index(bit); }
 
   // Set a word to a specified value or to all ones; clear a word.
@@ -151,6 +156,7 @@ class BitMap VALUE_OBJ_CLASS_SPEC {
 
   bool at(idx_t index) const {
     verify_index(index);
+      //判断BitMap中对应的映射地址的对应位是否是1，如果是1,1!=0返回true，表示已经被标记了
     return (*word_addr(index) & bit_mask(index)) != 0;
   }
 

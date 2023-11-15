@@ -38,6 +38,9 @@
 // iteration of their oops.
 
 
+// InstanceMirrorKlass是InstanceKlass的一个子类
+// InstanceMirrorKlass是java.lang.Class类专用的InstanceKlass，
+// 关于Class对象，JVM并没有将描述Java类元信息的instanceKlass直接暴露给Java程序使用，而是又抽象了一层，即所谓的镜像类：instanceMirrorKlass
 class InstanceMirrorKlass: public InstanceKlass {
   friend class VMStructs;
   friend class InstanceKlass;

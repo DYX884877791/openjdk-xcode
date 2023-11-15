@@ -34,6 +34,7 @@ class SubTasksDone;
 
 // A "GenCollectedHeap" is a SharedHeap that uses generational
 // collection.  It is represented with a sequence of Generation's.
+// 表示分代堆内存的GenCollectedHeap
 class GenCollectedHeap : public SharedHeap {
   friend class GenCollectorPolicy;
   friend class Generation;
@@ -59,26 +60,34 @@ public:
 
  protected:
   // Fields:
+  //静态GenCollectedHeap实例
   static GenCollectedHeap* _gch;
 
  private:
+    //包含的Generation的个数，通常是2
   int _n_gens;
+    //Generation数组，其中max_gens是一个常量枚举
   Generation* _gens[max_gens];
+    //用来初始化Generation的GenerationSpec数组
   GenerationSpec** _gen_specs;
 
   // The generational collector policy.
+  //垃圾回收策略
   GenCollectorPolicy* _gen_policy;
 
   // Indicates that the most recent previous incremental collection failed.
   // The flag is cleared when an action is taken that might clear the
   // condition that caused that incremental collection to fail.
+  // 执行promote是否会失败
   bool _incremental_collection_failed;
 
   // In support of ExplicitGCInvokesConcurrent functionality
+  //已经执行完成的Full GC的次数
   unsigned int _full_collections_completed;
 
   // Data structure for claiming the (potentially) parallel tasks in
   // (gen-specific) roots processing.
+  //用于控制根节点遍历任务的并行执行
   SubTasksDone* _process_strong_tasks;
 
   // In block contents verification, the number of header words to skip
@@ -475,6 +484,7 @@ public:
   // We optionally consult the young gen, if asked to do so;
   // otherwise we base our answer on whether the previous incremental
   // collection attempt failed with no corrective action as of yet.
+    //当老年代空间不足以promote，年轻代执行GC前调用collection_attempt_is_safe方法返回false，就会将_incremental_collection_failed属性置为false
   bool incremental_collection_will_fail(bool consult_young) {
     // Assumes a 2-generation system; the first disjunct remembers if an
     // incremental collection failed, even when we thought (second disjunct)
