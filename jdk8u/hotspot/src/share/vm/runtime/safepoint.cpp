@@ -168,6 +168,8 @@ static volatile int TryingToBlock = 0 ;    // proximate value -- for advisory us
 static bool timeout_error_printed = false;
 
 // Roll all threads forward to a safepoint and suspend them all
+// 在SafepointSynchronize::begin方法完成了安全点同步，即所有线程都停下来后，会执行do_cleanup_tasks方法，
+// 该方法会调用deflate_idle_monitors清理空闲的ObjectMonitor
 void SafepointSynchronize::begin() {
   EventSafepointBegin begin_event;
   Thread* myThread = Thread::current();

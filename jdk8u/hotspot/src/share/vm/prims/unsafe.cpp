@@ -25,6 +25,7 @@
 #include "precompiled.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/g1/g1SATBCardTableModRefBS.hpp"
 #endif // INCLUDE_ALL_GCS
@@ -1278,6 +1279,7 @@ static void post_thread_park_event(EventThreadPark* event, const oop obj, jlong 
 }
 
 UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute, jlong time))
+  slog_debug("进入hotspot/src/share/vm/prims/unsafe.cpp中的Unsafe_Park函数...");
   UnsafeWrapper("Unsafe_Park");
   EventThreadPark event;
 #ifndef USDT2
@@ -1315,6 +1317,7 @@ UNSAFE_END
 
 // Unsafe_Unpark会将JavaThread的parker属性缓存到Thread实例的nativeParkEventPointer属性中，方便下次调用unpark方法时可以快速获取关联的parker，然后执行unpark方法唤醒目标线程。
 UNSAFE_ENTRY(void, Unsafe_Unpark(JNIEnv *env, jobject unsafe, jobject jthread))
+  slog_debug("进入hotspot/src/share/vm/prims/unsafe.cpp中的Unsafe_Unpark函数...");
   UnsafeWrapper("Unsafe_Unpark");
   Parker* p = NULL;
   if (jthread != NULL) {
@@ -1341,8 +1344,10 @@ UNSAFE_ENTRY(void, Unsafe_Unpark(JNIEnv *env, jobject unsafe, jobject jthread))
           if (thr != NULL) {
             p = thr->parker();
             if (p != NULL) { // Bind to Java thread for next time.
+              jlong ptr = addr_to_java(p);
+
                 //设置Thread实例的nativeParkEventPointer属性，这样下次调用unpark方法时可以快速的获取parker指针
-              java_lang_Thread::set_park_event(java_thread, addr_to_java(p));
+              java_lang_Thread::set_park_event(java_thread, ptr);
             }
           }
         }

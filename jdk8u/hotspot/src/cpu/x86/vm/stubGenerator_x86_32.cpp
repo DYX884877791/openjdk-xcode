@@ -134,6 +134,7 @@ class StubGenerator: public StubCodeGenerator {
 
   address generate_call_stub(address& return_address) {
     StubCodeMark mark(this, "StubRoutines", "call_stub");
+      //汇编器会将生成的例程在内存中线性排列。所以取当前汇编器生成的上个例程最后一行汇编指令的地址，用来作为即将生成的新例程的首地址
     address start = __ pc();
 
     // stub code parameters / addresses
@@ -141,10 +142,12 @@ class StubGenerator: public StubCodeGenerator {
     bool  sse_save = false;
     const Address rsp_after_call(rbp, -4 * wordSize); // same as in generate_catch_exception()!
     const int     locals_count_in_bytes  (4*wordSize);
+      //定义一些变量，用于保存一些调用方的信息,这四个参数放在被调用者堆栈中，即call_stub例程堆栈中，所以相对于call_stub例程的栈基址（rbp）为负数。（栈是向下增长），后面会用到这四个变量。
     const Address mxcsr_save    (rbp, -4 * wordSize);
     const Address saved_rbx     (rbp, -3 * wordSize);
     const Address saved_rsi     (rbp, -2 * wordSize);
     const Address saved_rdi     (rbp, -1 * wordSize);
+      //传参，放在调用方堆栈中，所以相对call_stub例程的栈基址为正数,可以理解为调用方在调用call_stub例程之前，会将传参都放在自己的堆栈中，这样call_stub例程中就可以直接基于栈基址进行偏移取用了。
     const Address result        (rbp,  3 * wordSize);
     const Address result_type   (rbp,  4 * wordSize);
     const Address method        (rbp,  5 * wordSize);
@@ -155,14 +158,30 @@ class StubGenerator: public StubCodeGenerator {
     sse_save =  UseSSE > 0;
 
     // stub code
+     /**
+      * enter（）对应的方法如下，用来保存调用方栈基址，并将call_stub栈基址更新为当前栈顶地址，c语言编译器其实在调用方法前都会插入这件事，这里JVM相对于借用了这种思想。
+      * void MacroAssembler::enter() {
+      *      push(rbp);
+      *      mov(rbp, rsp);
+      * }
+      */
     __ enter();
+      //接下来计算并分配call_stub堆栈所需栈大小。
+      //先将参数数量放入rcx寄存器。
     __ movptr(rcx, parameter_size);              // parameter counter
+      //shl用于左移，这里将rcx中的值左移了Interpreter::logStackElementSize位，在64位平台，logStackElementSize=3；在32位平台，logStackElementSize=2；
+      // 所以在64位平台上，rcx = rcx * 8, 即每个参数占用8字节;32位平台rcx = rcx *4 ,即每个参数占4个字节。
     __ shlptr(rcx, Interpreter::logStackElementSize); // convert parameter count to bytes
+      // locals_count_in_bytes 在上面有定义：const int     locals_count_in_bytes  (4*wordSize);这四个字节其实就是上面用来保存调用方信息所占空间。
     __ addptr(rcx, locals_count_in_bytes);       // reserve space for register saves
+      //rcx现在保存了计算好的所需栈空间，将保存栈顶地址的寄存器rsp减去rcx，即向下扩展栈。
     __ subptr(rsp, rcx);
+      //引用《揭秘Java虚拟机》：为了加速内存寻址和回收，物理机器在分配堆栈空间时都会进行内存对齐，JVM也借用了这个思想。
+      // JVM中是按照两个字节，即16位进行对齐的：const int StackAlignmentInBytes = (2*wordSize);
     __ andptr(rsp, -(StackAlignmentInBytes));    // Align stack
 
     // save rdi, rsi, & rbx, according to C calling conventions
+      //将调用方的一些信息，保存到栈中分配的地址处，最后会再次还原到寄存器中
     __ movptr(saved_rdi, rdi);
     __ movptr(saved_rsi, rsi);
     __ movptr(saved_rbx, rbx);
@@ -193,9 +212,11 @@ class StubGenerator: public StubCodeGenerator {
     }
 #endif
 
+    //接下来就要进行参数压栈了;
     // pass parameters if any
     BLOCK_COMMENT("pass parameters if any");
     Label parameters_done;
+      //检查参数数量是否为0，为0则直接跳到标号parameters_done处。
     __ movl(rcx, parameter_size);  // parameter counter
     __ testl(rcx, rcx);
     __ jcc(Assembler::zero, parameters_done);
@@ -208,25 +229,36 @@ class StubGenerator: public StubCodeGenerator {
     // source is rdx[rcx: N-1..0]
     // dest   is rsp[rbx: 0..N-1]
 
+      //将参数首地址放到寄存器rdx中，并将rbx置0；
     __ movptr(rdx, parameters);          // parameter pointer
     __ xorptr(rbx, rbx);
 
+      //标号loop处
     __ BIND(loop);
 
     // get parameter
+      //此处开始循环；从最后一个参数倒序往前进行参数压栈，初始时，rcx = parameter_size；要注意，这里的参数是指java方法所需的参数，而不是call_stub例程所需参数！
+      //将（rdx + rcx * stackElementScale（）- wordSize ）移到 rax 中，（rdx + rcx * stackElementScale（）- wordSize ）指向了要压栈的参数。
     __ movptr(rax, Address(rdx, rcx, Interpreter::stackElementScale(), -wordSize));
+      //再从rax中转移到（rsp + rbx * stackElementScale（）） 处，expr_offset_in_bytes（0） = 0；这里是基于栈顶地址进行偏移寻址的，最后一个参数会被压到栈顶处。第一个参数会被压到rsp + （parameter_size-1）* stackElementScale（）处。
     __ movptr(Address(rsp, rbx, Interpreter::stackElementScale(),
                     Interpreter::expr_offset_in_bytes(0)), rax);          // store parameter
+      //更新rbx
     __ increment(rbx);
+      //自减rcx，当rcx不为0时，继续跳往loop处循环执行。
     __ decrement(rcx);
     __ jcc(Assembler::notZero, loop);
 
     // call Java function
+      //标号parameters_done处
     __ BIND(parameters_done);
+      //接下来要开始调用Java方法了。
+      //将调用java方法的entry_point例程所需的一些参数保存到寄存器中
     __ movptr(rbx, method);           // get Method*
     __ movptr(rax, entry_point);      // get entry_point
     __ mov(rsi, rsp);                 // set sender sp
     BLOCK_COMMENT("call Java function");
+      //跳往entry_point例程执行
     __ call(rax);
 
     BLOCK_COMMENT("call_stub_return_address:");

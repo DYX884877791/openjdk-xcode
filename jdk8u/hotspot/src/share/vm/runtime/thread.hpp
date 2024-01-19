@@ -112,6 +112,7 @@ class Thread: public ThreadShadow {
   // Support for forcing alignment of thread objects for biased locking
   void*       _real_malloc_address;
  public:
+    // 运算符重载...
   void* operator new(size_t size) throw() { return allocate(size, true); }
   void* operator new(size_t size, const std::nothrow_t& nothrow_constant) throw() {
     return allocate(size, false); }
@@ -279,10 +280,15 @@ class Thread: public ThreadShadow {
 
   // Private thread-local objectmonitor list - a simple cache organized as a SLL.
  public:
+    // omFreeList就是ObjectMonitor空闲链表
   ObjectMonitor* omFreeList;
+    // omFreeCount就是空闲链表包含的个数
   int omFreeCount;                              // length of omFreeList
+    // omFreeProvision是从全局的空闲链表中获取若干个ObjectMonitor到本地空闲链表时能够获取的最大数量
   int omFreeProvision;                          // reload chunk size
+    // omInUseList是正在使用中的ObjectMonitor列表
   ObjectMonitor* omInUseList;                   // SLL to track monitors in circulation
+    // omInUseCount表示正在使用中的ObjectMonitor的个数
   int omInUseCount;                             // length of omInUseList
 
 #ifdef ASSERT

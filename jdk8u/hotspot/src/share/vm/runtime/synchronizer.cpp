@@ -178,19 +178,42 @@ static volatile int MonitorPopulation = 0 ;      // # Extant -- in circulation
  * 3. revoke_and_rebias这个偏向锁的获取逻辑在 biasedLocking.cpp中
  * 4. 如果偏向锁未开启，则进入 slow_enter获取轻量级锁的流程
  *
+ * 偏向锁顾名思义会偏向于一个线程，如果有其他线程来抢占这个偏向锁则会导致偏向锁被撤销，恢复成无锁状态或者直接膨胀成轻量级锁。
+ * 当偏向锁没有被某个线程占用，即对象头中用于保存线程指针的位都是0的时候，这个偏向锁就是匿名偏向锁。
+ *
+ * 撤销偏向锁就是将锁对象oop的对象头恢复成无锁状态或者膨胀成轻量级锁状态，执行撤销动作的前提是锁对象oop的对象头处于偏向锁状态。具体而言有以下几种情形：
+ *
+ * 1、执行Object类的hashcode方法，会将其恢复成无锁状态。
+ * 2、执行Object类的wait/notify/notifyall方法，会将其恢复成无锁状态，直接膨胀成重量级锁。
+ * 3、执行jni_MonitorEnter或者jni_MonitorExit方法，会将其恢复成无锁状态，直接膨胀成重量级锁。
+ * 4、执行Unsafe类的monitorenter/trymonitorenter/monitorexit方法，会将其恢复成无锁状态，直接膨胀成重量级锁。
+ * 5、尝试获取某个偏向锁，如果该偏向锁被某个线程占用了，但是没有关联的BasicObjectLock，即实际占用该偏向锁的方法已经退出了，则会将其恢复成无锁状态，
+ *      然后膨胀成轻量级锁，但是在撤销一定次数后触发批量重偏向（rebasic）的情形下也可能重新获取该偏向锁。如果该偏向锁正在被某个方法所使用，
+ *      即存在对应的BasicObjectLock，则直接将该偏向锁膨胀成轻量级锁。
+ *
+ *  注意偏向锁的撤销大部分情形下都是需要在安全点下执行，因为需要遍历其他线程的所有调用栈帧，判断是否存在与之关联的BasicObjectLock。在以下情形不需要在安全点下执行：
+ *
+ * 1、目标对象的对象头是匿名偏向锁状态
+ * 2、目标对象的Klass的prototype_header变成无锁状态
+ * 3、目标对象的Klass的prototype_header中的epoch值和目标对象对象头中的epoch值不一样
+ * 4、目标对象的偏向锁由当前线程持有
  */
 void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_rebias, TRAPS) {
+ slog_debug("进入hotspot/src/share/vm/runtime/synchronizer.cpp中的ObjectSynchronizer::fast_enter函数...");
     //判断是否开启了偏向锁
  if (UseBiasedLocking) {
      //如果不处于全局安全点
     if (!SafepointSynchronize::is_at_safepoint()) {
+      slog_debug("当前不处于全局安全点...");
         //通过`revoke_and_rebias`这个函数尝试获取偏向锁
       BiasedLocking::Condition cond = BiasedLocking::revoke_and_rebias(obj, attempt_rebias, THREAD);
         //如果是撤销与重偏向直接返回
       if (cond == BiasedLocking::BIAS_REVOKED_AND_REBIASED) {
+        slog_debug("获取到的偏向锁的状态为重偏向,直接返回...");
         return;
       }
     } else {
+      slog_debug("当前处于全局安全点,撤销偏向锁...");
         //如果在安全点，撤销偏向锁
       assert(!attempt_rebias, "can not rebias toward VM thread");
         //当到达一个全局安全点时，这时会根据偏向锁的状态来判断是否需要撤销偏向锁，调用 revoke_at_safepoint方法
@@ -253,10 +276,11 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 // 简单整理轻量级锁的获取逻辑：
 //  1. mark->is_neutral()方法, is_neutral这个方法是在 markOop.hpp中定义，如果 biased_lock:0且lock:01表示无锁状态
 //  2. 如果mark处于无锁状态，则进入下一步骤，否则执行最后一个步骤
-//  3. 把mark保存到BasicLock对象的displacedheader字段
-//  4. 通过CAS尝试将markword更新为指向BasicLock对象的指针，如果更新成功，表示竞争到锁，则执行同步代码，否则执行下一步骤
+//  3. 把mark保存到BasicLock对象的_displaced_header字段
+//  4. 通过CAS尝试将markword更新为指向BasicLock对象的指针lock，如果更新成功，表示竞争到锁，则执行同步代码，否则执行下一步骤
 //  5. 如果当前mark处于加锁状态，且mark中的ptr指针指向当前线程的栈帧，则执行同步代码，否则说明有多个线程竞争轻量级锁，轻量级锁需要膨胀升级为重量级锁
 void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/runtime/synchronizer.cpp中的ObjectSynchronizer::slow_enter函数...");
   markOop mark = obj->mark();
   assert(!mark->has_bias_pattern(), "should not see bias pattern here");
 
@@ -266,7 +290,7 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
     // be visible <= the ST performed by the CAS.
       //直接把mark保存到BasicLock对象的_displaced_header字段
     lock->set_displaced_header(mark);
-      //通过CAS将mark word更新为指向BasicLock对象的指针，更新成功表示获得了轻量级锁
+      //通过CAS将mark word更新为指向BasicLock对象的指针lock，更新成功表示获得了轻量级锁
     if (mark == (markOop) Atomic::cmpxchg_ptr(lock, obj()->mark_addr(), mark)) {
       TEVENT (slow_enter: release stacklock) ;
       return ;
@@ -399,6 +423,7 @@ void ObjectSynchronizer::jni_exit(oop obj, Thread* THREAD) {
 // Internal VM locks on java objects
 // standard constructor, allows locking failures
 ObjectLocker::ObjectLocker(Handle obj, Thread* thread, bool doLock) {
+  slog_debug("进入hotspot/src/share/vm/runtime/synchronizer.cpp中的ObjectLocker::ObjectLocker构造函数...");
   _dolock = doLock;
   _thread = thread;
   debug_only(if (StrictSafepointChecks) _thread->check_for_valid_safepoint_state(false);)
@@ -407,12 +432,15 @@ ObjectLocker::ObjectLocker(Handle obj, Thread* thread, bool doLock) {
   if (_dolock) {
     TEVENT (ObjectLocker) ;
 
+    slog_debug("在ObjectLocker::ObjectLocker构造函数中即将调用ObjectSynchronizer::fast_enter函数...");
     ObjectSynchronizer::fast_enter(_obj, &_lock, false, _thread);
   }
 }
 
 ObjectLocker::~ObjectLocker() {
+  slog_debug("进入hotspot/src/share/vm/runtime/synchronizer.cpp中的ObjectLocker::~ObjectLocker析构函数...");
   if (_dolock) {
+    slog_debug("在ObjectLocker::~ObjectLocker析构函数中即将调用ObjectSynchronizer::fast_exit函数...");
     ObjectSynchronizer::fast_exit(_obj(), &_lock, _thread);
   }
 }
@@ -421,20 +449,29 @@ ObjectLocker::~ObjectLocker() {
 // -----------------------------------------------------------------------------
 //  Wait/Notify/NotifyAll
 // NOTE: must use heavy weight monitor to handle wait()
+// 这三个方法就是Object的wait，notify，notifyAll方法的核心实现，wait方法会分配一个与该对象关联的ObjectMonitor然后调用其wait方法；
+// notify和notifyall会校验对象是否持有轻量级锁，如果有则直接返回，因为如果持有轻量级锁说明其未调用wait方法，没有与之关联的ObjectMonitor实例，
+// 如果没有则获取关联的ObjectMonitor实例，调用其notify和notifyall方法，在执行具体的逻辑前会检查获取的ObjectMonitor实例是否是当前线程持有的，
+// 如果不是会抛出异常ObjectMonitor实例，如果先调用wait方法再调用notify或者notifyall方法则不报错。
 void ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
+    //UseBiasedLocking默认为true
   if (UseBiasedLocking) {
+      //撤销对象头中包含的偏向锁
     BiasedLocking::revoke_and_rebias(obj, false, THREAD);
     assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
   }
   if (millis < 0) {
     TEVENT (wait - throw IAX) ;
+      //参数非法抛出异常
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
   }
+    //分配一个关联的ObjectMonitor实例
   ObjectMonitor* monitor = ObjectSynchronizer::inflate(THREAD,
                                                        obj(),
                                                        inflate_cause_wait);
 
   DTRACE_MONITOR_WAIT_PROBE(monitor, obj(), THREAD, millis);
+    //调用其wait方法
   monitor->wait(millis, true, THREAD);
 
   /* This dummy call is in place to get around dtrace bug 6254741.  Once
@@ -459,14 +496,17 @@ void ObjectSynchronizer::waitUninterruptibly (Handle obj, jlong millis, TRAPS) {
 
 void ObjectSynchronizer::notify(Handle obj, TRAPS) {
  if (UseBiasedLocking) {
+     //撤销对象头中包含的偏向锁
     BiasedLocking::revoke_and_rebias(obj, false, THREAD);
     assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
   }
 
   markOop mark = obj->mark();
   if (mark->has_locker() && THREAD->is_lock_owned((address)mark->locker())) {
+      //如果该对象持有轻量级锁则直接返回，持有轻量级锁说明其对象头中没有包含ObjectMonitor指针
     return;
   }
+    //获取与之关联的ObjectMonitor实例，调用其notify方法
   ObjectSynchronizer::inflate(THREAD,
                               obj(),
                               inflate_cause_notify)->notify(THREAD);
@@ -475,14 +515,17 @@ void ObjectSynchronizer::notify(Handle obj, TRAPS) {
 // NOTE: see comment of notify()
 void ObjectSynchronizer::notifyall(Handle obj, TRAPS) {
   if (UseBiasedLocking) {
+      //撤销对象头中包含的偏向锁
     BiasedLocking::revoke_and_rebias(obj, false, THREAD);
     assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
   }
 
   markOop mark = obj->mark();
   if (mark->has_locker() && THREAD->is_lock_owned((address)mark->locker())) {
+      //如果该对象持有轻量级锁则直接返回
     return;
   }
+    //获取与之关联的ObjectMonitor实例，调用其notify方法
   ObjectSynchronizer::inflate(THREAD,
                               obj(),
                               inflate_cause_notify)->notifyAll(THREAD);
@@ -1373,6 +1416,7 @@ static void post_monitor_inflate_event(EventJavaMonitorInflate* event,
 }
 
 // Fast path code shared by multiple functions
+// inflate_helper是给JVM内部其他类使用的，也是基于inflate方法实现的
 ObjectMonitor* ObjectSynchronizer::inflate_helper(oop obj) {
   markOop mark = obj->mark();
   if (mark->has_monitor()) {
@@ -1415,6 +1459,7 @@ ObjectMonitor* ObjectSynchronizer::inflate_helper(oop obj) {
 ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
                                                   oop object,
                                                   const InflateCause cause) {
+  slog_debug("进入hotspot/src/share/vm/runtime/synchronizer.cpp中的ObjectSynchronizer::inflate函数...");
   // Inflate mutates the heap ...
   // Relaxing assertion for bug 6320749.
   assert (Universe::verify_in_progress() ||
@@ -1437,6 +1482,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
       // CASE: inflated
       //has_monitor是markOop.hpp中的方法，如果为true表示当前锁已经是重量级锁了
       if (mark->has_monitor()) {
+          slog_debug("当前锁标记位(mark word最后2位)为10,即重量级锁...");
           //如果已经持有监视器锁，则返回对象头中保存的ObjectMonitor指针
           //获得重量级锁的对象监视器直接返回
           ObjectMonitor * inf = mark->monitor() ;
@@ -1454,6 +1500,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
       // We could always eliminate polling by parking the thread on some auxiliary list.
       //膨胀等待，表示存在线程正在膨胀，通过continue进行下一轮的膨胀
       if (mark == markOopDesc::INFLATING()) {
+         slog_debug("当前正处于升级为重量级锁的过程中...");
          TEVENT (Inflate: spin while INFLATING) ;
           //其他某个线程正在将该对象的锁膨胀成监视器锁，在此等待膨胀完成，会先自旋，超过1000次后yeild，yield 一定次数后执行park
          ReadStableMark(object) ;
@@ -1481,6 +1528,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
 
       //表示当前锁为轻量级锁，以下是轻量级锁的膨胀逻辑
       if (mark->has_locker()) {
+          slog_debug("当前锁标记位(mark word最后2位)为00,即轻量级锁,进行轻量级锁的膨胀...");
           //获取一个可用的ObjectMonitor
           //从当前线程的本地空闲链表或者全局空闲链表中分配一个空闲的ObjectMonitor
           ObjectMonitor * m = omAlloc (Self) ;
@@ -1497,6 +1545,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
           //将其对象头原子的修改为INFLATING
           // 将object->mark_addr()和mark比较，如果这两个值相等，则将object->mark_addr()
           //    改成markOopDesc::INFLATING()，相等返回是mark，不相等返回的是object->mark_addr()
+          slog_debug("使用CAS操作尝试将对象头修改为INFLATING...");
           markOop cmp = (markOop) Atomic::cmpxchg_ptr (markOopDesc::INFLATING(), object->mark_addr(), mark) ;
           //CAS失败
           //如果修改失败则将m归还到本地线程的空闲链表，修改失败说明其他某个线程也在尝试执行锁膨胀
@@ -1505,6 +1554,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
              omRelease (Self, m, true) ;
               // 重试
               //开始下一次循环
+             slog_debug("CAS修改失败,继续下一次循环...");
              continue ;       // Interference -- just retry
           }
 
@@ -1565,7 +1615,9 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
           // Hopefully the performance counters are allocated on distinct cache lines
           // to avoid false sharing on MP systems ...
           //增加计数
-          if (ObjectMonitor::_sync_Inflations != NULL) ObjectMonitor::_sync_Inflations->inc() ;
+          if (ObjectMonitor::_sync_Inflations != NULL) {
+              ObjectMonitor::_sync_Inflations->inc() ;
+          }
           TEVENT(Inflate: overwrite stacklock) ;
           if (TraceMonitorInflation) {
             if (object->is_instance()) {
@@ -1592,6 +1644,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
       // An inflateTry() method that we could call from fast_enter() and slow_enter()
       // would be useful.
 
+      slog_debug("当前锁标记位(mark word最后3位)为001,即无锁状态...");
       //如果是无锁状态
       assert (mark->is_neutral(), "invariant");
       //获取一个可用的ObjectMonitor
@@ -1632,7 +1685,9 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self,
       // Hopefully the performance counters are allocated on distinct
       // cache lines to avoid false sharing on MP systems ...
       //对象头修改成功，增加计数
-      if (ObjectMonitor::_sync_Inflations != NULL) ObjectMonitor::_sync_Inflations->inc() ;
+      if (ObjectMonitor::_sync_Inflations != NULL) {
+          ObjectMonitor::_sync_Inflations->inc() ;
+      }
       TEVENT(Inflate: overwrite neutral) ;
       if (TraceMonitorInflation) {
         if (object->is_instance()) {
@@ -1699,12 +1754,14 @@ bool ObjectSynchronizer::deflate_monitor(ObjectMonitor* mid, oop obj,
   guarantee (mid->header()->is_neutral(), "invariant");
 
   if (mid->is_busy()) {
+      //如果ObjectMonitor正在使用中，返回false
      if (ClearResponsibleAtSTW) mid->_Responsible = NULL ;
      deflated = false;
   } else {
      // Deflate the monitor if it is no longer being used
      // It's idle - scavenge and return to the global free list
      // plain old deflation ...
+      //如果ObjectMonitor未使用则回收，将其归还FreeTailp空闲链表中，返回true
      TEVENT (deflate_idle_monitors - scavenge1) ;
      if (TraceMonitorInflation) {
        if (obj->is_instance()) {
@@ -1715,12 +1772,15 @@ bool ObjectSynchronizer::deflate_monitor(ObjectMonitor* mid, oop obj,
      }
 
      // Restore the header back to obj
+      //恢复原来的对象头
      obj->release_set_mark(mid->header());
+      //重置
      mid->clear();
 
      assert (mid->object() == NULL, "invariant") ;
 
      // Move the object to the working free list defined by FreeHead,FreeTail.
+      //将其插入到空闲链表中
      if (*FreeHeadp == NULL) *FreeHeadp = mid;
      if (*FreeTailp != NULL) {
        ObjectMonitor * prevtail = *FreeTailp;
@@ -1749,6 +1809,7 @@ int ObjectSynchronizer::walk_monitor_list(ObjectMonitor** listheadp,
      }
      if (deflated) {
        // extract from per-thread in-use-list
+         //如果未使用被回收了，则将其从listheadp中移除
        if (mid == *listheadp) {
          *listheadp = mid->FreeNext;
        } else if (curmidinuse != NULL) {
@@ -1757,6 +1818,7 @@ int ObjectSynchronizer::walk_monitor_list(ObjectMonitor** listheadp,
        next = mid->FreeNext;
        mid->FreeNext = NULL;  // This mid is current tail in the FreeHead list
        mid = next;
+         //增加计数
        deflatedcount++;
      } else {
        curmidinuse = mid;
@@ -1766,6 +1828,12 @@ int ObjectSynchronizer::walk_monitor_list(ObjectMonitor** listheadp,
   return deflatedcount;
 }
 
+/**
+ * 如果MonitorInUseLists为true，deflate_idle_monitors依赖walk_monitor_list遍历所有线程的本地omInUseList链表和全局的gOmInUseList，
+ * 如果链表中的ObjectMonitor未被使用则将其归还到一个链表中；如果MonitorInUseLists为false，deflate_idle_monitors则依赖deflate_monitor，
+ * 通过gBlockList遍历所有的已创建的ObjectMonitor实例，如果其Object为非空即已经被分配出去了但是未被使用则将其回收，归还到某个链表中；
+ * walk_monitor_list处理链表中的ObjectMonitor实例时，也是调用deflate_monitor方法；最后将所有归还的ObjectMonitor实例构成的链表插入到全局空闲链表gFreeList的前面。
+ */
 void ObjectSynchronizer::deflate_idle_monitors() {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at safepoint");
   int nInuse = 0 ;              // currently associated with objects
@@ -1780,22 +1848,28 @@ void ObjectSynchronizer::deflate_idle_monitors() {
   // Prevent omFlush from changing mids in Thread dtor's during deflation
   // And in case the vm thread is acquiring a lock during a safepoint
   // See e.g. 6320749
+    //获取锁
   Thread::muxAcquire (&ListLock, "scavenge - return") ;
 
+    //MonitorInUseLists默认为false
   if (MonitorInUseLists) {
     int inUse = 0;
     for (JavaThread* cur = Threads::first(); cur != NULL; cur = cur->next()) {
       nInCirculation+= cur->omInUseCount;
+        //遍历线程本地的omInUseList链表中的ObjectMonitor，如果其未使用则将其回收，返回该链表中被回收掉的ObjectMonitor个数
       int deflatedcount = walk_monitor_list(cur->omInUseList_addr(), &FreeHead, &FreeTail);
       cur->omInUseCount-= deflatedcount;
       // verifyInUse(cur);
+        //nScavenged表示累计回收掉的ObjectMonitor数量
       nScavenged += deflatedcount;
+        //nInuse表示累计的正在使用中的ObjectMonitor数量
       nInuse += cur->omInUseCount;
      }
 
    // For moribund threads, scan gOmInUseList
    if (gOmInUseList) {
      nInCirculation += gOmInUseCount;
+       //遍历全局的gOmInUseList链表中的ObjectMonitor
      int deflatedcount = walk_monitor_list((ObjectMonitor **)&gOmInUseList, &FreeHead, &FreeTail);
      gOmInUseCount-= deflatedcount;
      nScavenged += deflatedcount;
@@ -1803,6 +1877,7 @@ void ObjectSynchronizer::deflate_idle_monitors() {
     }
 
   } else {
+      //通过gBlockList链表遍历所有已创建的ObjectMonitor，其中每个元素都是一个ObjectMonitor数组的头元素
     ObjectMonitor* block =
       (ObjectMonitor*)OrderAccess::load_ptr_acquire(&gBlockList);
     for (; block != NULL; block = (ObjectMonitor*)next(block)) {
@@ -1818,12 +1893,15 @@ void ObjectSynchronizer::deflate_idle_monitors() {
           // The monitor should either be a thread-specific private
           // free list or the global free list.
           // obj == NULL IMPLIES mid->is_busy() == 0
+            //obj为空说明其未被分配出去，还在本地或者全局空闲链表中
           guarantee(!mid->is_busy(), "invariant");
           continue;
         }
+          //如果该ObjectMonitor未使用则将其插入到FreeTail链表中
         deflated = deflate_monitor(mid, obj, &FreeHead, &FreeTail);
 
         if (deflated) {
+            //未被使用，将其FreeNext置为null，因为在分配该ObjectMonitor时已经将该ObjectMonitor从空闲链表中移除了，所以此处不需要再次将其从空闲链表中移除
           mid->FreeNext = NULL;
           nScavenged++;
         } else {
@@ -1833,6 +1911,7 @@ void ObjectSynchronizer::deflate_idle_monitors() {
     }
   }
 
+    //增加空闲计数
   MonitorFreeCount += nScavenged;
 
   // Consider: audit gFreeList to ensure that MonitorFreeCount and list agree.
@@ -1847,20 +1926,25 @@ void ObjectSynchronizer::deflate_idle_monitors() {
   ForceMonitorScavenge = 0;    // Reset
 
   // Move the scavenged monitors back to the global free list.
+    //如果回收掉了ObjectMonitor实例
   if (FreeHead != NULL) {
      guarantee (FreeTail != NULL && nScavenged > 0, "invariant") ;
      assert (FreeTail->FreeNext == NULL, "invariant") ;
      // constant-time list splice - prepend scavenged segment to gFreeList
+      //将FreeTail插入到gFreeList的后面
      FreeTail->FreeNext = gFreeList ;
      gFreeList = FreeHead ;
   }
+    //释放锁
   Thread::muxRelease (&ListLock) ;
 
+    // 增加计数
   if (ObjectMonitor::_sync_Deflations != NULL) ObjectMonitor::_sync_Deflations->inc(nScavenged) ;
   if (ObjectMonitor::_sync_MonExtant  != NULL) ObjectMonitor::_sync_MonExtant ->set_value(nInCirculation);
 
   // TODO: Add objectMonitor leak detection.
   // Audit/inventory the objectMonitors -- make sure they're all accounted for.
+    // 增加计数
   GVars.stwRandom = os::random() ;
   GVars.stwCycle ++ ;
 }

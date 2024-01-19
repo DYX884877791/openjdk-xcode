@@ -998,6 +998,7 @@ ThreadPriority java_lang_Thread::priority(oop java_thread) {
 
 
 void java_lang_Thread::set_priority(oop java_thread, ThreadPriority priority) {
+    // 这里是通过计算 oop 对象中 priority 属性存储的偏移地址，然后将值设置到该地址。
   java_thread->int_field_put(_priority_offset, priority);
 }
 

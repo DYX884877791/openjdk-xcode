@@ -461,12 +461,13 @@ void JavaCalls::call_helper(JavaValue* result, methodHandle* m, JavaCallArgument
          * 数一下我们通过函数指针调用时传递了几个参数？8个，那么后面的2个就需要通过调用函数（Caller）的栈来传递，
          * 这两个参数就是args->size_of_parameters()和CHECK（这是个宏，扩展后就是传递线程对象）。
          */
+      Method * m = method();
       StubRoutines::call_stub()(
         (address)&link, //方法链接，此变量的类型为JavaCallWrapper，这个变量对于栈展开过程非常重要
         // (intptr_t*)&(result->_value), // see NOTE above (compiler problem)
         result_val_address,          // see NOTE above (compiler problem) 函数返回值地址
         result_type,    // 函数返回类型
-        method(),   // 当前要执行的方法。通过此参数可以获取到Java方法所有的元数据信息，包括最重要的字节码信息，这样就可以根据字节码信息解释执行这个方法了
+        m,   // 当前要执行的方法。通过此参数可以获取到Java方法所有的元数据信息，包括最重要的字节码信息，这样就可以根据字节码信息解释执行这个方法了
         entry_point,    // 用于后续帧开辟, entry_point 会从 method() 中获取出 Java Method 的第一个字节码命令(Opcode)，也就是整个 Java Method 的调用入口，
                         // HotSpot每次在调用Java函数时，必然会调用CallStub函数指针，这个函数指针的值取自_call_stub_entry，HotSpot通过_call_stub_entry指向被调用函数地址。
                         // 在调用函数之前，必须要先经过entry_point，HotSpot实际是通过entry_point从method()对象上拿到Java方法对应的第1个字节码命令，这也是整个函数的调用入口

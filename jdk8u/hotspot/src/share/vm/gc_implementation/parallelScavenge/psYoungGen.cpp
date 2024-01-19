@@ -817,9 +817,9 @@ void PSYoungGen::print_on(outputStream* st) const {
 void PSYoungGen::print_used_change(size_t prev_used) const {
   slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psYoungGen.cpp中的PSYoungGen::print_used_change函数...");
   gclog_or_tty->print("[%s:", name());
-  gclog_or_tty->print(" GC之前新生代内存占用:"  SIZE_FORMAT "K"
-                      "->GC之后新生代内存占用:" SIZE_FORMAT "K"
-                      "(新生代内存容量:"  SIZE_FORMAT "K)",
+  gclog_or_tty->print(" "  SIZE_FORMAT "K"
+                      "->" SIZE_FORMAT "K"
+                      "("  SIZE_FORMAT "K)",
                       prev_used / K, used_in_bytes() / K,
                       capacity_in_bytes() / K);
   gclog_or_tty->print("]");

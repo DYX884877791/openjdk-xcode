@@ -188,6 +188,7 @@ void* Thread::allocate(size_t size, bool throw_excpt, MEMFLAGS flags) {
     void* real_malloc_addr = throw_excpt? AllocateHeap(aligned_size, flags, CURRENT_PC)
                                           : AllocateHeap(aligned_size, flags, CURRENT_PC,
                                               AllocFailStrategy::RETURN_NULL);
+      // 内存对齐...
     void* aligned_addr     = (void*) align_size_up((intptr_t) real_malloc_addr, alignment);
     assert(((uintptr_t) aligned_addr + (uintptr_t) size) <=
            ((uintptr_t) real_malloc_addr + (uintptr_t) aligned_size),
@@ -882,6 +883,9 @@ void Thread::print_on(outputStream* st) const {
       st->print("os_prio=%d ", os_prio);
     }
     st->print("tid=" INTPTR_FORMAT " ", this);
+    #if defined(__linux__) || defined(__APPLE__)
+      st->print("pthread_id=" INTPTR_FORMAT " ", osthread()->pthread_id());
+    #endif
     ext().print_on(st);
       // 最后是状态信息
     osthread()->print_on(st);
@@ -892,13 +896,21 @@ void Thread::print_on(outputStream* st) const {
 // Thread::print_on_error() is called by fatal error handler. Don't use
 // any lock or allocate memory.
 void Thread::print_on_error(outputStream* st, char* buf, int buflen) const {
-  if      (is_VM_thread())                  st->print("VMThread");
-  else if (is_Compiler_thread())            st->print("CompilerThread");
-  else if (is_Java_thread())                st->print("JavaThread");
-  else if (is_GC_task_thread())             st->print("GCTaskThread");
-  else if (is_Watcher_thread())             st->print("WatcherThread");
-  else if (is_ConcurrentGC_thread())        st->print("ConcurrentGCThread");
-  else st->print("Thread");
+  if      (is_VM_thread()) {
+      st->print("VMThread");
+  } else if (is_Compiler_thread()) {
+      st->print("CompilerThread");
+  } else if (is_Java_thread()) {
+      st->print("JavaThread");
+  } else if (is_GC_task_thread()) {
+      st->print("GCTaskThread");
+  } else if (is_Watcher_thread()) {
+      st->print("WatcherThread");
+  } else if (is_ConcurrentGC_thread()) {
+      st->print("ConcurrentGCThread");
+  } else {
+      st->print("Thread");
+  }
 
   st->print(" [stack: " PTR_FORMAT "," PTR_FORMAT "]",
             _stack_base - _stack_size, _stack_base);
@@ -1804,6 +1816,7 @@ void JavaThread::thread_main_inner() {
 
 
 static void ensure_join(JavaThread* thread) {
+  slog_debug("进入hotspot/src/share/vm/runtime/thread.cpp中的ensure_join函数...");
   // We do not need to grap the Threads_lock, since we are operating on ourself.
   Handle threadObj(thread, thread->threadObj());
   assert(threadObj.not_null(), "java thread object must exist");
@@ -1824,6 +1837,7 @@ static void ensure_join(JavaThread* thread) {
   // Ignore pending exception (ThreadDeath), since we are exiting anyway
     // 清除待处理异常
   thread->clear_pending_exception();
+    // 退出ensure_join时，会释放掉ObjectLocker实例，会调用ObjectLocker对应的析构函数，而在析构函数中，进行解锁操作...
 }
 
 
@@ -3996,10 +4010,14 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     }
   }
 
+    // 启动一个WatcherThread线程来执行周期性任务
   {
+      // 通过MutexLocker来锁定PeriodicTask_lock，确保WatcherThread
+      // 可以通过WatcherThread::start()或动态注册来启动
       MutexLockerEx ml(PeriodicTask_lock, Mutex::_no_safepoint_check_flag);
       // Make sure the watcher thread can be started by WatcherThread::start()
       // or by dynamic enrollment.
+      // 将WatcherThread设置为可启动状态
       // 确保WatcherThread可以通过start()的形式启动
       WatcherThread::make_startable();
       // Start up the WatcherThread if there are any periodic tasks
@@ -4007,6 +4025,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       //   aren't, late joiners might appear to start slowly (we might
       //   take a while to process their first tick).
       // 如果有任何周期的监控任务则启动监控线程
+      // 如果有周期性任务，则启动WatcherThread线程来执行任务。
+      // 需要注意的是，所有的周期性任务应该在此之前都已经注册了，
+      // 否则晚注册的任务可能会启动缓慢。
       if (PeriodicTask::num_tasks() > 0) {
           WatcherThread::start();
       }

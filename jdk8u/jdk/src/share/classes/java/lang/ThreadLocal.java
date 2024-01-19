@@ -75,6 +75,10 @@ import java.util.function.Supplier;
  */
 public class ThreadLocal<T> {
     /**
+     *  当前threadLocal对象的hashCode
+     *  threadLocal对象的hashCode生成器 [cas操作保证线程安全]
+     *  相邻创建的两个threadLocal的hashCode的差值
+     *
      * ThreadLocals rely on per-thread linear-probe hash maps attached
      * to each thread (Thread.threadLocals and
      * inheritableThreadLocals).  The ThreadLocal objects act as keys,
@@ -151,6 +155,12 @@ public class ThreadLocal<T> {
     }
 
     /**
+     *  获取当前线程对应的ThreadLocalMap
+     *  如果map不为null，获取该map中this对应的entry，进而获取当前线程对应当前threadLocal对应的数据
+     *      如果该数据不为null，则返回
+     *      否则 设置当前线程对应当前threadLocal对应的数据为initialValue()
+     *  否则 为当前线程创建threadLocalMap  并且设置当前线程对应当前threadLocal对应的数据为initialValue()
+     *
      * Returns the value in the current thread's copy of this
      * thread-local variable.  If the variable has no value for the
      * current thread, it is first initialized to the value returned
@@ -195,6 +205,8 @@ public class ThreadLocal<T> {
         T value = initialValue();
         Thread t = Thread.currentThread();
         ThreadLocalMap map = getMap(t);
+        // 获取当前线程的threadLocalMap 设置默认值 如果该map为null 则创建一个threadLocalMap 并设置初始值
+        // 返回initialValue
         if (map != null) {
             map.set(this, value);
         } else {
@@ -216,6 +228,8 @@ public class ThreadLocal<T> {
      *        this thread-local.
      */
     public void set(T value) {
+        // 获取当前线程的threadLocalMap 如果map为null 创建一个
+        // 添加value到该threadLocalMap
         Thread t = Thread.currentThread();
         ThreadLocalMap map = getMap(t);
         if (map != null) {
@@ -237,6 +251,7 @@ public class ThreadLocal<T> {
      * @since 1.5
      */
      public void remove() {
+         // 获取当前线程的threadLocalMap 并移除当前threadLocal对象所对应的对象
          ThreadLocalMap m = getMap(Thread.currentThread());
          if (m != null) {
              m.remove(this);
@@ -262,6 +277,7 @@ public class ThreadLocal<T> {
      * @param firstValue value for the initial entry of the map
      */
     void createMap(Thread t, T firstValue) {
+        // 创建一个ThreadLocalMap 并添加一个初值
         t.threadLocals = new ThreadLocalMap(this, firstValue);
     }
 
@@ -365,6 +381,8 @@ public class ThreadLocal<T> {
         }
 
         /**
+         * 如果i+1没有超过len 则返回i+1 否则返回0, 构成一个循环
+         *
          * Increment i modulo len.
          */
         private static int nextIndex(int i, int len) {
@@ -432,6 +450,8 @@ public class ThreadLocal<T> {
          * @return the entry associated with key, or null if no such
          */
         private Entry getEntry(ThreadLocal<?> key) {
+            // 通过key的threadLocalHashCode计算出当前线程存储的对象的索引 如果该索引对应的entry不为null 并且该entry.get == key 返回该entry
+            // 在该索引之后到下一个空entry之间查找key匹配的entry
             int i = key.threadLocalHashCode & (table.length - 1);
             Entry e = table[i];
             if (e != null && e.get() == key)
@@ -453,6 +473,18 @@ public class ThreadLocal<T> {
             Entry[] tab = table;
             int len = tab.length;
 
+            // 从第i开始遍历 直到tab[index]为null[下一个为null的entry]
+            //      如果e.threadLocal 和key是同一个对象 返回e
+            //      如果e.threadLocal为null[key被gc]  清空该元素, 以及更新各个符合条件的entry的位置
+            //          否则更新index
+            // 如果没有找到 则表示没有该key对应的entry
+
+            /*
+             * 因为存放的时候是先查找[index = threadLocal.hashCode & len]
+             * 如果该index的entry为null 或者该entry对应的key即为当前threadLocal 则设置值
+             * 否则查找到下一个key被gc 或者为null的entry设置值
+             * 而且每一次修改Map的时候, 会做一些维护性质的操作
+             */
             while (e != null) {
                 ThreadLocal<?> k = e.get();
                 if (k == key)
@@ -481,7 +513,15 @@ public class ThreadLocal<T> {
 
             Entry[] tab = table;
             int len = tab.length;
+            // 获取到threadLocal对应的索引
             int i = key.threadLocalHashCode & (len-1);
+            // 遍历i之后的entry 直到该entry为null
+            //     如果当前entry.threadLocal和key是同一个对象 更新value
+            //     如果当前entry.threadLocal为null[该threadLocal被gc了] replaceStaleEntry
+            //         向后查找是否存在和当前threadLocal匹配的entry, 如果有则将其替换到当前位置
+            //         否则 则在当前位置创建一个entry
+            // 遍历到了为null的entry 则设置entry  清理对象
+            // 如果没有清除任何对象 并且size超过了阈值 进行扩容
 
             for (Entry e = tab[i];
                  e != null;
@@ -512,6 +552,7 @@ public class ThreadLocal<T> {
             Entry[] tab = table;
             int len = tab.length;
             int i = key.threadLocalHashCode & (len-1);
+            // 从i开始遍历 如果存在一个entry.threadLocal == key则清除该entry, 并从该位置开始, 清空key被gc的元素, 向前移动符合条件的非空元素, 直到碰到空元素
             for (Entry e = tab[i];
                  e != null;
                  e = tab[i = nextIndex(i, len)]) {
@@ -608,10 +649,12 @@ public class ThreadLocal<T> {
          * for expunging).
          */
         private int expungeStaleEntry(int staleSlot) {
+            // 对于第staleSlot之后的元素, 直到碰到null元素, 清空key被gc的元素, 向前移动符合条件的非空元素
             Entry[] tab = table;
             int len = tab.length;
 
             // expunge entry at staleSlot
+            // 清除第i个entry的数据 更新size
             tab[staleSlot].value = null;
             tab[staleSlot] = null;
             size--;
@@ -619,21 +662,26 @@ public class ThreadLocal<T> {
             // Rehash until we encounter null
             Entry e;
             int i;
+            // 从slateSlot向后循环遍历 直到tab[nextIndex]为null 不再循环
             for (i = nextIndex(staleSlot, len);
                  (e = tab[i]) != null;
                  i = nextIndex(i, len)) {
                 ThreadLocal<?> k = e.get();
+                // 如果该entry依赖的threadLocal为null[key被gc的entry] 清除该entry的数据 更新size
+                // 否则 再次获取该threadLocal对应的索引 如果该索引不为i 清除第i个entry的数据 然后将数据复制到h之后第一个entry为null的entry处
                 if (k == null) {
                     e.value = null;
                     tab[i] = null;
                     size--;
                 } else {
+                    // 在次获取该threadLocal的存放值的索引 如果h不为当前的索引则  清理tab[i] 将数据复制到h之后第一个entry为null的entry处
                     int h = k.threadLocalHashCode & (len - 1);
                     if (h != i) {
                         tab[i] = null;
 
                         // Unlike Knuth 6.4 Algorithm R, we must scan until
                         // null because multiple entries could have been stale.
+                        // 找到h之后第一个entry为null的索引 给该entry赋值
                         while (tab[h] != null)
                             h = nextIndex(h, len);
                         tab[h] = e;
@@ -702,10 +750,12 @@ public class ThreadLocal<T> {
         private void resize() {
             Entry[] oldTab = table;
             int oldLen = oldTab.length;
+            // 长度变为原来长度的2倍 新建Entry数组
             int newLen = oldLen * 2;
             Entry[] newTab = new Entry[newLen];
             int count = 0;
 
+            // 遍历原来的tab 添加oldTab中的数据到newTab中
             for (int j = 0; j < oldLen; ++j) {
                 Entry e = oldTab[j];
                 if (e != null) {
@@ -714,6 +764,7 @@ public class ThreadLocal<T> {
                         e.value = null; // Help the GC
                     } else {
                         int h = k.threadLocalHashCode & (newLen - 1);
+                        // 获取索引 如果最合适的索引存在值 则访问下一个索引 直到找到下一个entry为null的entry
                         while (newTab[h] != null)
                             h = nextIndex(h, newLen);
                         newTab[h] = e;
@@ -722,6 +773,7 @@ public class ThreadLocal<T> {
                 }
             }
 
+            // 更新threshold, size, tab
             setThreshold(newLen);
             size = count;
             table = newTab;

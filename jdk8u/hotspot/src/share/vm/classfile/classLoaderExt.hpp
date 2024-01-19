@@ -61,6 +61,7 @@ public:
 
   static void add_class_path_entry(const char* path, bool check_for_duplicates,
                                    ClassPathEntry* new_entry) {
+      //添加到链表
     ClassLoader::add_to_list(new_entry);
   }
   static void append_boot_classpath(ClassPathEntry* new_entry) {

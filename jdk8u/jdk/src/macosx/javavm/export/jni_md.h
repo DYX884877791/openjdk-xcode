@@ -26,6 +26,16 @@
 #ifndef _JAVASOFT_JNI_MD_H_
 #define _JAVASOFT_JNI_MD_H_
 
+/**
+ * 因为在hotspot/make/bsd/makefiles/gcc.make中设置了CFLAGS += -fvisibility=hidden，
+ *
+ * 意味着，动态库中的函数默认是隐藏的，除非代码中显示声明为__attribute__((visibility("default"))).
+ *
+ * 所以这里通过宏定义了符号的可见属性，
+ * __attribute__((visibility("default")))
+ *
+ * https://blog.csdn.net/starstarstone/article/details/7493144?utm_source=tuicool
+ */
 #define JNIEXPORT     __attribute__((visibility("default")))
 #define JNIIMPORT     __attribute__((visibility("default")))
 #define JNICALL

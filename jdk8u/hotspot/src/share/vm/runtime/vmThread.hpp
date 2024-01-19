@@ -89,6 +89,8 @@ class VMOperationQueue : public CHeapObj<mtInternal> {
 // and is itself used by other threads to offload heavy vm operations
 // like scavenge, garbage_collect etc.
 //
+//
+//
 
 // 表示一个特殊的专门用来执行比较耗时的VM_Operation的原生线程，VMThread线程在整个JAVA进程有且只会有一个。
 // 可以想象一下VMThread线程的简单执行过程：不断地轮询某个任务列表并在有任务时依次执行任务。

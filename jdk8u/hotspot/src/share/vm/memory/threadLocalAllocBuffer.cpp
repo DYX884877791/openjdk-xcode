@@ -195,24 +195,34 @@ void ThreadLocalAllocBuffer::initialize(HeapWord* start,
 }
 
 void ThreadLocalAllocBuffer::initialize() {
+    //设置初始指针，由于还没有从 Eden 分配内存，所以这里都设置为 NULL
   initialize(NULL,                    // start
              NULL,                    // top
              NULL);                   // end
 
+    //计算初始期望大小，并设置
   set_desired_size(initial_desired_size());
 
   // Following check is needed because at startup the main
   // thread is initialized before the heap is.  The initialization for
   // this thread is redone in startup_initialization below.
   if (Universe::heap() != NULL) {
+      //所有 TLAB 总大小，不同的 GC 实现有不同的 TLAB 容量， 一般是 Eden 区大小
+      //例如 G1 GC，就是等于 (_policy->young_list_target_length() - _survivor.length()) * HeapRegion::GrainBytes，可以理解为年轻代减去Survivor区，也就是Eden区
     size_t capacity   = Universe::heap()->tlab_capacity(myThread()) / HeapWordSize;
     // Keep alloc_frac as float and not double to avoid the double to float conversion
+      //计算这个线程的 TLAB 期望占用所有 TLAB 总体大小比例
+      //TLAB 期望占用大小也就是这个 TLAB 大小乘以期望 refill 的次数
     float alloc_frac = desired_size() * target_refills() / (float) capacity;
+      //记录下来，用于计算 EMA
     _allocation_fraction.sample(alloc_frac);
   }
 
+    //计算初始 refill 最大浪费空间，并设置
+    //如前面原理部分所述，初始大小就是 TLAB 的大小（_desired_size） / TLABRefillWasteFraction
   set_refill_waste_limit(initial_refill_waste_limit());
 
+    //重置统计
   initialize_statistics();
 }
 
@@ -220,6 +230,8 @@ void ThreadLocalAllocBuffer::startup_initialization() {
 
   // Assuming each thread's active tlab is, on average,
   // 1/2 full at a GC
+    // 假设平均下来，GC 扫描的时候，每个线程当前的 TLAB 都有一半的内存被浪费，这个每个线程使用内存的浪费的百分比率（也就是 TLABWasteTargetPercent），也就是等于（注意，仅最新的那个 TLAB 有浪费，之前 refill 退回的假设是没有浪费的）：1/2 * (每个 epoch 内每个线程期望 refill 次数) * 100
+    //那么每个 epoch 内每个线程 refill 次数配置就等于 50 / TLABWasteTargetPercent， 默认也就是 50 次。
   _target_refills = 100 / (2 * TLABWasteTargetPercent);
   _target_refills = MAX2(_target_refills, (unsigned)1U);
 
@@ -227,6 +239,7 @@ void ThreadLocalAllocBuffer::startup_initialization() {
 
   // During jvm startup, the main thread is initialized
   // before the heap is initialized.  So reinitialize it now.
+    // 初始化 main 线程的 TLAB
   guarantee(Thread::current()->is_Java_thread(), "tlab initialization thread not Java thread");
   Thread::current()->tlab().initialize();
 
@@ -236,19 +249,30 @@ void ThreadLocalAllocBuffer::startup_initialization() {
   }
 }
 
+//计算初始大小
 size_t ThreadLocalAllocBuffer::initial_desired_size() {
   size_t init_sz = 0;
 
+    //如果通过 -XX:TLABSize 设置了 TLAB 大小，则用这个值作为初始期望大小
+    //表示堆内存占用大小都需要用占用几个 HeapWord 表示，所以用TLABSize / HeapWordSize
   if (TLABSize > 0) {
     init_sz = TLABSize / HeapWordSize;
   } else if (global_stats() != NULL) {
     // Initial size is a function of the average number of allocating threads.
+      //获取当前epoch内线程数量期望，这个如之前所述通过 EMA 预测
     unsigned nof_threads = global_stats()->allocating_threads_avg();
 
+      //不同的 GC 实现有不同的 TLAB 容量，Universe::heap()->tlab_capacity(thread()) 一般是 Eden 区大小
+      //例如 G1 GC，就是等于 (_policy->young_list_target_length() - _survivor.length()) * HeapRegion::GrainBytes，可以理解为年轻代减去Survivor区，也就是Eden区
+      //整体大小等于 Eden区大小/(当前 epcoh 内会分配对象期望线程个数 * 每个 epoch 内每个线程 refill 次数配置)
+      //target_refills已经在 JVM 初始化所有 TLAB 全局配置的时候初始化好了
     init_sz  = (Universe::heap()->tlab_capacity(myThread()) / HeapWordSize) /
                       (nof_threads * target_refills());
+      //考虑对象对齐，得出最后的大小
     init_sz = align_object_size(init_sz);
   }
+    //保持大小在  min_size() 还有 max_size() 之间
+    //min_size主要由 MinTLABSize 决定
   init_sz = MIN2(MAX2(init_sz, min_size()), max_size());
   return init_sz;
 }

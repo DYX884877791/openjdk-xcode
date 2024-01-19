@@ -55,6 +55,7 @@
 #include "runtime/vm_operations.hpp"
 #include "services/memoryService.hpp"
 #include "utilities/stack.inline.hpp"
+#include "utilities/slog.hpp"
 
 PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 
@@ -230,6 +231,7 @@ bool PSScavenge::invoke() {
   IsGCActiveMark mark;
 
   const bool scavenge_done = PSScavenge::invoke_no_policy();
+    // 如果需要full gc那么就进入if块，然后执行full gc逻辑
   const bool need_full_gc = !scavenge_done ||
     policy->should_full_GC(heap->old_gen()->free_in_bytes());
   bool full_gc_done = false;
@@ -261,6 +263,7 @@ bool PSScavenge::invoke() {
 // This method contains no policy. You should probably
 // be calling invoke() instead.
 bool PSScavenge::invoke_no_policy() {
+  slog_debug("进入hotspot/src/share/vm/gc_implementation/parallelScavenge/psScavenge.cpp中的PSScavenge::invoke_no_policy函数...");
   assert(SafepointSynchronize::is_at_safepoint(), "should be at safepoint");
   assert(Thread::current() == (Thread*)VMThread::vm_thread(), "should be in vm thread");
 

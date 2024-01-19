@@ -64,6 +64,7 @@
 #include "utilities/growableArray.hpp"
 #include "utilities/macros.hpp"
 #include "utilities/ostream.hpp"
+#include "utilities/slog.hpp"
 
 ClassLoaderData * ClassLoaderData::_the_null_class_loader_data = NULL;
 
@@ -266,10 +267,11 @@ void ClassLoaderData::Dependencies::add(Handle dependency, TRAPS) {
 void ClassLoaderData::Dependencies::locked_add(objArrayHandle last_handle,
                                                objArrayHandle new_dependency,
                                                Thread* THREAD) {
-
+  slog_debug("进入hotspot/src/share/vm/classfile/classLoaderData.cpp中的ClassLoaderData::Dependencies::locked_add函数...");
   // Have to lock and put the new dependency on the end of the dependency
   // array so the card mark for CMS sees that this dependency is new.
   // Can probably do this lock free with some effort.
+  slog_debug("即将创建一个ObjectLocker实例...");
   ObjectLocker ol(Handle(THREAD, _list_head), THREAD);
 
   oop loader_or_mirror = new_dependency->obj_at(0);

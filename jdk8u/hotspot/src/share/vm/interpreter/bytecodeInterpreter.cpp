@@ -45,6 +45,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "runtime/threadCritical.hpp"
 #include "utilities/exceptions.hpp"
+#include "utilities/slog.hpp"
 
 // no precompiled headers
 #ifdef CC_INTERP
@@ -448,9 +449,11 @@
 #if defined(VM_JVMTI)
 void
 BytecodeInterpreter::runWithChecks(interpreterState istate) {
+ slog_debug("进入hotspot/src/share/vm/interpreter/bytecodeInterpreter.cpp中的BytecodeInterpreter::runWithChecks函数...");
 #else
 void
 BytecodeInterpreter::run(interpreterState istate) {
+ slog_debug("进入hotspot/src/share/vm/interpreter/bytecodeInterpreter.cpp中的BytecodeInterpreter::run函数...");
 #endif
 
   // In order to simplify some tests based on switches set at runtime
@@ -1814,6 +1817,7 @@ run:
       /* monitorenter and monitorexit for locking/unlocking an object */
 
       CASE(_monitorenter): {
+        slog_debug("进入操作码opcode为_monitorenter的分支...");
         oop lockee = STACK_OBJECT(-1);
         // derefing's lockee ought to provoke implicit null check
         CHECK_NULL(lockee);

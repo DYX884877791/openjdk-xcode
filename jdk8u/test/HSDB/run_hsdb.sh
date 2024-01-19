@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-. ./set_java_env.sh
+CUR_DIR=`cd $(dirname $0) && pwd`
+. ${CUR_DIR}/set_java_env.sh
 
 pid=$(ps -ef | grep java | grep "${java_main_class}" | grep -v grep | awk '{print $2}')
 if test -n $pid; then

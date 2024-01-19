@@ -198,11 +198,11 @@ public:
 
 class PlatformEvent : public CHeapObj<mtInternal> {
   private:
-    double CachePad [4] ;   // increase odds that _mutex is sole occupant of cache line
-    volatile int _Event ;
-    volatile int _nParked ;
-    pthread_mutex_t _mutex  [1] ;
-    pthread_cond_t  _cond   [1] ;
+    double CachePad [4] ;   // increase odds that _mutex is sole occupant of cache line 和下面的PostPad一样，都是为了规避缓存行问题
+    volatile int _Event ;   // 只有两个值，0表示执行完park，1表示执行完unpark
+    volatile int _nParked ; // 只有两个值，1或者0，用来记录park的线程数
+    pthread_mutex_t _mutex  [1] ;   // 等待的锁，互斥量
+    pthread_cond_t  _cond   [1] ;   // 等待的条件，条件变量
     double PostPad  [2] ;
     Thread * _Assoc ;
 
@@ -212,6 +212,7 @@ class PlatformEvent : public CHeapObj<mtInternal> {
   public:
     PlatformEvent() {
       int status;
+        //初始化_cond和_mutex
       status = pthread_cond_init (_cond, NULL);
       assert_status(status == 0, status, "cond_init");
       status = pthread_mutex_init (_mutex, NULL);
@@ -233,8 +234,8 @@ class PlatformEvent : public CHeapObj<mtInternal> {
 
 class PlatformParker : public CHeapObj<mtInternal> {
   protected:
-    pthread_mutex_t _mutex [1] ;
-    pthread_cond_t  _cond  [1] ;
+    pthread_mutex_t _mutex [1] ;    // 锁 等待的锁
+    pthread_cond_t  _cond  [1] ;    // 条件变量，一个用于相对时间，一个用于绝对时间。等待的条件，等待一段时间时使用
 
   public:       // TODO-FIXME: make dtor private
     ~PlatformParker() { guarantee (0, "invariant") ; }
@@ -242,6 +243,7 @@ class PlatformParker : public CHeapObj<mtInternal> {
   public:
     PlatformParker() {
       int status;
+        //初始化_cond数组和_mutex
       status = pthread_cond_init (_cond, NULL);
       assert_status(status == 0, status, "cond_init");
       status = pthread_mutex_init (_mutex, NULL);

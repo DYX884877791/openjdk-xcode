@@ -83,7 +83,7 @@ class CodeSection VALUE_OBJ_CLASS_SPEC {
   typedef int csize_t;  // code size type; would be size_t except for history
 
  private:
-  // 汇编指令的开始地址
+  // 汇编指令的开始地址，address是指针unsigned char*的别名...
   address     _start;           // first byte of contents (instructions)
   // 用户打标的一个地址
   address     _mark;            // user mark, usually an instruction beginning

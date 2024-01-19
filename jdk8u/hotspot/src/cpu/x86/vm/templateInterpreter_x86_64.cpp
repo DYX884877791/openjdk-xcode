@@ -532,6 +532,11 @@ void InterpreterGenerator::generate_stack_overflow_check(void) {
 //      rax
 //      c_rarg0, c_rarg1, c_rarg2, c_rarg3, ...(param regs)
 //      rscratch1, rscratch2 (scratch regs)
+/**
+ * 在lock_method（）中，会在当前方法栈帧中分配一段空间，用于分配一个BasicObjectLock对象，
+ * 这个对象主要干两件事，一是记录将要锁的对象指针，二是用一个字长的空间，复制锁对象的markOop。
+ * 现在我们可能不知道这么做是为什么，但是后面就会清楚了。主要上面最后一步，调用了lock_object（）进行加锁：
+ */
 void InterpreterGenerator::lock_method(void) {
   // synchronize method
   const Address access_flags(rbx, Method::access_flags_offset());
@@ -561,6 +566,7 @@ void InterpreterGenerator::lock_method(void) {
     __ testl(rax, JVM_ACC_STATIC);
     // get receiver (assume this is frequent case)
       //将栈顶的执行方法调用的实例拷贝到rax中
+      //  局部变量表中第一个变量，存放着即将锁的对象指针，移动到rax中
     __ movptr(rax, Address(r14, Interpreter::local_offset_in_bytes(0)));
       //如果不是静态方法，则跳转到done
     __ jcc(Assembler::zero, done);
@@ -587,14 +593,18 @@ void InterpreterGenerator::lock_method(void) {
 
   // add space for monitor & lock
     //将rsp往下，即低地址端移动entry_size，即一个BasicObjectLock的大小
+    // 在当前栈帧中分配一个空间，用于分配一个BasicObjectLock对象
   __ subptr(rsp, entry_size); // add space for a monitor entry
     //将rsp地址写入栈帧中monitor_block_top地址
   __ movptr(monitor_block_top, rsp);  // set new monitor block top
   // store object
     //将rax即跟锁关联的对象保存到BasicObjectLock的obj属性
+    // 将要锁的对象指针移动到分配的BasicObjectLock中的obj变量
   __ movptr(Address(rsp, BasicObjectLock::obj_offset_in_bytes()), rax);
     //将rsp地址拷贝到c_rarg1，即BasicObjectLock实例的地址
+    //将分配的BasicObjectLock的指针移动到lockreg寄存器中
   __ movptr(c_rarg1, rsp); // object address
+    //加锁
     //调用lock_object加锁，实现加锁的lock_object方法跟 synchronized修饰代码块时调用方法是一样的，都是InterpreterMacroAssembler::lock_object方法
   __ lock_object(c_rarg1);
 }
@@ -1208,6 +1218,7 @@ address InterpreterGenerator::generate_native_entry(bool synchronized) {
     // 必须在invocation_counter之后执行
   if (synchronized) {
       //获取方法的锁
+      // 对于同步方法，entry_point例程插入了一道关卡：lock_method()
     lock_method();
   } else {
     // no synchronization necessary ASSERT代码块用于检测该方法的flags不包含ACC_SYNCHRONIZED，即不是synchronized关键字修饰的方法

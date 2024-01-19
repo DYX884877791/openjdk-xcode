@@ -261,7 +261,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     slog_flag_t eFlag = ParseSlogLevel(&argc, &argv);
 
     if (eFlag == SLOG_UNKNOWN) {
-        JLI_ReportMessage("sloglevel support one of following levels: \"%s\"",  slog_get_all_levels());
+        JLI_ReportMessage("The level of slog only support one of following levels: \"%s\"",  slog_get_all_levels());
         return(1);
     }
 

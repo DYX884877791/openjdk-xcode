@@ -58,6 +58,7 @@ bool               CompilationPolicy::_in_vm_startup;
 void compilationPolicy_init() {
   CompilationPolicy::set_in_vm_startup(DelayCompilationDuringStartup);
 
+  // 在Arguments::set_tiered_flags中设置CompilationPolicyChoice在 server 下的默认值为3
   switch(CompilationPolicyChoice) {
   case 0:
     CompilationPolicy::set_policy(new SimpleCompPolicy());

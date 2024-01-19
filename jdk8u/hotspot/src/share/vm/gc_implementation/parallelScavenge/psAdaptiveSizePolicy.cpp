@@ -192,7 +192,7 @@ void PSAdaptiveSizePolicy::major_collection_end(size_t amount_live,
   _major_timer.start();
 }
 
-//如果晋升到老年代的平均大小大于老年代的剩余大小，则认为要进行一次full gc
+// 如果老年代的剩余空间少于下一次收集所需的剩余空间，那么现在就做一个完整的收集。
 // If the remaining free space in the old generation is less that
 // that expected to be needed by the next collection, do a full
 // collection now.
@@ -200,6 +200,7 @@ bool PSAdaptiveSizePolicy::should_full_GC(size_t old_free_in_bytes) {
 
   // A similar test is done in the scavenge's should_attempt_scavenge().  If
   // this is changed, decide if that test should also be changed.
+    //如果晋升到老年代的平均大小大于老年代的剩余大小，则认为要进行一次full gc
   bool result = padded_average_promoted_in_bytes() > (float) old_free_in_bytes;
   if (PrintGCDetails && Verbose) {
     if (result) {

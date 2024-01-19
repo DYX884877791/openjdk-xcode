@@ -34,7 +34,7 @@ this_script_dir=`cd $this_script_dir > /dev/null && pwd`
 # This trick is needed to get autoconf to co-operate properly.
 # configure文件只是一个wrapper文件. 实际是会直接调用: $this_script_dir/common/autoconf/configure 脚本.
 # 进入工程目录的configure脚本,可以看到这个只是一个简单的包装,主要是确定了该脚本的绝对地址,实际调用的是common/autoconf/configure文件
-# bash -c String 使用：直接把Sring的内容当成脚本内容进行执行.
+# bash -c String 使用：直接把String的内容当成脚本内容进行执行.
 # 这个说明 -c 后面的string参数实际就是命令序列. 或者说其就是shell的文件内容本身.
 # 比如我们可以这样写:bash -c 'ls -lash;pwd', 以上的命令会先执行ls命令,再执行pwd 命令.
 bash -c ". $this_script_dir/common/autoconf/configure" $this_script_dir/configure CHECKME $this_script_dir "$@"

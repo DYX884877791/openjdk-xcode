@@ -133,6 +133,7 @@ PerfCounter*    ClassLoader::_unsafe_defineClassCallCounter = NULL;
 PerfCounter*    ClassLoader::_isUnsyncloadClass = NULL;
 PerfCounter*    ClassLoader::_load_instance_class_failCounter = NULL;
 
+// 每个定义的目录都是以ClassPathEntry为表现形式...
 ClassPathEntry* ClassLoader::_first_entry         = NULL;
 ClassPathEntry* ClassLoader::_last_entry          = NULL;
 int             ClassLoader::_num_entries         = 0;
@@ -635,6 +636,7 @@ void ClassLoader::check_shared_classpath(const char *path) {
 
 void ClassLoader::setup_bootstrap_search_path() {
   assert(_first_entry == NULL, "should not setup bootstrap class search path twice");
+    // 获取sys_class_path
   const char* sys_class_path = Arguments::get_sysclasspath();
   if (PrintSharedArchiveAndExit) {
     // Don't print sys_class_path - this is the bootcp of this current VM process, not necessarily
@@ -822,6 +824,7 @@ bool ClassLoader::update_class_path_entry_list(const char *path,
     // File or directory found
     ClassPathEntry* new_entry = NULL;
     Thread* THREAD = Thread::current();
+      //以ClassPathEntry表示
     new_entry = create_class_path_entry(path, &st, LazyBootClassLoader, throw_exception, CHECK_(false));
     if (new_entry == NULL) {
       return false;
@@ -1170,6 +1173,7 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     PerfClassTraceTime vmtimer(perf_sys_class_lookup_time(),
                                ((JavaThread*) THREAD)->get_thread_stat()->perf_timers_addr(),
                                PerfClassTraceTime::CLASS_LOAD);
+      //BootStralClassLoader加载的包是存放在_first_entry中的，这个是一个链表结构
       // 遍历class_path找到要加载的类文件，获取到文件的绝对路径后就创建ClassFileStream对象。ClassPathEntry 是一个链表结构（因为class path有多个），
       // 同时在ClassPathEntry中还声明了一个虚函数open_stream()。
       // 这样就可以通过循环遍历链表上的结构，直到查找到某个路径下名称为name的文件为止，这时候open_stream()函数会返回ClassFileStream实例。
@@ -1195,7 +1199,7 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
     // 在load_classfile()方法中获取到ClassFileStream实例后会调用ClassFileParser类中的parseClassFile()方法
   if (stream != NULL) {
     // class file found, parse it
-      //构建一个ClassFileParser实例
+      //构建一个ClassFileParser实例，这里做解析操作
     ClassFileParser parser(stream);
       //构建一个ClassLoaderData实例
     ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();

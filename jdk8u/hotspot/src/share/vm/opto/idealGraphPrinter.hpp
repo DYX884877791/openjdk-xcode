@@ -44,6 +44,7 @@ class ciMethod;
 class IdealGraphPrinter : public CHeapObj<mtCompiler> {
  private:
 
+    // 缩进...
   static const char *INDENT;
   static const char *TOP_ELEMENT;
   static const char *GROUP_ELEMENT;

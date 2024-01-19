@@ -588,6 +588,11 @@ class Arguments : AllStatic {
   static void set_library_path(char *value) { _java_library_path->set_value(value); }
   static void set_ext_dirs(char *value) { _java_ext_dirs->set_value(value); }
   static void set_endorsed_dirs(char *value) { _java_endorsed_dirs->set_value(value); }
+    /**
+     * 有两处地方调用该函数:
+     * 1. Arguments::finalize_vm_init_args
+     * 2. os::set_boot_path
+     */
   static void set_sysclasspath(char *value) { _sun_boot_class_path->set_value(value); }
   static void append_sysclasspath(const char *value) { _sun_boot_class_path->append_value(value); }
   static void set_meta_index_path(char* meta_index_path, char* meta_index_dir) {
@@ -598,6 +603,7 @@ class Arguments : AllStatic {
   static char* get_java_home() { return _java_home->value(); }
   static char* get_dll_dir() { return _sun_boot_library_path->value(); }
   static char* get_endorsed_dir() { return _java_endorsed_dirs->value(); }
+    // 获取的是_sun_boot_class_path的值，而_sun_boot_class_path是通过函数set_sysclasspath设置的
   static char* get_sysclasspath() { return _sun_boot_class_path->value(); }
   static char* get_meta_index_path() { return _meta_index_path; }
   static char* get_meta_index_dir()  { return _meta_index_dir;  }

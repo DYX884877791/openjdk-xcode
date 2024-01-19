@@ -3384,14 +3384,19 @@ JVM_ENTRY(void, JVM_SetThreadPriority(JNIEnv* env, jobject jthread, jint prio))
   // Ensure that the C++ Thread and OSThread structures aren't freed before we operate
     //获取Threads_lock锁
   MutexLocker ml(Threads_lock);
+    //转成 JVM 层使用的 oop 对象，它是 JVM 中对 Java 层 Thread 对象的描述。
     //获取关联的Thread实例oop
   oop java_thread = JNIHandles::resolve_non_null(jthread);
     //设置Thread实例的priority属性
+    //设置 oop 对象的优先级属性值，这里通过`java_lang_Thread::set_priority`来设置
   java_lang_Thread::set_priority(java_thread, (ThreadPriority)prio);
     //获取关联的JavaThread实例
+    //通过`java_lang_Thread::thread`获取 JavaThread 指针，即`(JavaThread*)java_thread->address_field(_eetop_offset)`，其中通过计算 eetop 偏移来获取，eetop 属于 Java 层的 Thread 类中的属性。
+    // 可以这样做的原因是 JavaThread 对象维护了一个指向 oop 的指针，而 oop 也同样维护了一个指向 JavaThread 对象的指针。
   JavaThread* thr = java_lang_Thread::thread(java_thread);
   if (thr != NULL) {                  // Thread not yet started; priority pushed down when it is
       //设置优先级
+      //最后调用`Thread::set_priority`来设置操作系统级别的线程优先级，通过调用`os::set_priority`来实现。
     Thread::set_priority(thr, (ThreadPriority)prio);
   }
 JVM_END
@@ -3424,6 +3429,7 @@ static void post_thread_sleep_event(EventThreadSleep* event, jlong millis) {
 }
 
 JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
+  slog_debug("进入hotspot/src/share/vm/prims/jvm.cpp中的JVM_Sleep函数...");
   JVMWrapper("JVM_Sleep");
 
   if (millis < 0) {
@@ -3431,6 +3437,7 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
   }
 
+    //判断并清除线程中断状态，如果中断状态为true，抛出中断异常
   if (Thread::is_interrupted (THREAD, true) && !HAS_PENDING_EXCEPTION) {
       //如果已经被中断则抛出异常
     THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");
@@ -3459,15 +3466,22 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
     if (ConvertSleepToYield) {
       os::yield();
     } else {
+        //获取并保存线程的旧状态
       ThreadState old_state = thread->osthread()->get_state();
         //将osthread的状态置为SLEEPING
       thread->osthread()->set_state(SLEEPING);
+        //调用系统级别的sleep方法，此时只会睡眠最小时间间隔
       os::sleep(thread, MinSleepInterval, false);
+        //恢复线程状态
       thread->osthread()->set_state(old_state);
     }
   } else {
+      //如果睡眠时间大于0，也是做:sleep()操作，支持中断
+      //保存初始状态，返回时恢复原状态
     ThreadState old_state = thread->osthread()->get_state();
     thread->osthread()->set_state(SLEEPING);
+      //调用os::sleep方法，如果发生中断，抛出异常
+      //睡眠指定的毫秒数，并判断返回值
     if (os::sleep(thread, millis, true) == OS_INTRPT) {
       // An asynchronous exception (e.g., ThreadDeathException) could have been thrown on
       // us while we were sleeping. We do not overwrite those.

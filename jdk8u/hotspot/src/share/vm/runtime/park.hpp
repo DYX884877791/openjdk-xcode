@@ -28,6 +28,23 @@
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"
 /*
+ * Parker和ParkEvent的区别
+ * 在os_bsd.cpp中，存在两种形式的park/unpark功能：
+ * 1、PlatformEvent实现的park，unpark方法：
+ *      PlatformEvent::park();
+ *      PlatformEvent::park(jlong millis);
+ *      PlatformEvent::unpark()
+ * 2、Parker实现的park，unpark方法：
+ *      Parker::park(bool isAbsolute, jlong time);
+ *      Parker::unpark();
+ * 它们的区别可以在park.hpp的源码注释中看到：
+ * 意思是说ParkEvent是用于java级别的synchronize关键字，Parker是JSR166来的并发工具集合，后面会统一使用ParkEvent。
+ * ParkerEvent继承了PlatformEvent。基类PlatformEvent是特定于平台的，而ParkEvent则是平台无关的。
+ * Parker继承自PlatformParker。
+ *
+ * ParkerEvent中的park，unpark方法用于实现Java的object.wait()方法和object.notify()方法;
+ * Parker中的park，unpark方法用于实现Java的Locksupprt.park()方法和Locksupprt.unpark()方法;
+ *
  * Per-thread blocking support for JSR166. See the Java-level
  * Documentation for rationale. Basically, park acts like wait, unpark
  * like notify.
@@ -46,10 +63,11 @@
  */
 
 // Parker 继承自 os::PlatformParker，也就是说，由各个平台具体实现。比如：hotspot/src/os/linux/vm/os_linux.hpp->PlatformParker
-// 注意Parker是JavaThread的一个实例属性，Unsafe中park和unpark方法都是针对当前线程，即不存在两个不同的线程访问同一个Parker实例的情形，但是存在同一个Parker的park/unpark方法在同一个线程内被多次调用。
+// 注意Parker是JavaThread的一个实例属性，Unsafe中park和unpark方法都是针对当前线程，即不存在两个不同的线程访问同一个Parker实例的情形，
+// 但是存在同一个Parker的park/unpark方法在同一个线程内被多次调用。
 class Parker : public os::PlatformParker {
 private:
-    // 重要变量，通过 0/1 表示是否持有许可，决定是否阻塞，用来表示Parker的状态，park方法执行完成为0，unpark方法执行完成为1，其中等于1说是一个非常短暂的状态，一旦线程被环境又会将其置为0
+    // 重要变量，通过 0/1 表示是否持有许可，决定是否阻塞，用来表示Parker的状态，park方法执行完成为0，unpark方法执行完成为1，其中等于1说是一个非常短暂的状态，一旦线程被唤醒又会将其置为0
   volatile int _counter ;
     // 下一个空闲的Parker
   Parker * FreeNext ;

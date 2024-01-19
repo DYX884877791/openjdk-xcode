@@ -3838,6 +3838,7 @@ void TemplateTable::athrow() {
 // ...
 // [saved rbp    ] <--- rbp
 void TemplateTable::monitorenter() {
+  slog_debug("进入hotspot/src/cpu/x86/vm/templateTable_x86_64.cpp中的TemplateTable::monitorenter函数...");
     //校验当前指令的栈顶缓存类型是否正确
   transition(atos, vtos);
 

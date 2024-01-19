@@ -102,6 +102,7 @@ int PeriodicTask::time_to_wait() {
 
 
 PeriodicTask::PeriodicTask(size_t interval_time) :
+  // 将interval_time赋值给了_interval属性，_interval是一个私有常量，以毫秒为单位，同时_counter设置为0：
   _counter(0), _interval((int) interval_time) {
   // Sanity check the interval time
   assert(_interval >= PeriodicTask::min_interval &&
@@ -124,6 +125,7 @@ void PeriodicTask::enroll() {
   }
   _tasks[_num_tasks++] = this;
 
+    // 可以看到最终还是使用了一个WatcherThread对象，WatcherThread是Thread对象的派生类，其定义在thread.hpp中。
   WatcherThread* thread = WatcherThread::watcher_thread();
   if (thread) {
     thread->unpark();

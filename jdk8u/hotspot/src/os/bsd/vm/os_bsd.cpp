@@ -712,7 +712,7 @@ static void *java_start(Thread *thread) {
 
   OSThread* osthread = thread->osthread();
   pthread_t pthread_id = osthread->pthread_id();
-  slog_debug("当前线程pthread_t为0x%zx,所属进程的pid为%d", pthread_id, pid);
+  slog_debug("当前线程pthread_id为[0x%016lx],所属进程的pid为[%d]", pthread_id, pid);
   Monitor* sync = osthread->startThread_lock();
 
   // non floating stack BsdThreads needs extra check, see above
@@ -720,20 +720,21 @@ static void *java_start(Thread *thread) {
     // notify parent thread
     MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
     osthread->set_state(ZOMBIE);
-    slog_debug("osThread线程的状态置为ZOMBIE，当前线程[0x%zx]即将调用sync->notify_all函数唤醒父线程，将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...");
+    slog_debug("osThread线程的状态置为ZOMBIE,当前线程pthread_id[0x%016lx]即将调用sync->notify_all函数唤醒父线程,"
+               "将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...", pthread_id);
     sync->notify_all();
     return NULL;
   }
 
   pid_t tid = os::Bsd::gettid();
-  slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id为0x%lx,并赋值给osthread的_thread_id变量", tid);
+  slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id_t(tid)为[0x%lx],并赋值给osthread的_thread_id变量", tid);
   osthread->set_thread_id(tid);
 
 #ifdef __APPLE__
     // https://blog.csdn.net/yxccc_914/article/details/79854603
   uint64_t unique_thread_id = locate_unique_thread_id(osthread->thread_id());
   guarantee(unique_thread_id != 0, "unique thread id was not found");
-  slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为0x%zx,并赋值给osthread的_unique_thread_id变量", unique_thread_id);
+  slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为[0x%016lx],并赋值给osthread的_unique_thread_id变量", unique_thread_id);
   osthread->set_unique_thread_id(unique_thread_id);
 #endif
   // initialize signal mask for this thread
@@ -757,15 +758,16 @@ static void *java_start(Thread *thread) {
     // notify parent thread
     // 唤醒父线程...
     osthread->set_state(INITIALIZED);
-    slog_debug("osThread线程的状态置为INITIALIZED，当前线程[0x%zx]即将调用sync->notify_all函数唤醒父线程，将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...", pthread_id);
+    slog_debug("osThread线程的状态置为INITIALIZED，当前线程pthread_id[0x%016lx]即将调用sync->notify_all函数唤醒父线程,"
+               "将会唤醒os_bsd.cpp中os::create_thread函数中的sync_with_child->wait...", pthread_id);
     sync->notify_all();
 
     // wait until os::start_thread()
     slog_debug("不停的查看osThread线程的状态是否为INITIALIZED...");
     while (osthread->get_state() == INITIALIZED) {
-      slog_debug("osThread线程的状态是INITIALIZED，当前线程[0x%zx]调用sync->wait函数进行等待(等待os::start_thread函数中修改osThread的状态并调用sync_with_child->notify函数进行唤醒)...", pthread_id);
+      slog_debug("osThread线程的状态是INITIALIZED，当前线程pthread_id[0x%016lx]调用sync->wait函数进行等待(等待os::start_thread函数中修改osThread的状态并调用sync_with_child->notify函数进行唤醒)...", pthread_id);
       sync->wait(Mutex::_no_safepoint_check_flag);
-      slog_debug("当前线程[0x%zx]被唤醒了，再次检查osThread线程的状态是否为INITIALIZED...", pthread_id);
+      slog_debug("当前线程pthread_id[0x%016lx]被唤醒了，再次检查osThread线程的状态是否为INITIALIZED...", pthread_id);
     }
     slog_debug("osThread线程的状态不为INITIALIZED，继续往下执行...");
   }
@@ -839,9 +841,9 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
   ThreadState state;
 
   {
-    pthread_t tid;
+    pthread_t _pthread_id;
     slog_debug("即将调用pthread_create库函数创建线程,回调函数是java_start...");
-    int ret = pthread_create(&tid, &attr, (void* (*)(void*)) java_start, thread);
+    int ret = pthread_create(&_pthread_id, &attr, (void* (*)(void*)) java_start, thread);
 
     pthread_attr_destroy(&attr);
 
@@ -856,19 +858,20 @@ bool os::create_thread(Thread* thread, ThreadType thr_type, size_t stack_size) {
     }
 
     // Store pthread info into the OSThread
-    slog_debug("创建的posix线程tid为0x%zx,并赋值给osThread对象的_pthread_id变量", tid);
-    osthread->set_pthread_id(tid);
+    slog_debug("创建的posix线程pthread_id为[0x%016lx],并赋值给osThread对象的_pthread_id变量", _pthread_id);
+    osthread->set_pthread_id(_pthread_id);
 
     // Wait until child thread is either initialized or aborted
     {
       Monitor* sync_with_child = osthread->startThread_lock();
       MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
       while ((state = osthread->get_state()) == ALLOCATED) {
-        slog_debug("在os::create_thread函数中，当前线程[0x%zx]即将调用sync_with_child->wait函数进行等待，等待java_start函数中修改osThread的状态并调用sync->notify_all函数进行唤醒...");
+        slog_debug("在os::create_thread函数中,当前线程pthread_id[0x%016lx]即将调用sync_with_child->wait函数进行等待,"
+                   "等待java_start函数中修改osThread的状态并调用sync->notify_all函数进行唤醒...", _pthread_id);
         sync_with_child->wait(Mutex::_no_safepoint_check_flag);
-        slog_debug("当前线程[0x%zx]被唤醒了，再次检查osThread线程的状态是否为ALLOCATED...", pthread_self());
+        slog_debug("当前线程pthread_id[0x%016lx]被唤醒了,再次检查osThread线程的状态是否为ALLOCATED...", _pthread_id);
       }
-      slog_debug("osThread线程的状态不为ALLOCATED，继续往下执行...");
+      slog_debug("osThread线程的状态不为ALLOCATED,继续往下执行...");
     }
 
   }
@@ -913,14 +916,14 @@ bool os::create_attached_thread(JavaThread* thread) {
   }
 
   pid_t tid = os::Bsd::gettid();
-  slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id为0x%lx,并赋值给osthread对象的_thread_id变量", tid);
+  slog_debug("调用os::Bsd::gettid()函数得到操作系统内核层面的thread_id_t(tid)为[0x%lx],并赋值给osthread对象的_thread_id变量...", tid);
   osthread->set_thread_id(tid);
 
   // Store pthread info into the OSThread
 #ifdef __APPLE__
   uint64_t unique_thread_id = locate_unique_thread_id(osthread->thread_id());
   guarantee(unique_thread_id != 0, "just checking");
-  slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为0x%zx,并赋值给osthread对象的_unique_thread_id变量", unique_thread_id);
+  slog_debug("在APPLE系统中,调用locate_unique_thread_id函数,得到的unique_thread_id值为[0x%016lx],并赋值给osthread对象的_unique_thread_id变量...", unique_thread_id);
   osthread->set_unique_thread_id(unique_thread_id);
 #endif
   osthread->set_pthread_id(::pthread_self());
@@ -947,7 +950,8 @@ void os::pd_start_thread(Thread* thread) {
   assert(osthread->get_state() != INITIALIZED, "just checking");
   Monitor* sync_with_child = osthread->startThread_lock();
   MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
-  slog_debug("在os::pd_start_thread函数中此时osThread线程的状态是RUNNABLE，当前线程[0x%zx]即将调用sync_with_child->notify函数，将会唤醒os_bsd.cpp中java_start函数中的sync->wait...", pthread_self());
+  slog_debug("在os::pd_start_thread函数中此时osThread线程的状态是RUNNABLE,当前线程pthread_id[0x%016lx]即将调用sync_with_child->notify函数,"
+             "将会唤醒os_bsd.cpp中java_start函数中的sync->wait...", osthread->pthread_id());
   sync_with_child->notify();
 }
 
@@ -1237,6 +1241,7 @@ pid_t os::Bsd::gettid() {
   int retval = -1;
 
 #ifdef __APPLE__ //XNU kernel
+  // https://blog.csdn.net/yxccc_914/article/details/79854603
   // despite the fact mach port is actually not a thread id use it
   // instead of syscall(SYS_thread_selfid) as it certainly fits to u4
   retval = ::pthread_mach_thread_np(::pthread_self());
@@ -2668,7 +2673,15 @@ size_t os::read_at(int fd, void *buf, unsigned int nBytes, jlong offset) {
 // generates a SIGUSRx signal. Note that SIGUSR1 can interfere with
 // SIGSEGV, see 4355769.
 
+// 通过阅读源码知道，原来sleep是通过pthread_cond_timedwait实现的，那么为什么不通过linux的sleep实现呢？
+//      1、pthread_cond_timedwait既可以堵塞在某个条件变量上，也可以设置超时时间；
+//      2、sleep不能及时唤醒线程,最小精度为秒；
+//
+// 可以看出pthread_cond_timedwait使用灵活，而且时间精度更高；
+// interruptible表示可中断的，即是否允许被打断
+// 如果millis>0,则这里传入的interruptible为true，否则为false
 int os::sleep(Thread* thread, jlong millis, bool interruptible) {
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::sleep函数...");
   assert(thread == Thread::current(),  "thread consistency check");
 
   ParkEvent * const slp = thread->_SleepEvent ;
@@ -2679,25 +2692,32 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
     jlong prevtime = javaTimeNanos();
 
     for (;;) {
+        //判断是否中断，检查打断标记，如果打断标记为true，则直接返回
         //如果线程已被中断
       if (os::is_interrupted(thread, true)) {
         return OS_INTRPT;
       }
 
+        //线程被唤醒后的当前时间戳
+        //获取当前时间
       jlong newtime = javaTimeNanos();
 
       if (newtime - prevtime < 0) {
+        //如果bsd不支持monotonic lock,有可能出现newtime
         // time moving backwards, should only happen if no monotonic clock
         // not a guarantee() because JVM should not abort on kernel/glibc bugs
         assert(!Bsd::supports_monotonic_clock(), "time moving backwards");
       } else {
+          //睡眠毫秒数减去当前已经经过的毫秒数
         millis -= (newtime - prevtime) / NANOSECS_PER_MILLISEC;
       }
 
+        //如果小于0，那么说明已经睡眠了足够多的时间，直接返回
       if(millis <= 0) {
         return OS_OK;
       }
 
+        //更新基准时间
       prevtime = newtime;
 
       {
@@ -2710,6 +2730,8 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
         // cleared by handle_special_suspend_equivalent_condition() or
         // java_suspend_self() via check_and_wait_while_suspended()
 
+          //调用_SleepEvent对象的park方法，阻塞线程,此处为重点代码，睡眠代码
+          //底层调用pthread_cond_timedwait实现
         slp->park(millis);
 
         // were we externally suspended while we were waiting?
@@ -2717,6 +2739,7 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
       }
     }
   } else {
+      //如果interruptible=false
     OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
     jlong prevtime = javaTimeNanos();
 
@@ -3165,6 +3188,9 @@ void os::interrupt(Thread* thread) {
 
 }
 
+/**
+ * clear_interrupted：表示是否清除中断标记..
+ */
 bool os::is_interrupted(Thread* thread, bool clear_interrupted) {
   assert(Thread::current() == thread || Threads_lock->owned_by_self(),
     "possibility of dangling Thread pointer");
@@ -3952,6 +3978,20 @@ ExtendedPC os::get_thread_pc(Thread* thread) {
   return fetcher.result();
 }
 
+/**
+ * pthread_cond_timedwait函数
+ * 在使用pthread_cond_timedwait()函数时，必须有三步:
+ *  (1)加互斥锁: pthread_mutex_lock(& mutex)
+ *  (2)等待:pthread_cond_timedwait(&cond,&mutex,& abstime)//解锁->等待->加锁
+ *  (3)解互斥锁:pthread_mutex_unlock(& mutex)
+ *
+ * pthread_cond_timedwait的工作过程：
+ *  1、pthread_cond_timedwait在把线程放进阻塞队列后，自动对mutex进行解锁，使得其它线程可以获得加锁的权利。
+ *  2、pthread_cond_timedwait是一个阻塞操作，这意味着线程将睡眠，在它苏醒之前不会消耗CPU周期。
+ *  3、线程阻塞期间，这样其它线程能对mutex临界资源进行访问，并唤醒这个阻塞的进程。
+ *  4、当等待条件的发生，当收到信号或者等待的时间完成之后，pthread_cond_timedwait返回，又自动给mutex加锁。
+ *
+ */
 int os::Bsd::safe_cond_timedwait(pthread_cond_t *_cond, pthread_mutex_t *_mutex, const struct timespec *_abstime)
 {
   return pthread_cond_timedwait(_cond, _mutex, _abstime);
@@ -4470,33 +4510,49 @@ int os::PlatformEvent::TryPark() {
   for (;;) {
     const int v = _Event ;
     guarantee ((v == 0) || (v == 1), "invariant") ;
-    if (Atomic::cmpxchg (0, &_Event, v) == v) return v  ;
+    if (Atomic::cmpxchg (0, &_Event, v) == v) {
+        return v  ;
+    }
   }
 }
 
 void os::PlatformEvent::park() {       // AKA "down()"
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::PlatformEvent::park函数...");
   // Invariant: Only the thread associated with the Event/PlatformEvent
   // may call park().
   // TODO: assert that _Assoc != NULL or _Assoc == Self
   int v ;
   for (;;) {
       v = _Event ;
-      if (Atomic::cmpxchg (v-1, &_Event, v) == v) break ;
+      // 使用CAS将_Event的值减一
+      if (Atomic::cmpxchg (v-1, &_Event, v) == v) {
+          break ;
+      }
   }
   guarantee (v >= 0, "invariant") ;
+  // 这里的v是原来的值，而_Event是最新的值...
   if (v == 0) {
      // Do this the hard way by blocking ...
      int status = pthread_mutex_lock(_mutex);
      assert_status(status == 0, status, "mutex_lock");
      guarantee (_nParked == 0, "invariant") ;
+      // 阻塞线程加一
      ++ _nParked ;
+     pthread_t pthread_id = pthread_self();
+      // 如果递减之后event为-1则阻塞
      while (_Event < 0) {
+        slog_debug("在os::PlatformEvent::park函数中,_Event小于0,即将调用pthread_cond_wait函数将当前线程pthread_id[0x%016lx]阻塞在条件变量_cond上,"
+                   "只能依靠其他线程调用pthread_cond_signal/pthread_cond_broadcast函数来将其唤醒...", pthread_id);
         status = pthread_cond_wait(_cond, _mutex);
         // for some reason, under 2.7 lwp_cond_wait() may return ETIME ...
         // Treat this the same as if the wait was interrupted
-        if (status == ETIMEDOUT) { status = EINTR; }
+        slog_debug("在os::PlatformEvent::park函数中,当前线程pthread_id[0x%016lx]被唤醒,继续判断_Event是否小于0,若小于0则继续循环,若大于或等于0才跳出循环...", pthread_id);
+        if (status == ETIMEDOUT) {
+            status = EINTR;
+        }
         assert_status(status == 0 || status == EINTR, status, "cond_wait");
      }
+      // 阻塞线程减一
      -- _nParked ;
 
     _Event = 0 ;
@@ -4515,10 +4571,14 @@ int os::PlatformEvent::park(jlong millis) {
   int v ;
   for (;;) {
       v = _Event ;
-      if (Atomic::cmpxchg (v-1, &_Event, v) == v) break ;
+      if (Atomic::cmpxchg (v-1, &_Event, v) == v) {
+          break ;
+      }
   }
   guarantee (v >= 0, "invariant") ;
-  if (v != 0) return OS_OK ;
+  if (v != 0) {
+      return OS_OK ;
+  }
 
   // We do this the hard way, by blocking the thread.
   // Consider enforcing a minimum timeout value.
@@ -4526,6 +4586,7 @@ int os::PlatformEvent::park(jlong millis) {
   compute_abstime(&abst, millis);
 
   int ret = OS_TIMEOUT;
+    //加互斥锁
   int status = pthread_mutex_lock(_mutex);
   assert_status(status == 0, status, "mutex_lock");
   guarantee (_nParked == 0, "invariant") ;
@@ -4547,16 +4608,20 @@ int os::PlatformEvent::park(jlong millis) {
   // In that case, we should propagate the notify to another waiter.
 
   while (_Event < 0) {
+      //pthread_cond_timedwait方法进行条件限时等待，在 &abst 时间内等待条件时间发生，并且跟互斥锁_mutex有关
     status = os::Bsd::safe_cond_timedwait(_cond, _mutex, &abst);
     if (status != 0 && WorkAroundNPTLTimedWaitHang) {
       pthread_cond_destroy (_cond);
       pthread_cond_init (_cond, NULL) ;
     }
-    assert_status(status == 0 || status == EINTR ||
-                  status == ETIMEDOUT,
-                  status, "cond_timedwait");
-    if (!FilterSpuriousWakeups) break ;                 // previous semantics
-    if (status == ETIMEDOUT) break ;
+    assert_status(status == 0 || status == EINTR || status == ETIMEDOUT, status, "cond_timedwait");
+    if (!FilterSpuriousWakeups) {
+        break ;                 // previous semantics
+    }
+    // 如果是到达超时时间唤醒的话，返回值则是ETIMEDOUT...
+    if (status == ETIMEDOUT) {
+        break ;
+    }
     // We consume and ignore EINTR and spurious wakeups.
   }
   --_nParked ;
@@ -4564,6 +4629,7 @@ int os::PlatformEvent::park(jlong millis) {
      ret = OS_OK;
   }
   _Event = 0 ;
+    //解互斥锁
   status = pthread_mutex_unlock(_mutex);
   assert_status(status == 0, status, "mutex_unlock");
   assert (_nParked == 0, "invariant") ;
@@ -4573,7 +4639,9 @@ int os::PlatformEvent::park(jlong millis) {
   return ret;
 }
 
+// unpark用于唤醒某个被park方法阻塞的线程
 void os::PlatformEvent::unpark() {
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的os::PlatformEvent::unpark函数...");
   // Transitions for _Event:
   //    0 :=> 1
   //    1 :=> 1
@@ -4589,15 +4657,23 @@ void os::PlatformEvent::unpark() {
   // from the first park() call after an unpark() call which will help
   // shake out uses of park() and unpark() without condition variables.
 
-  if (Atomic::xchg(1, &_Event) >= 0) return;
+    //将其原子的置为1，如果原来就是1，说明已经unpark过了，直接返回
+  if (Atomic::xchg(1, &_Event) >= 0) {
+      return;
+  }
 
   // Wait for the thread associated with the event to vacate
+    //获取锁
   int status = pthread_mutex_lock(_mutex);
   assert_status(status == 0, status, "mutex_lock");
   int AnyWaiters = _nParked;
   assert(AnyWaiters == 0 || AnyWaiters == 1, "invariant");
+    //WorkAroundNPTLTimedWaitHang默认是true
   if (AnyWaiters != 0 && WorkAroundNPTLTimedWaitHang) {
     AnyWaiters = 0;
+    pthread_t pthread_id = pthread_self();
+      //发信号唤醒阻塞在该条件变量_cond上的线程...
+    slog_debug("在os::PlatformEvent::unpark函数中,当前线程pthread_id[0x%016lx]即将调用pthread_cond_signal函数将阻塞在条件变量_cond上的其他线程唤醒...", pthread_id);
     pthread_cond_signal(_cond);
   }
   status = pthread_mutex_unlock(_mutex);
@@ -4689,7 +4765,15 @@ static void unpackTime(struct timespec* absTime, bool isAbsolute, jlong time) {
   assert(absTime->tv_nsec < NANOSECS_PER_SEC, "tv_nsec >= nanos_per_sec");
 }
 
+/**
+ * 1、判断是否需要阻塞等待，如果_counter > 0，不需要等待，将_counter置为0，返回；
+ *
+ * 2、步骤1不成功，构造当前线程的ThreadBlockInVM，检查_counter > 0是否成立，成立则将_counter设置为0，unlock mutex，返回；
+ *
+ * 3、步骤2不成功，根据等待时间调用不同的等待函数等待，如果等待返回正确，将_counter置为0，unlock mutex，返回，park调用成功。
+ */
 void Parker::park(bool isAbsolute, jlong time) {
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的Parker::park函数,当前线程pthread_id为[0x%016lx]...", pthread_self());
   // Ideally we'd do something useful while spinning, such
   // as calling unpackTime().
 
@@ -4697,7 +4781,12 @@ void Parker::park(bool isAbsolute, jlong time) {
   // Return immediately if a permit is available.
   // We depend on Atomic::xchg() having full barrier semantics
   // since we are doing a lock-free update to _counter.
-  if (Atomic::xchg(0, &_counter) > 0) return;
+    //counter>0，使用xchg指令置为0，然后直接返回
+  int old_counter = 0;
+  if ((old_counter = Atomic::xchg(0, &_counter)) > 0) {
+      slog_debug("在Parker::park函数中,使用Atomic::xchg函数成功将_counter设置为0(_counter的原值为[%d]),直接返回...", old_counter);
+      return;
+  }
 
   Thread* thread = Thread::current();
   assert(thread->is_Java_thread(), "Must be JavaThread");
@@ -4725,6 +4814,7 @@ void Parker::park(bool isAbsolute, jlong time) {
   // In particular a thread must never block on the Threads_lock while
   // holding the Parker:: mutex.  If safepoints are pending both the
   // the ThreadBlockInVM() CTOR and DTOR may grab Threads_lock.
+    //构造当前线程的ThreadBlockInVM
   ThreadBlockInVM tbivm(jt);
 
   // Don't wait if cannot get lock since interference arises from
@@ -4734,7 +4824,9 @@ void Parker::park(bool isAbsolute, jlong time) {
   }
 
   int status ;
-  if (_counter > 0)  { // no wait needed
+  slog_debug("在Parker::park函数中,_counter的值为[%d]...", _counter);
+  if (_counter > 0)  { // no wait needed counter>0，不需要等待
+      //将counter置为0
     _counter = 0;
     status = pthread_mutex_unlock(_mutex);
     assert (status == 0, "invariant") ;
@@ -4755,10 +4847,16 @@ void Parker::park(bool isAbsolute, jlong time) {
   OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
   jt->set_suspend_equivalent();
   // cleared by handle_special_suspend_equivalent_condition() or java_suspend_self()
-
+  pthread_t pthread_id = thread->osthread()->pthread_id();
   if (time == 0) {
+      //调用pthread_cond_wait
+    slog_debug("在Parker::park函数中,即将调用pthread_cond_wait函数将当前线程pthread_id[0x%016lx]阻塞在条件变量_cond上,"
+               "只能依靠其他线程调用pthread_cond_signal/pthread_cond_broadcast函数来将其唤醒...", pthread_id);
     status = pthread_cond_wait (_cond, _mutex) ;
   } else {
+      //调用pthread_cond_timedwait
+    slog_debug("在Parker::park函数中,即将调用os::Bsd::safe_cond_timedwait函数将当前线程pthread_id[0x%016lx]阻塞在条件变量_cond上,"
+               "依靠其他线程调用pthread_cond_signal/pthread_cond_broadcast函数来将其唤醒或者到达超时时间之后自动唤醒...", pthread_id);
     status = os::Bsd::safe_cond_timedwait (_cond, _mutex, &absTime) ;
     if (status != 0 && WorkAroundNPTLTimedWaitHang) {
       pthread_cond_destroy (_cond) ;
@@ -4773,6 +4871,8 @@ void Parker::park(bool isAbsolute, jlong time) {
   pthread_sigmask(SIG_SETMASK, &oldsigs, NULL);
 #endif
 
+    //从等待函数返回后，将counter置为0
+  slog_debug("在Parker::park函数中,当前线程pthread_id[0x%016lx]被唤醒了,将_counter置为0...", pthread_id);
   _counter = 0 ;
   status = pthread_mutex_unlock(_mutex) ;
   assert_status(status == 0, status, "invariant") ;
@@ -4787,11 +4887,14 @@ void Parker::park(bool isAbsolute, jlong time) {
 }
 
 void Parker::unpark() {
+  slog_debug("进入hotspot/src/os/bsd/vm/os_bsd.cpp中的Parker::unpark函数,当前线程pthread_id为[0x%016lx]...", pthread_self());
   int s, status ;
   status = pthread_mutex_lock(_mutex);
   assert (status == 0, "invariant") ;
   s = _counter;
   _counter = 1;
+  slog_debug("_counter初始值为[%d],这里将_counter值设置为1,WorkAroundNPTLTimedWaitHang的值为[%d],"
+             "即将调用pthread_cond_signal函数唤醒阻塞在条件变量_cond上的其他线程...", s, WorkAroundNPTLTimedWaitHang);
   if (s < 1) {
      if (WorkAroundNPTLTimedWaitHang) {
         status = pthread_cond_signal (_cond) ;

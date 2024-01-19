@@ -105,7 +105,9 @@ class JavaThread;
 class markOopDesc: public oopDesc {
  private:
   // Conversion
-  uintptr_t value() const { return (uintptr_t) this; }
+  uintptr_t value() const {
+    return (uintptr_t) this;
+  }
 
  public:
   // Constants
@@ -121,19 +123,19 @@ class markOopDesc: public oopDesc {
   // The biased locking code currently requires that the age bits be
   // contiguous to the lock bits.
   enum { lock_shift               = 0,
-         biased_lock_shift        = lock_bits,
-         age_shift                = lock_bits + biased_lock_bits,
-         cms_shift                = age_shift + age_bits,
-         hash_shift               = cms_shift + cms_bits,
-         epoch_shift              = hash_shift
+         biased_lock_shift        = lock_bits, // 2
+         age_shift                = lock_bits + biased_lock_bits, // 2+1=3
+         cms_shift                = age_shift + age_bits, // 3+4=7
+         hash_shift               = cms_shift + cms_bits, // 7+1=8
+         epoch_shift              = hash_shift // 8
   };
 
-  enum { lock_mask                = right_n_bits(lock_bits),
-         lock_mask_in_place       = lock_mask << lock_shift,
-         biased_lock_mask         = right_n_bits(lock_bits + biased_lock_bits),
+  enum { lock_mask                = right_n_bits(lock_bits), // 最右边两位是lock_mask，锁的状态位
+         lock_mask_in_place       = lock_mask << lock_shift, //
+         biased_lock_mask         = right_n_bits(lock_bits + biased_lock_bits), // 最右边三位是biased_lock_mask，偏向锁的状态位
          biased_lock_mask_in_place= biased_lock_mask << lock_shift,
-         biased_lock_bit_in_place = 1 << biased_lock_shift,
-         age_mask                 = right_n_bits(age_bits),
+         biased_lock_bit_in_place = 1 << biased_lock_shift, // 从右往左数的第2个比特位，偏向锁的标记位
+         age_mask                 = right_n_bits(age_bits), //
          age_mask_in_place        = age_mask << age_shift,
          epoch_mask               = right_n_bits(epoch_bits),
          epoch_mask_in_place      = epoch_mask << epoch_shift,
@@ -171,6 +173,7 @@ class markOopDesc: public oopDesc {
   // by the lower-level CAS-based locking code, although the runtime
   // fixes up biased locks to be compatible with it when a bias is
   // revoked.
+  // has_bias_pattern() 返回 true 时代表 markword 的可偏向标志 bit 位为 1 ，且对象头末尾标志为 01。
   bool has_bias_pattern() const {
     return (mask_bits(value(), biased_lock_mask_in_place) == biased_lock_pattern);
   }
@@ -181,6 +184,7 @@ class markOopDesc: public oopDesc {
   }
   // Indicates that the mark has the bias bit set but that it has not
   // yet been biased toward a particular thread
+  // biased_locker() == NULL 返回 true 时代表对象 Mark Word 中 bit field 域存储的 Thread Id 为空。
   bool is_biased_anonymously() const {
     return (has_bias_pattern() && (biased_locker() == NULL));
   }
@@ -219,12 +223,16 @@ class markOopDesc: public oopDesc {
     return (mask_bits(value(), lock_mask_in_place) == marked_value);
   }
     // 无锁
-  bool is_neutral()  const { return (mask_bits(value(), biased_lock_mask_in_place) == unlocked_value); }
+  bool is_neutral()  const {
+    return (mask_bits(value(), biased_lock_mask_in_place) == unlocked_value);
+  }
 
   // Special temporary state of the markOop while being inflated.
   // Code that looks at mark outside a lock need to take this into account.
   // 膨胀时 markOop 的特殊临时状态。 在锁外查看标记的代码需要考虑到这一点。
-  bool is_being_inflated() const { return (value() == 0); }
+  bool is_being_inflated() const {
+    return (value() == 0);
+  }
 
   // Distinguished markword value - used when inflating over
   // an existing stacklock.  0 indicates the markword is "BUSY".
@@ -233,7 +241,9 @@ class markOopDesc: public oopDesc {
   // other thread.  (They should spin or block instead.  The 0 value
   // is transient and *should* be short-lived).
   // 锁对象处于升级为重量级锁的过程中
-  static markOop INFLATING() { return (markOop) 0; }    // inflate-in-progress
+  static markOop INFLATING() {
+    return (markOop) 0;
+  }    // inflate-in-progress
 
   // Should this header be preserved during GC?
   inline bool must_be_preserved(oop obj_containing_mark) const;

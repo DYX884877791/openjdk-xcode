@@ -287,6 +287,7 @@ void TemplateInterpreterGenerator::generate_all() {
     const int index_size = sizeof(u2);
       //初始化Interpreter::_return_entry数组
     for (int i = 0; i < Interpreter::number_of_return_entries; i++) {
+      slog_trace("初始化Interpreter::_return_entry数组中第[%d]个EntryPoint...", i);
       Interpreter::_return_entry[i] =
         EntryPoint(
           generate_return_entry_for(itos, i, index_size),

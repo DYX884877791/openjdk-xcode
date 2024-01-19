@@ -629,6 +629,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
                                                         Handle class_loader,
                                                         Handle protection_domain,
                                                         TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/classfile/systemDictionary.cpp中的SystemDictionary::resolve_instance_class_or_null函数...");
   assert(name != NULL && !FieldType::is_array(name) &&
          !FieldType::is_obj(name), "invalid class name");
 
@@ -673,6 +674,7 @@ Klass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   // Make sure we are synchronized on the class loader before we proceed
   Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
   check_loader_lock_contention(lockObject, THREAD);
+  slog_debug("在SystemDictionary::resolve_instance_class_or_null函数中即将创建一个ObjectLocker实例...");
   ObjectLocker ol(lockObject, THREAD, DoObjectLock);
 
   // Check again (after locking) if class already exist in SystemDictionary
@@ -1129,6 +1131,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
   check_loader_lock_contention(lockObject, THREAD);
     // 根据是否支持并发来加锁的逻辑在ObjectLocker的构造函数中
+  slog_debug("在SystemDictionary::resolve_from_stream函数中即将创建一个ObjectLocker实例...");
   ObjectLocker ol(lockObject, THREAD, DoObjectLock);
 
   TempNewSymbol parsed_name = NULL;
@@ -1284,6 +1287,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(
 instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
                                                         Handle class_loader,
                                                         Handle protection_domain, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/classfile/systemDictionary.cpp中的SystemDictionary::load_shared_class函数...");
   if (ik.not_null()) {
     instanceKlassHandle nh = instanceKlassHandle(); // null Handle
     Symbol* class_name = ik->name();
@@ -1336,6 +1340,7 @@ instanceKlassHandle SystemDictionary::load_shared_class(instanceKlassHandle ik,
     {
       Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
       check_loader_lock_contention(lockObject, THREAD);
+      slog_debug("在SystemDictionary::load_shared_class函数中即将创建一个ObjectLocker实例...");
       ObjectLocker ol(lockObject, THREAD, true);
       ik->restore_unshareable_info(loader_data, protection_domain, CHECK_(nh));
     }

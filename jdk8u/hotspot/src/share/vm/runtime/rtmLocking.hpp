@@ -62,6 +62,25 @@
 // supported for stack locks just like inflated locks.
 
 // RTM locking counters
+/**
+ * RTM锁
+ * 从因特尔微架构Haswell开始，增加了事务同步扩展指令集，该指令集包括硬件锁消除和受限事务内存（Restricted TransactionalMemory，RTM）。下面详细介绍RTM如何从硬件上支持程序执行事务代码。
+ *
+ * RTM使用硬件指令实现。xbegin和xend限定了事务代码块的范围，两者结合相当于monitorenter和monitorexit。如果在事务代码块执行过程中没有异常发生，寄存器和内存的修改都会在xend执行时提交。xabort可以用于显式地终止事务的执行，xtest检查EIP/RIP是否位于事务代码块。前文提到过锁的膨胀过程大致如下：
+ *
+ * 不加锁→偏向锁→基本对象锁→重量级锁
+ *
+ * 如果开启-XX:+UseRTMLocking，经过C2编译后的代码的加锁过程会多一个RTM加锁代码：
+ *
+ * 无锁→基本对象锁→重量级锁的RTM加锁→重量级锁
+ *
+ * 如果同时开启-XX:+UseRTMLocking和-XX:+UseRTMForStackLocks，加锁过程会增加两步：
+ *
+ * 无锁→基本对象锁的RTM加锁→基本对象锁→重量级锁的RTM加锁→重量级锁
+ *
+ * RTM的关键是无数据竞争。当没有数据竞争时，只要多个线程访问xbegin和xend限定事务代码中的同一个内存位置且没有写操作，那么硬件允许多个线程同时并行执行完事务，即使monitor代码段的语义是互斥执行。但是当发生数据竞争时，事务执行会失败，且事务终止的开销和事务重试的开销不容忽视。可见，RTM从实现到工业应用还有很长的一段路要走。
+ *
+ */
 class RTMLockingCounters VALUE_OBJ_CLASS_SPEC {
  private:
   uintx _total_count; // Total RTM locks count

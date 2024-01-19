@@ -908,9 +908,14 @@ void Method::unlink_method() {
 // Called when the method_holder is getting linked. Setup entrypoints so the method
 // is ready to be called from interpreter, compiler, and vtables.
 void Method::link_method(methodHandle h_method, TRAPS) {
+  // methodHandle的()运算符重载了...
+  char * method_name = h_method()->name_and_sig_as_C_string();
+  slog_debug("进入hotspot/src/share/vm/oops/method.cpp中的Method::link_method函数,进行Java方法[%s]的链接操作...", method_name);
   // If the code cache is full, we may reenter this function for the
   // leftover methods that weren't linked.
-  if (_i2i_entry != NULL) return;
+  if (_i2i_entry != NULL) {
+    return;
+  }
 
   assert(_adapter == NULL, "init'd to NULL" );
   assert( _code == NULL, "nothing compiled yet" );

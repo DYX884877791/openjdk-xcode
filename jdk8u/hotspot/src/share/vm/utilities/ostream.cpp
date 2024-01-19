@@ -1331,6 +1331,9 @@ void ttyLocker::break_tty_lock_for_safepoint(intx holder) {
   // (else there was no lock to break)
 }
 
+/**
+ * 初始化defaultStream::instance
+ */
 void ostream_init() {
   if (defaultStream::instance == NULL) {
     defaultStream::instance = new(ResourceObj::C_HEAP, mtInternal) defaultStream();
@@ -1344,6 +1347,9 @@ void ostream_init() {
   }
 }
 
+/**
+ * 初始化JVM的Debug log 和 GC的log
+ */
 void ostream_init_log() {
   // For -Xloggc:<file> option - called in runtime/thread.cpp
   // Note : this must be called AFTER ostream_init()

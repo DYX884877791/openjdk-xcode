@@ -61,7 +61,7 @@ class oopDesc {
   friend class VMStructs;
     // _mark和_metadata被称为对象头，其中前者存储对象的运行时记录信息；后者是一个指针，指向当前对象所属的Klass对象。
  private:
-    //标记,线程状态,并发锁,GC分代信息等内部标识
+    //标记,线程状态,并发锁,GC分代信息等内部标识，即对象头中的markword
     // 用于存储对象的运行时记录信息，如哈希值、GC分代年龄、锁状态等
     // 在hotspot/src/share/vm/oops/oopsHierarchy.hpp中定义了markOop也是一个别名：
     // typedef class   markOopDesc*                markOop;

@@ -213,7 +213,10 @@ static InvocationFunctions *sExportedJNIFunctions = NULL;
 static char *sPreferredJVMType = NULL;
 
 static InvocationFunctions *GetExportedJNIFunctions() {
-    if (sExportedJNIFunctions != NULL) return sExportedJNIFunctions;
+
+    if (sExportedJNIFunctions != NULL) {
+        return sExportedJNIFunctions;
+    }
 
     char jrePath[PATH_MAX];
     jboolean gotJREPath = GetJREPath(jrePath, sizeof(jrePath), GetArch(), JNI_FALSE);
@@ -714,7 +717,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
     slog_debug("成功获取到JNI_GetDefaultJavaVMInitArgs的函数指针，指针的值为 %p", ifn->GetDefaultJavaVMInitArgs);
 
     ifn->GetCreatedJavaVMs = (GetCreatedJavaVMs_t)
-    dlsym(libjvm, "JNI_GetCreatedJavaVMs");
+        dlsym(libjvm, "JNI_GetCreatedJavaVMs");
     if (ifn->GetCreatedJavaVMs == NULL) {
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
@@ -892,7 +895,8 @@ ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void
      */
     slog_debug("即将调用pthread_create创建一个线程...");
     if (pthread_create(&tid, &attr, (void *(*)(void*))continuation, (void*)args) == 0) {
-      slog_debug("创建线程成功,线程的tid为0x%zx...", tid);
+      slog_debug("新创建线程的pthread_id为[0x%016lx],并调用pthread_join函数使当前线程pthread_id[0x%016lx]挂起,"
+                 "等待新创建的线程执行结束之后,当前线程才继续执行...", tid, pthread_self());
       void * tmp;
         // 使用pthread_join让创建的线程先执行完，再执行后续的 rslt = (int)tmp;
       pthread_join(tid, &tmp);

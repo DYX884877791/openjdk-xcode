@@ -843,7 +843,7 @@ void os::start_thread(Thread* thread) {
   MutexLockerEx ml(thread->SR_lock(), Mutex::_no_safepoint_check_flag);
   OSThread* osthread = thread->osthread();
     // osthread->set_state(RUNNABLE)，设置线程状态 RUNNABLE
-  slog_debug("设置osThread线程_pthread_t[0x%zx],thread_type[%s]的状态为RUNNABLE，但没有notify线程...", osthread->pthread_id(), os::get_thread_type((enum ThreadType)(osthread->thread_type())));
+  slog_debug("设置osThread线程pthread_id[0x%016lx],thread_type[%s]的状态为RUNNABLE，但没有notify线程...", osthread->pthread_id(), os::get_thread_type((enum ThreadType)(osthread->thread_type())));
   osthread->set_state(RUNNABLE);
     //唤醒之前创建的在startThread_lock上等待的子线程，开始执行JavaThread的run方法
     // 启动线程，这个就由各个 OS 实现类，实现各自系统的启动方法了。比如，windows系统和Linux系统的代码是完全不同的。

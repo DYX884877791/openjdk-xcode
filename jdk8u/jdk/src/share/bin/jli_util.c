@@ -360,7 +360,7 @@ static void slog_create_tid(char *pOut, int nSize, uint8_t nTraceTid) {
     if (!nTraceTid) {
         pOut[0] = SLOG_NUL;
     } else {
-        snprintf(pOut, nSize, "[user-thread-id:0x%zx,kernel-thread-id:0x%lx] ", slog_get_tid(), slog_get_kernel_tid());
+        snprintf(pOut, nSize, "[user-thread-id:0x%016lx,kernel-thread-id:0x%lx] ", slog_get_tid(), slog_get_kernel_tid());
     }
 }
 

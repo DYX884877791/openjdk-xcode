@@ -153,11 +153,11 @@ REGISTER_DECLARATION(Register, rbp_mh_SP_save, noreg);
 // Note: A register location is represented via a Register, not
 //       via an address for efficiency & simplicity reasons.
 
-// assembler_x86.hpp中除定义了Assembler类以外，还定义了表示内存地址的多个不同Address类，如Address、AddressLiteral、RuntimeAddress等
-// 其中RuntimeAddress等是AddressLiteral的子类，如下图。AddressLiteral主要是为了应对部分特殊指令在32位和64位下处理不一样的情形，
-// 三个子类是特定于不同的地址类型的。
 class ArrayAddress;
 
+// assembler_x86.hpp中除定义了Assembler类以外，还定义了表示内存地址的多个不同Address类，如Address、AddressLiteral、RuntimeAddress等
+// 其中RuntimeAddress等是AddressLiteral的子类，AddressLiteral主要是为了应对部分特殊指令在32位和64位下处理不一样的情形，
+// 三个子类是特定于不同的地址类型的。
 class Address VALUE_OBJ_CLASS_SPEC {
  public:
   enum ScaleFactor {

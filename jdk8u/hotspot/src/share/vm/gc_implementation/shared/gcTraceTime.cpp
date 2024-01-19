@@ -40,21 +40,22 @@ GCTraceTime::GCTraceTime(const char* title, bool doit, bool print_cr, GCTimer* t
   if (_doit || _timer != NULL) {
     _start_counter.stamp();
   }
-
+  Thread* thread = Thread::current();
   if (_timer != NULL) {
     assert(SafepointSynchronize::is_at_safepoint(), "Tracing currently only supported at safepoints");
-    assert(Thread::current()->is_VM_thread(), "Tracing currently only supported from the VM thread");
+    assert(thread->is_VM_thread(), "Tracing currently only supported from the VM thread");
 
     _timer->register_gc_phase_start(title, _start_counter);
   }
-
+  OSThread* osthread = thread->osthread();
+  pthread_t pthread_id = osthread->pthread_id();
   if (_doit) {
     gclog_or_tty->date_stamp(PrintGCDateStamps);
     gclog_or_tty->stamp(PrintGCTimeStamps);
     if (PrintGCID) {
       gclog_or_tty->print("#%u: ", gc_id.id());
     }
-    gclog_or_tty->print("[%s", title);
+    gclog_or_tty->print("[pthread_id:0x%016lx,%s", pthread_id, title);
     gclog_or_tty->flush();
   }
 }

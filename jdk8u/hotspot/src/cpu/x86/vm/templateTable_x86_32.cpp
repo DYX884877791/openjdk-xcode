@@ -3268,6 +3268,7 @@ void TemplateTable::invokedynamic(int byte_no) {
 
 void TemplateTable::_new() {
   transition(vtos, atos);
+    // 1. 获取new指令后的操作数，即类在常量池的索引，放入rdx寄存器中。bcp即rsi寄存器，用来记录当前解释器运行的字节码指令地址，类似SS：IP寄存器，用来进行pc计数。这个方法主要就是获取当前运行指令地址偏移一个字节处内容。
   __ get_unsigned_2_byte_index_at_bcp(rdx, 1);
   Label slow_case;
   Label slow_case_no_pop;
@@ -3276,25 +3277,30 @@ void TemplateTable::_new() {
   Label initialize_object;  // including clearing the fields
   Label allocate_shared;
 
+    // 2. 获取常量池首地址放入rcx寄存器，获取常量池中元素类型数组_tags首地址，放入rax中。_tags数组按顺序存放了每个常量池元素的类型。
   __ get_cpool_and_tags(rcx, rax);
 
   // Make sure the class we're about to instantiate has been resolved.
   // This is done before loading InstanceKlass to be consistent with the order
   // how Constant Pool is updated (see ConstantPool::klass_at_put)
+    // 3. 判断_tags数组中对应元素类型是否为JVM_CONSTANT_Class，不是则跳往slow_case_no_pop处。
   const int tags_offset = Array<u1>::base_offset_in_bytes();
   __ cmpb(Address(rax, rdx, Address::times_1, tags_offset), JVM_CONSTANT_Class);
   __ jcc(Assembler::notEqual, slow_case_no_pop);
 
   // get InstanceKlass
+    // 4. 获取创建对象所属类地址，放入rcx中，即类的运行时数据结构InstanceKlass，并将其入栈。
   __ movptr(rcx, Address(rcx, rdx, Address::times_ptr, sizeof(ConstantPool)));
   __ push(rcx);  // save the contexts of klass for initializing the header
 
   // make sure klass is initialized & doesn't have finalizer
   // make sure klass is fully initialized
+    // 5. 判断类是否已经被解析过，没有解析的话直接跳往slow_close，slow_case即慢速分配，如果对象所属类已经被解析过，则会进入快速分配，否则会进入慢速分配，去进行类的解析。
   __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
   __ jcc(Assembler::notEqual, slow_case);
 
   // get instance_size in InstanceKlass (scaled to a count of bytes)
+    // 6. 此时rcx中存放的是类InstanceKlass的内存地址，利用偏移获取类实例大小，存入rdx寄存器，对象的大小早在类加载时就已经确定了。
   __ movl(rdx, Address(rcx, Klass::layout_helper_offset()));
   // test to see if it has a finalizer or is malformed in some way
   __ testl(rdx, Klass::_lh_instance_slow_path_bit);
@@ -3315,12 +3321,21 @@ void TemplateTable::_new() {
     __ get_thread(thread);
   }
 
+    // 7. 尝试在TLAB区为对象分配内存，TLAB即ThreadLocalAllocationBuffers（线程局部分配缓存）。每个线程都有自己的一块内存区域，用于分配对象，这块内存区域便为TLAB区。
+    // 这样的好处是在分配内存时，无需对一整块内存进行加锁。TLAB只是在分配对象时的操作属于线程私有，分配的对象对于其他线程仍是可读的。
   if (UseTLAB) {
+      // 获取TLAB区剩余空间首地址，放入rax寄存器。
     __ movptr(rax, Address(thread, in_bytes(JavaThread::tlab_top_offset())));
+      // rdx寄存器已经记录了对象大小，此处及根据TLAB空闲区首地址，计算出对象分配后，对象尾地址，放入rbx中
     __ lea(rbx, Address(rax, rdx, Address::times_1));
+      // 将rbx中内容与TLAB空闲区尾地址进行比较。
     __ cmpptr(rbx, Address(thread, in_bytes(JavaThread::tlab_end_offset())));
+      // 如果上面比较结果表明rbx > TLAB空闲区尾地址，则表明TLAB区空闲区大小不足以分配该对象，那么在allow_shared_alloc（允许在Eden区分配）情况下，就直接跳往Eden区分配内存标号处运行,即第8步
     __ jcc(Assembler::above, allow_shared_alloc ? allocate_shared : slow_case);
+      // 因为对象分配后，TLAB区空间变小，此处更新TLAB空闲区首地址为对象尾地址
     __ movptr(Address(thread, in_bytes(JavaThread::tlab_top_offset())), rbx);
+      // 如果TLAB区默认会对回收的空闲区清零，那么就不需要在为对象变量进行清零操作了，直接跳往对象头初始化处运行。有同学可能会问为什么要进行清零操作呢？
+      // 因为分配的内存可能还保留着上次分配给其他对象时的数据，内存块虽然被回收了，但是之前的数据没有被清除，会污染新对象。
     if (ZeroTLAB) {
       // the fields have been already cleared
       __ jmp(initialize_header);
@@ -3330,19 +3345,25 @@ void TemplateTable::_new() {
     }
   }
 
+    // 8. 如果在TLAB区分配失败，会直接在Eden区进行分配，具体过程和第7很像。
   // Allocation in the shared Eden, if allowed.
   //
   // rdx: instance size in bytes
   if (allow_shared_alloc) {
+      // TLAB区分配失败会跳到这。
     __ bind(allocate_shared);
 
+      // 获取Eden区剩余空间的首地址和结束地址。
     ExternalAddress heap_top((address)Universe::heap()->top_addr());
+    ExternalAddress heap_end((address)Universe::heap()->end_addr());
 
     Label retry;
     __ bind(retry);
+      // 将空闲区首地址放入rax中，用作对象分配开始处。
     __ movptr(rax, heap_top);
+      // 计算对象尾地址，与空闲区尾地址进行比较，内存不足则跳往慢速分配。
     __ lea(rbx, Address(rax, rdx, Address::times_1));
-    __ cmpptr(rbx, ExternalAddress((address)Universe::heap()->end_addr()));
+    __ cmpptr(rbx, heap_end);
     __ jcc(Assembler::above, slow_case);
 
     // Compare rax, with the top addr, and if still equal, store the new
@@ -3352,6 +3373,10 @@ void TemplateTable::_new() {
     // rax,: object begin
     // rbx,: object end
     // rdx: instance size in bytes
+      // rax,: object begin，rax此时记录了对象分配的内存首地址
+      // rbx,: object end    rbx此时记录了对象分配的内存尾地址
+      // rdx: instance size in bytes rdx记录了对象大小
+      // 利用CAS操作，更新Eden空闲区首地址为对象尾地址，因为Eden区是线程共用的，所以需要加锁。
     __ locked_cmpxchgptr(rbx, heap_top);
 
     // if someone beat us on the allocation, try again, otherwise continue
@@ -3360,15 +3385,20 @@ void TemplateTable::_new() {
     __ incr_allocated_bytes(thread, rdx, 0);
   }
 
+    // 9. 对象所需内存已经分配好后，就会进行对象的初始化了，先初始化对象实例数据。
+
   if (UseTLAB || Universe::heap()->supports_inline_contig_alloc()) {
     // The object is initialized before the header.  If the object size is
     // zero, go directly to the header initialization.
+      // 开始初始化对象处
     __ bind(initialize_object);
+      // 如果rdx和sizeof(oopDesc)大小一样，即对象所需大小和对象头大小一样，则表明对象真正的实例数据内存为0，那么就不需要进行对象实例数据的初始化了，直接跳往对象头初始化处即可。Hotspot中虽然对象头在内存中排在对象实例数据前，但是会先初始化对象实例数据，再初始化对象头。
     __ decrement(rdx, sizeof(oopDesc));
     __ jcc(Assembler::zero, initialize_header);
 
     // Initialize topmost object field, divide rdx by 8, check if odd and
     // test if zero.
+      // 执行异或，使得rcx为0，为之后给对象变量赋零值做准备
     __ xorl(rcx, rcx);    // use zero reg to clear memory (shorter code)
     __ shrl(rdx, LogBytesPerLong); // divide by 2*oopSize and set carry flag if odd
 
@@ -3384,6 +3414,7 @@ void TemplateTable::_new() {
 #endif
 
     // initialize remaining object fields: rdx was a multiple of 8
+      // 此处以rdx（对象大小）递减，按字节进行循环遍历对内存，初始化对象实例内存为零值。
     { Label loop;
     __ bind(loop);
     __ movptr(Address(rax, rdx, Address::times_8, sizeof(oopDesc) - 1*oopSize), rcx);
@@ -3392,10 +3423,16 @@ void TemplateTable::_new() {
     __ jcc(Assembler::notZero, loop);
     }
 
+      // 10：对象实例数据初始化好后，就开始进行对象头的初始化了。
+
     // initialize object header only.
+      // 初始化对象头标号处
     __ bind(initialize_header);
+      // 是否使用偏向锁，大多时一个对象只会被同一个线程访问，所以在对象头中记录获取锁的线程id，下次线程获取锁时就不需要加锁了。
     if (UseBiasedLocking) {
+        // 第4步中有将类数据InstanceKlass的地址入栈，此时重新出栈，放入rcx寄存器。
       __ pop(rcx);   // get saved klass back in the register.
+        // 接下来两步将类的偏向锁相关数据移动到对象头部
       __ movptr(rbx, Address(rcx, Klass::prototype_header_offset()));
       __ movptr(Address(rax, oopDesc::mark_offset_in_bytes ()), rbx);
     } else {
@@ -3403,6 +3440,8 @@ void TemplateTable::_new() {
                 (int32_t)markOopDesc::prototype()); // header
       __ pop(rcx);   // get saved klass back in the register.
     }
+      // 此时rcx保存了InstanceKlass，rax保存了对象首地址，此处保存对象所属的类数据InstanceKlass放入对象头中，对象头尾oopDesc类型，
+      // 里面有个_metadata联合体，_metadata中专门有个Klass指针用来指向类所属对象，此处其实就是将InstanceKlass地址放入该指针中。
     __ store_klass(rax, rcx);  // klass
 
     {
@@ -3417,15 +3456,22 @@ void TemplateTable::_new() {
     __ jmp(done);
   }
 
+    // 11. 慢速分配，经过上面分析可知，如果类没有被加载解析，会跳到此处执行。
+
   // slow case
   __ bind(slow_case);
+    // 因为第4步有将InsanceKlass入栈，这里用不上，重新出栈，还原栈顶数据。
   __ pop(rcx);   // restore stack pointer to what it was when we came in.
   __ bind(slow_case_no_pop);
+    // 获取常量池地址，存入rax寄存器。
   __ get_constant_pool(rax);
+    // 获取new 指令后操作数，即类在常量池中的索引，放入rdx寄存器。
   __ get_unsigned_2_byte_index_at_bcp(rdx, 1);
+    // 进入InterpreterRuntime::_new生成的机器指令地址处，开始执行，里面会进行类的加载和对象分配，并将分配的对象地址返回，存入rax寄存器中。
   call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::_new), rax, rdx);
 
   // continue
+    // 创建结束
   __ bind(done);
 }
 

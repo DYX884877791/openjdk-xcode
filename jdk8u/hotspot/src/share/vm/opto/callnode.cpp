@@ -1687,7 +1687,7 @@ Node *LockNode::Ideal(PhaseGVN *phase, bool can_reshape) {
     }
 
     //
-    // Try lock coarsening
+    // Try lock coarsening 锁粗化
     //
     PhaseIterGVN* iter = phase->is_IterGVN();
     if (iter != NULL && !is_eliminated()) {

@@ -2336,6 +2336,7 @@ public final class String
             the second is not the ascii digit or ascii letter.
          */
         char ch = 0;
+        // 如果regex是一个普通字符串..
         if (((regex.value.length == 1 &&
              ".$|()[{^?*+\\".indexOf(ch = regex.charAt(0)) == -1) ||
              (regex.length() == 2 &&
@@ -2350,11 +2351,14 @@ public final class String
             int next = 0;
             boolean limited = limit > 0;
             ArrayList<String> list = new ArrayList<>();
+            // 依次找到这个匹配字符串之前的偏移 然后将其加入list
             while ((next = indexOf(ch, off)) != -1) {
                 if (!limited || list.size() < limit - 1) {
+                    // 并非最后一个   从这里来看limit应该是限制分割后的数组的长度为多少个
                     list.add(substring(off, next));
                     off = next + 1;
                 } else {    // last one
+                    // 处理最后一个子串
                     //assert (list.size() == limit - 1);
                     list.add(substring(off, value.length));
                     off = value.length;
@@ -2362,6 +2366,7 @@ public final class String
                 }
             }
             // If no match was found, return this
+            // 如果没有匹配到split字符串
             if (off == 0)
                 return new String[]{this};
 
@@ -2371,14 +2376,17 @@ public final class String
 
             // Construct result
             int resultSize = list.size();
+            // 如果limit为0[不限制] 计算从list的后边查看去掉空字符串的size
             if (limit == 0) {
                 while (resultSize > 0 && list.get(resultSize - 1).length() == 0) {
                     resultSize--;
                 }
             }
             String[] result = new String[resultSize];
+            // 构造分割后的字符数组
             return list.subList(0, resultSize).toArray(result);
         }
+        // 如果regex符合正则表达式规则
         return Pattern.compile(regex).split(this, limit);
     }
 
@@ -2836,6 +2844,8 @@ public final class String
     }
 
     /**
+     * 去掉行首行尾的空格
+     *
      * Returns a string whose value is this string, with any leading and trailing
      * whitespace removed.
      * <p>
@@ -2871,12 +2881,15 @@ public final class String
         int st = 0;
         char[] val = value;    /* avoid getfield opcode */
 
+        // 删除行首的' '
         while ((st < len) && (val[st] <= ' ')) {
             st++;
         }
+        // 删除行尾的' '
         while ((st < len) && (val[len - 1] <= ' ')) {
             len--;
         }
+        // 如果行首和行尾都没有' ' 返回this
         return ((st > 0) || (len < value.length)) ? substring(st, len) : this;
     }
 
@@ -2891,6 +2904,7 @@ public final class String
 
     /**
      * Converts this string to a new character array.
+     * 新建一个字符数组 拷贝value的数据  并返回
      *
      * @return  a newly allocated character array whose length is the length
      *          of this string and whose contents are initialized to contain
@@ -2898,6 +2912,7 @@ public final class String
      */
     public char[] toCharArray() {
         // Cannot use Arrays.copyOf because of class initialization order issues
+        // 为什么不能用Arrays.copyOf??
         char result[] = new char[value.length];
         System.arraycopy(value, 0, result, 0, value.length);
         return result;

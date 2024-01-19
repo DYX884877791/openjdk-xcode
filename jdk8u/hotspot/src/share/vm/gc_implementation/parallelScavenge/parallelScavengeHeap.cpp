@@ -663,9 +663,9 @@ void ParallelScavengeHeap::print_heap_change(size_t prev_used) {
                         "("  SIZE_FORMAT ")",
                         prev_used, used(), capacity());
   } else {
-    gclog_or_tty->print(" GC之前堆内存占用:"  SIZE_FORMAT "K"
-                        "->GC之前堆内存占用:" SIZE_FORMAT "K"
-                        "(堆内存容量:"  SIZE_FORMAT "K)",
+    gclog_or_tty->print(" "  SIZE_FORMAT "K"
+                        "->" SIZE_FORMAT "K"
+                        "("  SIZE_FORMAT "K)",
                         prev_used / K, used() / K, capacity() / K);
   }
 }

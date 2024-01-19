@@ -77,6 +77,11 @@ inline void Atomic::dec_ptr(volatile void*     dest) {
   dec_ptr((volatile intptr_t*)dest);
 }
 
+/**
+ * 把exchange_value的值，存到*dest去
+ *   可以理解 dest = exchange_value (当然这个操作有可能会失败)
+ *   替换成功后，返回的是原值，也就是最初的dest的值
+ */
 inline jint     Atomic::xchg    (jint     exchange_value, volatile jint*     dest) {
   __asm__ volatile (  "xchgl (%2),%0"
                     : "=r" (exchange_value)

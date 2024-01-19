@@ -35,6 +35,19 @@ class BasicLock VALUE_OBJ_CLASS_SPEC {
     // displaced_header属性用于保存锁对象oop的原始对象头，即无锁状态下的对象头，但是在synchronized嵌套的情形下displaced_header为NULL，
     // 因为外层synchronized对应的BasicObjectLock已经保存了原始对象头了，此处不需要再保存；
     // 另外，如果某个轻量级锁膨胀成重量级锁了，则displaced_header会被置为unused_mark，因为重量级锁本身会保存锁对象oop的原始对象头。
+    /**
+     * public static void main(String[] args) {
+     *       Object lock = new Object();
+     *       synchronized (lock) {
+     *           System.out.println("start");
+     *           synchronized (lock) {
+     *               System.out.println("inner");
+     *           }
+     *           System.out.println("end");
+     *       }
+     *   }
+     *
+     */
   volatile markOop _displaced_header;
  public:
   markOop      displaced_header() const               { return _displaced_header; }
@@ -57,6 +70,14 @@ class BasicLock VALUE_OBJ_CLASS_SPEC {
 // alignment of the embedded BasicLock objects on such machines, we
 // put the embedded BasicLock at the beginning of the struct.
 
+// 当锁对象升级到轻量级锁的时候，线程运行的时候在自己栈帧中分配的一块空间，用于存储锁对象头中mark word原始信息，
+// 拷贝过来的mark word也叫作displaced mark word，这块空间就是Lock Record，用于保存锁记录信息。
+//
+// 为什么要将锁对象的mark word拷贝到持有轻量级锁的线程的栈帧中？这样获取锁之后，还能保存锁对象的原始的hashcode、分代信息等。
+// 这也是轻量级锁和偏向锁的区别之一，否则如果只是和偏向锁类似，将锁对象通过一个线程ID标识当前被哪一个线程持有，那么在释放锁的时候只需要将这个线程ID清空就可以。
+// 但是如何保存锁对象的原始信息，比如hashcode和分代信息等，那就只有升级为重量级锁了，由监视器去保存这些东西。
+//
+// 在代码实现锁记录主要由BasicObjectLock和BasicLock实现，一个BasicLock表示保存锁记录；BasicObjectLock关联锁对象和BasicLock。
 class BasicObjectLock VALUE_OBJ_CLASS_SPEC {
   friend class VMStructs;
  private:

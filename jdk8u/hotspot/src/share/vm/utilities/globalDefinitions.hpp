@@ -1110,8 +1110,11 @@ const intptr_t OneBit     =  1; // only right_most bit set in a word
 
 // get a word with the n.th or the right-most or left-most n bits set
 // (note: #define used only so that they can be used in enum constant definitions)
+// 第几个位置比特位是1（最右边位置是0），以1右移几位即可
 #define nth_bit(n)        (n >= BitsPerWord ? 0 : OneBit << (n))
+// 右边连续几个比特位都是1
 #define right_n_bits(n)   (nth_bit(n) - 1)
+// 左边连续几个比特位都是1
 #define left_n_bits(n)    (right_n_bits(n) << (n >= BitsPerWord ? 0 : (BitsPerWord - n)))
 
 // bit-operations using a mask m

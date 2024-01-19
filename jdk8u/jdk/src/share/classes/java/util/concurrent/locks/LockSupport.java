@@ -133,6 +133,11 @@ public class LockSupport {
     /**
      * unpark方法只有一个版本，注意unpark不一定对当前线程，也可能是其他某个线程
      *
+     * 提供一个许可，唤醒线程的方法就这一个。
+     * 1.如果thread 之前没有持有许可，则让thread 线程持有一个，如果这前有许可了，那么数量不会增加
+     * 2.如果thread 之前因调用park()而被挂起，则调用unpark()后，该线程会被唤醒。
+     * 3.如果thread 之前没有调用park()，则调用unpark()方法后，后续再一次调用park()方法时，其会立刻返回。
+     *
      * Makes available the permit for the given thread, if it
      * was not already available.  If the thread was blocked on
      * {@code park} then it will unblock.  Otherwise, its next call
@@ -152,6 +157,10 @@ public class LockSupport {
 
     /**
      * 跟park相比就是parkBlocker不一样
+     * JDK1.6的新方法,除了参数之外其他和park()一样
+     * 参数：blocker，用来标识当前线程在等待的对象，即记录线程被阻塞时被谁阻塞的,用于线程监控和分析工具来定位
+     * 根据源码可以看到的是参数blocker是在park之前先通过setBlocker()记录阻塞线程的发起者object，当线程锁被释放后再次清除记录；
+     * 推荐使用该方法，而不是park(),因为这个函数可以记录阻塞的发起者，如果发生死锁方便查看，在线程dump中会明确看到这个对象
      *
      * Disables the current thread for thread scheduling purposes unless the
      * permit is available.
@@ -188,6 +197,8 @@ public class LockSupport {
     }
 
     /**
+     *  park()的扩展函数，时间是相对当前时间的时间段，单位为纳秒，如果超时自动返回
+     *
      * Disables the current thread for thread scheduling purposes, for up to
      * the specified waiting time, unless the permit is available.
      *
@@ -229,6 +240,8 @@ public class LockSupport {
     }
 
     /**
+     *  park()的扩展函数，时间是基于绝对时间(1970开始)的时间点，单位为毫秒，如果超时自动返回
+     *
      * Disables the current thread for thread scheduling purposes, until
      * the specified deadline, unless the permit is available.
      *
@@ -292,6 +305,11 @@ public class LockSupport {
      *   1.在调用park()之前调用了unpark或者interrupt则park直接返回，不会挂起。
      *   2.如果未调用，则park会挂起当前线程。
      *   3.park未知原因调用出错则直接返回（一般不会出现）
+     *
+     * 尝试获取一个许可，如果没有则阻塞当前线程，响应中断；以下情况会返回
+     * 1.调用unpark(Thread thread)获得许可，这个unpark操作可以在park之前或者之后，如果park之前已经获得了许可，则调用了park会发上返回
+     * 2.当前线程被中断(interrupt())，返回时不会抛出异常
+     * 3.因为虚假唤醒而返回
      *
      * Disables the current thread for thread scheduling purposes unless the
      * permit is available.

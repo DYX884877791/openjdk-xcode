@@ -673,9 +673,12 @@ void Monitor::IUnlock (bool RelaxAssert) {
 }
 
 bool Monitor::notify() {
+  slog_debug("进入hotspot/src/share/vm/runtime/mutex.cpp中的Monitor::notify函数...");
   assert (_owner == Thread::current(), "invariant") ;
   assert (ILocked(), "invariant") ;
-  if (_WaitSet == NULL) return true ;
+  if (_WaitSet == NULL) {
+      return true ;
+  }
   NotifyCount ++ ;
 
   // Transfer one thread from the WaitSet to the EntryList or cxq.
@@ -692,7 +695,9 @@ bool Monitor::notify() {
       const intptr_t v = _LockWord.FullWord ;
       assert ((v & 0xFF) == _LBIT, "invariant") ;
       nfy->ListNext = (ParkEvent *)(v & ~_LBIT);
-      if (CASPTR (&_LockWord, v, UNS(nfy)|_LBIT) == v) break;
+      if (CASPTR (&_LockWord, v, UNS(nfy)|_LBIT) == v) {
+          break;
+      }
       // interference - _LockWord changed -- just retry
     }
     // Note that setting Notified before pushing nfy onto the cxq is

@@ -1091,6 +1091,7 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   // First check to see whether biasing is even enabled for this object
   Label cas_label;
   int null_check_offset = -1;
+    // 如果swap_reg中没存mark_addr，那么就先将mark_addr存入swap_reg中。
   if (!swap_reg_contains_mark) {
     null_check_offset = offset();
     movptr(swap_reg, mark_addr);
@@ -1098,8 +1099,12 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (need_tmp_reg) {
     push(tmp_reg);
   }
+    // 将对象的mark_addr，即markOop指针移入tmp_reg中
   movptr(tmp_reg, swap_reg);
+    // 将tmp_reg和biased_lock_mask_in_place进行与操作，biased_lock_mask_in_place为111，和它进行与就可以取出markOop中后三位，即（是否偏向锁+锁标志位）
   andptr(tmp_reg, markOopDesc::biased_lock_mask_in_place);
+    // 将上面结果，即（是否偏向锁+锁标志位）和biased_lock_pattern再次比较（biased_lock_pattern为5，即101），如果不相等，则表明不为偏向锁状态，
+    // 需要进行CAS操作，跳往cas_label；否则即为偏向锁状态，接着往下走。
   cmpptr(tmp_reg, markOopDesc::biased_lock_pattern);
   if (need_tmp_reg) {
     pop(tmp_reg);
@@ -1121,9 +1126,16 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (swap_reg_contains_mark) {
     null_check_offset = offset();
   }
+    // 走到这，表明锁对象已经为偏向锁态，需要判断锁对象之前是否已经偏向当前线程。
+    // 将锁对象所属类的prototype_header移动至tmp_reg中，prototype_header中存储的也是markOop。
+    // prototype_header是专门为偏向锁打造的，初始时类的prototype_header为偏向锁态，即后三位为101，一旦发生了bulk_revoke,那么就会设为无锁态，即001。
+    // bulk_revoke为批量撤销，每次类发生bulk_rebais时（类的所有对象重设偏向锁），类prototype_header中的epoch就会+1，当epoch达到一个阈值时，
+    // 就会发生bulk_revoke，撤销该类每个对象的偏向锁，这样该类的所有对象以后都不能使用偏向锁了，其实也就是虚拟机认为该对象不适合偏向锁。
   load_prototype_header(tmp_reg, obj_reg);
 #ifdef _LP64
+    // 将当前线程id和类的prototype_header相或，这样得到的markOop为（当前线程id + prototype_header中的（epoch + 分代年龄 + 偏向锁标志 + 锁标志位）），注意prototype_header的分代年龄那4个字节为0
   orptr(tmp_reg, r15_thread);
+    // 将上面计算得到的结果与锁对象的markOop进行异或，tmp_reg中相等的位全部被置为0，只剩下不相等的位。
   xorptr(tmp_reg, swap_reg);
   Register header_reg = tmp_reg;
 #else
@@ -1132,6 +1144,8 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   xorptr(swap_reg, tmp_reg);
   Register header_reg = swap_reg;
 #endif
+    // 对((int) markOopDesc::age_mask_in_place)进行按位取反，age_mask_in_place为...0001111000,取反后，变成了...1110000111,除了分代年龄那4位，其他位全为1；
+    // 将取反后的结果再与header_reg相与，这样就把header_reg中除了分代年龄之外的其他位取了出来，即将上面异或得到的结果中分代年龄给忽略掉。
   andptr(header_reg, ~((int) markOopDesc::age_mask_in_place));
   if (need_tmp_reg) {
     pop(tmp_reg);
@@ -1140,10 +1154,13 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
     cond_inc32(Assembler::zero,
                ExternalAddress((address) counters->biased_lock_entry_count_addr()));
   }
+    // 如果除了分代年龄，对象的markOop和（当前线程id+其他位）相等，那么上面与操作的结果应该为0，表明对象之前已经偏向当前线程，即markOop中存放有当前线程id，那么跳到done处，直接进入方法执行即可；否则表明当前线程还不是偏向锁的持有者，会接着往下走。
   jcc(Assembler::equal, done);
 
+    // 这两个其实就是汇编里的标号
   Label try_revoke_bias;
   Label try_rebias;
+    // 走到这，表明锁对象并没有偏向当前线程，接下来判断是否需要撤销锁对象的偏向。
 
   // At this point we know that the header has the bias pattern and
   // that we are not the bias owner in the current epoch. We need to
@@ -1154,8 +1171,13 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   // If the low three bits in the xor result aren't clear, that means
   // the prototype header is no longer biased and we have to revoke
   // the bias on this object.
+    // 将header_reg和111相与，如果结果不为0，则表明header_reg后三位存在不为0的位，证明之前进行异或时，类的prototype_header后面三位与对象markOop的后三位不相等，
+    // 但是能走到这，表明对象markword后三位为101，即偏向模式。现在类的prototype_header和对象markOop后三位不相等，即对象所属类不再支持偏向，
+    // 发生了bulk_revoke，所以需要对当前对象进行偏向锁的撤销；否则表明目前该类还支持偏向锁，接着往下走。
   testptr(header_reg, markOopDesc::biased_lock_mask_in_place);
   jccb(Assembler::notZero, try_revoke_bias);
+
+    // 走到这，表明锁对象还支持偏向锁，需要判断当前对象的epoch是否合法，如果不合法，需要取进行重偏向。合法的话接着往下走。
 
   // Biasing is still enabled for this data type. See whether the
   // epoch of the current bias is still valid, meaning that the epoch
@@ -1166,8 +1188,12 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   // that the current epoch is invalid in order to do this because
   // otherwise the manipulations it performs on the mark word are
   // illegal.
+    // 测试对象所属类的prototype_header中epoch是否为0，不为0的话则表明之前异或时，类的prototype_header中epoch和对象markOop的epoch不相等，
+    // 表明类在对象分配后发生过bulk_rebais（）（前面提到过，每次发生bulk_rebaise,类的prototype header中的epoch都会+1），所以之前对象的偏向就无效了，需要进行重偏向。否则接着往下走。
   testptr(header_reg, markOopDesc::epoch_mask_in_place);
   jccb(Assembler::notZero, try_rebias);
+
+    // 走到这，表明锁对象的偏向态合法，可以尝试去获取锁，使对象偏向当前线程。
 
   // The epoch of the current bias is still valid but we know nothing
   // about the owner; it might be set or it might be clear. Try to
@@ -1176,13 +1202,16 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   // Note that we first construct the presumed unbiased header so we
   // don't accidentally blow away another thread's valid bias.
   NOT_LP64( movptr(swap_reg, saved_mark_addr); )
+    // 取出对象markOop中除线程id之外的其他位
   andptr(swap_reg,
          markOopDesc::biased_lock_mask_in_place | markOopDesc::age_mask_in_place | markOopDesc::epoch_mask_in_place);
   if (need_tmp_reg) {
     push(tmp_reg);
   }
 #ifdef _LP64
+    // 将其他位移动至 tmp_reg。
   movptr(tmp_reg, swap_reg);
+    // 将其他位和当前线程id进行或，构造成一个新的完整的32位markOop,存入tmp_reg中。新的markOop因为保存了当前线程id，所以会偏向当前线程。
   orptr(tmp_reg, r15_thread);
 #else
   get_thread(tmp_reg);
@@ -1191,6 +1220,9 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (os::is_MP()) {
     lock();
   }
+    // 尝试利用CAS操作将新构成的markOop存入对象头的mark_addr处，如果设置成功，则获取偏向锁成功。
+    // 这里说明下，cmpxchgptr操作会强制将rax寄存器（swap_reg）中内容作为老数据，与第二个参数，在这里即mark_addr处的内容进行比较，
+    // 如果相等，则将第一个参数的内容，即tmp_reg中的新数据，存入mark_addr。
   cmpxchgptr(tmp_reg, mark_addr); // compare tmp_reg and swap_reg
   if (need_tmp_reg) {
     pop(tmp_reg);
@@ -1203,9 +1235,11 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
     cond_inc32(Assembler::zero,
                ExternalAddress((address) counters->anonymously_biased_lock_entry_count_addr()));
   }
+    // 上面CAS操作失败的情况下，表明对象头中的markOop数据已经被篡改，即有其他线程已经获取到偏向锁，因为偏向锁不容许多个线程访问同一个锁对象，所以需要跳到slow_case处，去撤销该对象的偏向锁，并进行锁升级。
   if (slow_case != NULL) {
     jcc(Assembler::notZero, *slow_case);
   }
+    // 上面CAS成功的情况下，直接就跳往done处，回去执行方法的字节码了。
   jmp(done);
 
   bind(try_rebias);
@@ -1221,6 +1255,7 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (need_tmp_reg) {
     push(tmp_reg);
   }
+    // 将锁对象所属类的prototype_header送入tmp_reg。
   load_prototype_header(tmp_reg, obj_reg);
 #ifdef _LP64
   orptr(tmp_reg, r15_thread);
@@ -1232,6 +1267,7 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (os::is_MP()) {
     lock();
   }
+    // 尝试用CAS操作，使对象的markOop重置为无线程id的偏向锁态，即不偏向任何线程。
   cmpxchgptr(tmp_reg, mark_addr); // compare tmp_reg and swap_reg
   if (need_tmp_reg) {
     pop(tmp_reg);
@@ -1243,6 +1279,7 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
     cond_inc32(Assembler::zero,
                ExternalAddress((address) counters->rebiased_lock_entry_count_addr()));
   }
+    // 如果CAS失败，则表明对象头的markOop数据已经被其他线程更改，需要跳往slow_case进行撤销偏向锁，否则跳往done处，执行字节码。
   if (slow_case != NULL) {
     jcc(Assembler::notZero, *slow_case);
   }
@@ -1264,10 +1301,13 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   if (need_tmp_reg) {
     push(tmp_reg);
   }
+    // 走到这，表明这个类的prototype_header中已经没有偏向锁的位了，即这个类的所有对象都不再支持偏向锁了，但是当前对象仍为偏向锁状态，所以我们需要重置下当前对象的markOop为无锁态。
+    // 将锁对象所属类的prototype_header送入tmp_reg。
   load_prototype_header(tmp_reg, obj_reg);
   if (os::is_MP()) {
     lock();
   }
+    // 尝试用CAS操作，使对象的markOop重置为无锁态。这里是否失败无所谓，即使失败了，也表明其他线程已经移除了对象的偏向锁标志。
   cmpxchgptr(tmp_reg, mark_addr); // compare tmp_reg and swap_reg
   if (need_tmp_reg) {
     pop(tmp_reg);
@@ -1281,7 +1321,7 @@ int MacroAssembler::biased_locking_enter(Register lock_reg,
   }
 
   bind(cas_label);
-
+    //接下来会回到lock_object（）方法中，继续轻量级锁的获取。
   return null_check_offset;
 }
 

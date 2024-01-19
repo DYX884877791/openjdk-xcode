@@ -38,6 +38,7 @@
 #include "runtime/init.hpp"
 #include "runtime/thread.inline.hpp"
 #include "services/heapDumper.hpp"
+#include "utilities/slog.hpp"
 
 
 #ifdef ASSERT
@@ -196,6 +197,7 @@ CollectedHeap::CollectedHeap() : _n_par_threads(0)
 // collect_as_vm_thread该方法用于执行特定GCCause::Cause下的垃圾回收
 // 要求调用此方法的线程必须是JVM线程，必须已经获取了Heap_lock。GCCauseSetter是一个辅助类，通过其构造函数临时的改变当前CollectedHeap的_gc_cause， 通过析构函数将_gc_cause恢复成原来的
 void CollectedHeap::collect_as_vm_thread(GCCause::Cause cause) {
+  slog_debug("进入hotspot/src/share/vm/gc_interface/collectedHeap.cpp中的CollectedHeap::collect_as_vm_thread函数...");
   assert(Thread::current()->is_VM_thread(), "Precondition#1");
   assert(Heap_lock->is_locked(), "Precondition#2");
   GCCauseSetter gcs(this, cause);

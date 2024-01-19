@@ -36,6 +36,20 @@ class GlobalTLABStats;
 //            It is thread-private at any time, but maybe multiplexed over
 //            time across multiple threads. The park()/unpark() pair is
 //            used to make it available for such multiplexing.
+//
+// 创建对象时，需要在堆上申请指定大小的内存，如果同时有大量线程申请内存的话，可以通过CAS乐观锁机制确保不会申请到同一块内存，在JVM运行中，内存分配时一个极其频繁的动作，这种方式势必会降低性能。
+//  因此，在HotSpot1.6的实现中引入了TLAB技术。
+//
+//  什么是TLAB：
+//  TLAB全称ThreadLocalAllocationBuffer，是线程的一块私有内存，如果设置了虚拟机参数 -XX：UseTLAB，在线程初始化时，同时也会申请一块指定大小的内存，
+//  只给当前线程使用，这样每个线程都单独拥有一个Buffer，如果需要分配内存，就在自己的Buffer上分配，这样就不会存在竞争的情况，可以大大提升分配效率，
+//  当Buffer容量不够的时候，再重新从Eden区域申请一个继续使用，这个申请动作还是需要原子操作的。
+//
+//  TLAB的目的是在为新对象分配内存空间时，让每个Java应用线程能在使用自己专属的分配指针来分配空间，均摊GC堆（eden区）里共享的分配指针做更新而带来的同步开销。
+//
+//  TLAB只是让每个线程私有的分配指针，但底下存对象的内存空间还是给所有线程访问的，只是其他线程无法在这个区域分配而已。当一个TLAB用满（分配指针top撞上分配极限end了），
+//  就新申请一个TLAB，而在老TLAB里对象还留在原地什么都不用管——它们无法感知自己是否是曾经从TLAB分配出来的，而只关心自己是在eden里分配的。
+//
 // ThreadLocalAllocBuffer的定义位于hotspot/src/share/vm/memory/ThreadLocalAllocBuffer.hpp中，具体的实现在同目录的ThreadLocalAllocBuffer.inline.cpp
 // 和ThreadLocalAllocBuffer.cpp中，该类表示由线程私有的内存区域，简称TLAB，主要是为了解决在Eden区分配内存时锁竞争导致性能下降的问题。
 // 这块区域是线程私有的，这里的私有具体是指只能由该线程在这块内存区域中分配对象，但是已经分配的对象其他线程也可以正常访问。
@@ -43,12 +57,12 @@ class GlobalTLABStats;
 class ThreadLocalAllocBuffer: public CHeapObj<mtThread> {
   friend class VMStructs;
 private:
-  HeapWord* _start;                              // address of TLAB
-  HeapWord* _top;                                // address after last allocation
-  HeapWord* _pf_top;                             // allocation prefetch watermark
-  HeapWord* _end;                                // allocation end (excluding alignment_reserve)
-  size_t    _desired_size;                       // desired size   (including alignment_reserve)
-  size_t    _refill_waste_limit;                 // hold onto tlab if free() is larger than this
+  HeapWord* _start;                              // address of TLAB TLAB 起始地址，表示堆内存地址都用 HeapWord*
+  HeapWord* _top;                                // address after last allocation   上次分配的内存地址
+  HeapWord* _pf_top;                             // allocation prefetch watermark   Allocation Prefetch CPU 缓存优化机制相关需要的参数，这里先不用考虑
+  HeapWord* _end;                                // allocation end (excluding alignment_reserve)    TLAB 结束地址
+  size_t    _desired_size;                       // desired size   (including alignment_reserve)    TLAB 大小 包括保留空间，表示内存大小都需要通过 size_t 类型，也就是实际字节数除以 HeapWordSize 的值
+  size_t    _refill_waste_limit;                 // hold onto tlab if free() is larger than this    TLAB最大浪费空间，剩余空间不足分配浪费空间限制。在TLAB剩余空间不足的时候，根据这个值决定分配策略，如果浪费空间大于这个值则直接在 Eden 区分配，如果小于这个值则将当前 TLAB 放回 Eden 区管理并从 Eden 申请新的 TLAB 进行分配。
   size_t    _allocated_before_last_gc;           // total bytes allocated up until the last gc
 
   static size_t   _max_size;                     // maximum size of any TLAB

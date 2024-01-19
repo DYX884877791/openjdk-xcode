@@ -3071,9 +3071,9 @@ void MetaspaceAux::print_metaspace_change(size_t prev_metadata_used) {
                         used_bytes(),
                         reserved_bytes());
   } else {
-    gclog_or_tty->print(" GC之前元空间内存占用:"  SIZE_FORMAT "K"
-                        "->GC之前元空间内存占用:" SIZE_FORMAT "K"
-                        "(元空间内存容量:"  SIZE_FORMAT "K)",
+    gclog_or_tty->print(" "  SIZE_FORMAT "K"
+                        "->" SIZE_FORMAT "K"
+                        "("  SIZE_FORMAT "K)",
                         prev_metadata_used/K,
                         used_bytes()/K,
                         reserved_bytes()/K);

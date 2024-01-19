@@ -3288,6 +3288,8 @@ public class Arrays {
     }
 
     /**
+     * 复制original的前n个数据 到copy中
+     *
      * Copies the specified array, truncating or padding with zeros (if necessary)
      * so the copy has the specified length.  For all indices that are
      * valid in both the original array and the copy, the two arrays will

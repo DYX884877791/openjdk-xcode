@@ -4600,6 +4600,7 @@ class StubGenerator: public StubCodeGenerator {
 }; // end class declaration
 
 void StubGenerator_generate(CodeBuffer* code, bool all) {
+  slog_debug("进入hotspot/src/cpu/x86/vm/stubGenerator_x86_64.cpp中的StubGenerator_generate函数,即将创建StubGenerator实例...");
     // 进入StubGenerator g的构造方法，如上
   StubGenerator g(code, all);
 }

@@ -51,6 +51,7 @@ import sun.jvm.hotspot.utilities.*;
     menu bar...) */
 
 public class HSDB implements ObjectHistogramPanel.Listener, SAListener {
+    //
   public static void main(String[] args) {
     new HSDB(args).run();
   }

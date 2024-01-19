@@ -73,6 +73,7 @@ class VM_EnableBiasedLocking: public VM_Operation {
 
 
 // One-shot PeriodicTask subclass for enabling biased locking
+// EnableBiasedLockingTask 是PeriodicTask 的派生类，使用interval_time参数调用了父类的带参构造函数，PeriodicTask定义在task.hpp中，构造函数实现在task.cpp中
 class EnableBiasedLockingTask : public PeriodicTask {
  public:
   EnableBiasedLockingTask(size_t interval_time) : PeriodicTask(interval_time) {}
@@ -107,6 +108,7 @@ void BiasedLocking::init() {
       EnableBiasedLockingTask* task = new EnableBiasedLockingTask(BiasedLockingStartupDelay);
       task->enroll();
     } else {
+        // 否则立即调用VM_EnableBiasedLocking 开启偏向锁
       VM_EnableBiasedLocking op(false);
       VMThread::execute(&op);
     }
@@ -599,6 +601,7 @@ public:
 
 // BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向)。
 BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/runtime/biasedLocking.cpp中的BiasedLocking::revoke_and_rebias函数...");
   assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
 
   // We can revoke the biases of anonymously-biased objects
@@ -661,7 +664,7 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
         assert(THREAD->is_Java_thread(), "");
         markOop biased_value       = mark;
         markOop rebiased_prototype = markOopDesc::encode((JavaThread*) THREAD, mark->age(), prototype_header->bias_epoch());
-          //通过CAS 操作， 将本线程的 ThreadID 、时间错、分代年龄尝试写入对象头中
+          //通过CAS 操作， 将本线程的 ThreadID 、时间戳、分代年龄尝试写入对象头中
         markOop res_mark = (markOop) Atomic::cmpxchg_ptr(rebiased_prototype, obj->mark_addr(), mark);
         if (res_mark == biased_value) {
             //CAS成功，则返回撤销和重新偏向状态

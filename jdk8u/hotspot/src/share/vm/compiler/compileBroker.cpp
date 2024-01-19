@@ -1438,6 +1438,7 @@ void CompileBroker::compile_method_base(methodHandle method,
 
 
 // CompileBroker::compile_method用于提交编译任务，是接受编译请求的终极入口，默认配置下提交完后会立即返回不等待编译完成
+// 编译任务提交函数是 CompileBroker::compile_method()，编译策略对象  AdvancedThresholdPolicy::submit_compile() 中会调用这个函数提交编译任务
 nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
                                        int comp_level,
                                        methodHandle hot_method, int hot_count,

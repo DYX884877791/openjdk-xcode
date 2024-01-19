@@ -651,13 +651,34 @@ IRT_END
 // InterpreterRuntime::monitorenter用于获取轻量级锁或者重量级锁，获取轻量级锁成功后会将目标对象的对象头改成BasicLock指针，
 // 获取重量级锁成功后会将目标对象的对象头改成ObjectMonitor指针，BasicLock和ObjectMonitor本身会保存目标对象原来的无锁状态下的对象头
 //
+//
+//   准备加锁前会从当前方法对应的调用栈帧中查找一个空闲的BasicObjectLock，obj属性为NULL的就表示空闲的，
+//  查找时先从低地址即从最近才分配的BasicObjectLock开始遍历，如果找到一个obj属性跟目标对象一致的就终止遍历，
+//  BasicObjectLock就是外层synchronized对应的BasicObjectLock，如果没有找到obj属性跟目标对象一致的就会把所有的BasicObjectLock都遍历一遍，
+//  取地址最高的一个空闲BasicObjectLock，提高BasicObjectLock的使用率。
+//
+//  准备解锁前会从当前方法对应的调用栈帧中找到一个obj属性与目标对象一致的BasicObjectLock，遍历时从低地址即从最近才分配的BasicObjectLock开始遍历，
+//  找到了就立即返回，如果没有找到则抛出异常IllegalMonitorStateException。
+//
+//  注意上述的加锁解锁都是针对于synchronized关键字，如果是通过jni_MonitorEnter/jni_MonitorExit方法，
+//  Unsafe类的monitorenter/monitorexit方法加锁解锁则不需要分配BasicObjectLock，而是直接分配并使用重量级锁。
+//
 // 对比lock_obj方法可知，两者获取轻量级锁或者处理锁嵌套情形时的代码是一样的，monitorenter方法增加了一步撤销偏向锁和轻量级锁膨胀成重量级锁的逻辑，
 // 这是为了兼容UseHeavyMonitors参数为true或者UseBiasedLocking为false时的处理逻辑。
 // 基于monitorenter为入口，沿着无锁态->偏向锁->轻量级锁->重量级锁的路径来分析synchronized的实现过程：
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, BasicObjectLock* elem))
+  slog_debug("进入hotspot/src/share/vm/interpreter/interpreterRuntime.cpp中的InterpreterRuntime::monitorenter函数...");
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
 #endif
+  char * thread_name = thread->name();
+  pthread_t pthread_id = thread->osthread()->pthread_id();
+  slog_debug("当前线程的名称为[%s],pthread_id为[0x%016lx]...", thread_name, pthread_id);
+  if (thread->callee_target()) {
+      char * method_name = thread->callee_target()->name_and_sig_as_C_string();
+      slog_debug("当前方法的名称为[%s]...", method_name);
+  }
+
   if (PrintBiasedLockingStatistics) {
       //增加计数器
     Atomic::inc(BiasedLocking::slow_path_entry_count_addr());
@@ -687,9 +708,17 @@ IRT_END
 // monitorexit用于轻量级锁和重量级锁的释放，锁释放就是目标对象的对象头恢复成无锁状态
 // 对比unlock_obj方法的实现，两者轻量级锁解锁和锁嵌套情形下解锁的逻辑是一样的， monitorexit方法增加了重量级锁解锁的处理逻辑
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
+  slog_debug("进入hotspot/src/share/vm/interpreter/interpreterRuntime.cpp中的InterpreterRuntime::monitorexit函数...");
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
 #endif
+  char * thread_name = thread->name();
+  pthread_t pthread_id = thread->osthread()->pthread_id();
+  slog_debug("当前线程的名称为[%s],pthread_id为[0x%016lx]...", thread_name, pthread_id);
+  if (thread->callee_target()) {
+    char * method_name = thread->callee_target()->name_and_sig_as_C_string();
+    slog_debug("当前方法的名称为[%s]...", method_name);
+  }
   Handle h_obj(thread, elem->obj());
   assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
          "must be NULL or an object");

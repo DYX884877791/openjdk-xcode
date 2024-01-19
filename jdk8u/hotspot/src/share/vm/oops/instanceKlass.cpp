@@ -63,6 +63,7 @@
 #include "services/threadService.hpp"
 #include "utilities/dtrace.hpp"
 #include "utilities/macros.hpp"
+#include "utilities/slog.hpp"
 #if INCLUDE_ALL_GCS
 #include "gc_implementation/concurrentMarkSweep/cmsOopClosures.inline.hpp"
 #include "gc_implementation/g1/g1CollectedHeap.inline.hpp"
@@ -544,8 +545,10 @@ void InstanceKlass::fence_and_clear_init_lock() {
 }
 
 void InstanceKlass::eager_initialize_impl(instanceKlassHandle this_oop) {
+  slog_debug("进入hotspot/src/share/vm/oops/instanceKlass.cpp中的InstanceKlass::eager_initialize_impl函数...");
   EXCEPTION_MARK;
   oop init_lock = this_oop->init_lock();
+  slog_debug("即将创建一个ObjectLocker实例...");
   ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
 
   // abort if someone beat us to the initialization
@@ -638,6 +641,9 @@ bool InstanceKlass::link_class_or_fail(TRAPS) {
  */
 bool InstanceKlass::link_class_impl(
     instanceKlassHandle this_oop, bool throw_verifyerror, TRAPS) {
+  const char * class_name = this_oop->external_name();
+  slog_debug("进入hotspot/src/share/vm/oops/instanceKlass.cpp中的InstanceKlass::link_class_impl函数,进行类[%s]的链接操作...", class_name);
+
   // check for error state.
   // This is checking for the wrong state.  If the state is initialization_error,
   // then this class *was* linked.  The CDS code does a try_link_class and uses
@@ -709,6 +715,7 @@ bool InstanceKlass::link_class_impl(
   {
       //初始化对象锁
     oop init_lock = this_oop->init_lock();
+    slog_debug("在InstanceKlass::link_class_impl函数中即将创建一个ObjectLocker实例...");
     ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
     // rewritten will have been set if loader constraint error found
     // on an earlier link attempt
@@ -768,8 +775,7 @@ bool InstanceKlass::link_class_impl(
       // a shared class if the class is not loaded by the NULL classloader.
         //初始化vtable和itable
       ClassLoaderData * loader_data = this_oop->class_loader_data();
-      if (!(this_oop()->is_shared() &&
-            loader_data->is_the_null_class_loader_data())) {
+      if (!(this_oop()->is_shared() && loader_data->is_the_null_class_loader_data())) {
         ResourceMark rm(THREAD);
         this_oop->vtable()->initialize_vtable(true, CHECK_false);
         this_oop->itable()->initialize_itable(true, CHECK_false);
@@ -814,9 +820,11 @@ void InstanceKlass::rewrite_class(TRAPS) {
 // This is outside is_rewritten flag. In case of an exception, it can be
 // executed more than once.
 void InstanceKlass::link_methods(TRAPS) {
+  slog_debug("进入hotspot/src/share/vm/oops/instanceKlass.cpp中的InstanceKlass::link_methods函数...");
   int len = methods()->length();
   for (int i = len-1; i >= 0; i--) {
-    methodHandle m(THREAD, methods()->at(i));
+    Method* method = methods()->at(i);
+    methodHandle m(THREAD, method);
 
     // Set up method entry points for compiler and interpreter    .
     m->link_method(m, CHECK);
@@ -827,7 +835,9 @@ void InstanceKlass::link_methods(TRAPS) {
       ResourceMark rm(THREAD);
       static int nmc = 0;
       for (int j = i; j >= 0 && j >= i-4; j--) {
-        if ((++nmc % 1000) == 0)  tty->print_cr("Have run MethodComparator %d times...", nmc);
+        if ((++nmc % 1000) == 0) {
+          tty->print_cr("Have run MethodComparator %d times...", nmc);
+        }
         bool z = MethodComparator::methods_EMCP(m(),
                    methods()->at(j));
         if (j == i && !z) {
@@ -865,6 +875,8 @@ void InstanceKlass::initialize_super_interfaces(instanceKlassHandle this_k, TRAP
  * 类初始化的入口是InstanceKlass::initialize_impl方法
  */
 void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
+  const char* className = this_oop->external_name();
+  slog_debug("进入hotspot/src/share/vm/oops/instanceKlass.cpp中的InstanceKlass::initialize_impl函数,进行类[%s]的初始化操作...", className);
   // Make sure klass is linked (verified) before initialization
   // A class could already be verified, since it has been reflected upon.
     //完成此类的链接，如果已链接则会立即返回
@@ -879,6 +891,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
   {
       //获取对象锁
     oop init_lock = this_oop->init_lock();
+    slog_debug("在InstanceKlass::initialize_impl函数中即将创建一个ObjectLocker实例...");
     ObjectLocker ol(init_lock, THREAD, init_lock != NULL);
 
     Thread *self = THREAD; // it's passed the current thread
@@ -897,7 +910,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
        * 但是JVM必须要保证这个方法只能被执行一次，如果有其他线程并发调用触发了这个类的多次初始化，那只能让一个线程真正执行clinit方法，其他线程都必须等待，
        * 当clinit方法执行完之后，然后再唤醒其他等待这里的线程继续操作，当然不会再让它们有机会再执行clinit方法，因为每个类都有一个状态，这个状态可以保证这一点。
        *
-       * 当有个线程正在执行这个类的clinit方法的时候，就会设置这个类的状态为being_initialized，当正常执行完之后就马上设置为fully_initialized，
+       * 当有个线程正在执行这个类的cinit方法的时候，就会设置这个类的状态为being_initialized，当正常执行完之后就马上设置为fully_initialized，
        * 然后才唤醒其他也在等着对其做初始化的线程继续往下走，在继续走下去之前，会先判断这个类的状态，
        * 如果已经是fully_initialized了说明有线程已经执行完了clinit方法，因此不会再执行clinit方法了。
        */
@@ -926,7 +939,7 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
       DTRACE_CLASSINIT_PROBE_WAIT(erroneous, InstanceKlass::cast(this_oop()), -1,wait);
       ResourceMark rm(THREAD);
       const char* desc = "Could not initialize class ";
-      const char* className = this_oop->external_name();
+//      const char* className = this_oop->external_name();
       size_t msglen = strlen(desc) + strlen(className) + 1;
       char* message = NEW_RESOURCE_ARRAY(char, msglen);
       if (NULL == message) {

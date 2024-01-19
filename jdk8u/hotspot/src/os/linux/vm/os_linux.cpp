@@ -287,6 +287,7 @@ static char cpu_arch[] = HOTSPOT_LIB_ARCH;
 // on NPTL, it returns the same pid for all threads, as required by POSIX.)
 //
 pid_t os::Linux::gettid() {
+    // 定义在<sys./types.h>，Linux内核中的线程id...
   int rslt = syscall(SYS_gettid);
   if (rslt == -1) {
      // old kernel, no NPTL support
@@ -5346,6 +5347,7 @@ jint os::init_2(void)
     // set the number of file descriptors to max. print out error
     // if getrlimit/setrlimit fails but continue regardless.
     struct rlimit nbr_files;
+      // RLIMIT_NOFILE 进程能打开的文件描述符的最大数量...
     int status = getrlimit(RLIMIT_NOFILE, &nbr_files);
     if (status != 0) {
       if (PrintMiscellaneous && (Verbose || WizardMode))
@@ -6119,7 +6121,9 @@ int os::PlatformEvent::TryPark() {
       //_Event只能是0或者1
     guarantee ((v == 0) || (v == 1), "invariant") ;
       //将_Event原子的置为0
-    if (Atomic::cmpxchg (0, &_Event, v) == v) return v  ;
+    if (Atomic::cmpxchg (0, &_Event, v) == v) {
+        return v  ;
+    }
   }
 }
 
@@ -6132,7 +6136,9 @@ void os::PlatformEvent::park() {       // AKA "down()"
   for (;;) {
       v = _Event ;
       //将其原子的减1
-      if (Atomic::cmpxchg (v-1, &_Event, v) == v) break ;
+      if (Atomic::cmpxchg (v-1, &_Event, v) == v) {
+          break ;
+      }
   }
   guarantee (v >= 0, "invariant") ;
   if (v == 0) {
@@ -6149,7 +6155,9 @@ void os::PlatformEvent::park() {       // AKA "down()"
         status = pthread_cond_wait(_cond, _mutex);
         // for some reason, under 2.7 lwp_cond_wait() may return ETIME ...
         // Treat this the same as if the wait was interrupted
-        if (status == ETIME) { status = EINTR; }
+        if (status == ETIME) {
+            status = EINTR;
+        }
         assert_status(status == 0 || status == EINTR, status, "cond_wait");
      }
       //被唤醒了
@@ -6404,7 +6412,9 @@ void Parker::park(bool isAbsolute, jlong time) {
     // 原 _counter 不为零，许可可用，不需等待
     // 否则依赖于具有完整屏障语义的 Atomic::xchg() 对 _counter 进行无锁更新设置为0
     //将_counter属性置为0，返回值大于0，说明正在执行unpark动作唤醒当前线程，再park让其休眠无意义
-  if (Atomic::xchg(0, &_counter) > 0) return;
+  if (Atomic::xchg(0, &_counter) > 0) {
+      return;
+  }
 
     //获取当前线程(JavaThread)
   Thread* thread = Thread::current();

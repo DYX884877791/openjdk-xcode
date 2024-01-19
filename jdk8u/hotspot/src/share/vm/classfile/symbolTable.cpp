@@ -304,7 +304,7 @@ Symbol* SymbolTable::lookup(const Symbol* sym, int begin, int end, TRAPS) {
 
 Symbol* SymbolTable::lookup_only(const char* name, int len,
                                    unsigned int& hash) {
-  slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::lookup_only函数，查找[%s]的Symbol...", name);
+  slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::lookup_only函数,查找[%s]的Symbol...", name);
   hash = hash_symbol(name, len);
   int index = the_table()->hash_to_index(hash);
 

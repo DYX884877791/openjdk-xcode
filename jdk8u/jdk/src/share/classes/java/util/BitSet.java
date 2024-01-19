@@ -64,6 +64,9 @@ import java.util.stream.StreamSupport;
  */
 public class BitSet implements Cloneable, java.io.Serializable {
     /*
+     *  计算给定的bitIdx对应的long的索引, 每一个long存放的数据的个数
+     *  计算bitIdx在对应的long位置索引, -1
+     *
      * BitSets are packed into arrays of "words."  Currently a word is
      * a long, which consists of 64 bits, requiring 6 address bits.
      * The choice of word size is determined purely by performance concerns.
@@ -87,6 +90,8 @@ public class BitSet implements Cloneable, java.io.Serializable {
     };
 
     /**
+     * 存放数据, 当前使用的long的个数[每一次对于当前集合进行更新之后, 会重新计算wordInUse], 是否容量固定[假设], 序列化id
+     *
      * The internal field corresponding to the serialField "bits".
      */
     private long[] words;
@@ -106,6 +111,8 @@ public class BitSet implements Cloneable, java.io.Serializable {
     private static final long serialVersionUID = 7997698588986878753L;
 
     /**
+     * 相当于除以64, 返回bitIndex在的数组[words]中的索引
+     *
      * Given a bit index, return word index containing it.
      */
     private static int wordIndex(int bitIndex) {
@@ -162,6 +169,9 @@ public class BitSet implements Cloneable, java.io.Serializable {
         sizeIsSticky = true;
     }
 
+    /**
+     * 创建能够包含nBits个位的long数组
+     */
     private void initWords(int nbits) {
         words = new long[wordIndex(nbits-1) + 1];
     }
@@ -177,6 +187,8 @@ public class BitSet implements Cloneable, java.io.Serializable {
     }
 
     /**
+     * 统计longs中最后一个非0的long的索引  然后构造一个BitSet
+     *
      * Returns a new bit set containing all the bits in the given long array.
      *
      * <p>More precisely,

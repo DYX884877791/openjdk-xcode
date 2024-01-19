@@ -804,7 +804,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
   } else {
     Label done;
 
-    const Register swap_reg = rax; // Must use rax for cmpxchg instruction
+    const Register swap_reg = rax; // Must use rax for cmpxchg instruction，cmpxchg其实就是CAS操作，必须使用rax寄存器作为老数据的存储。
     const Register obj_reg = c_rarg3; // Will contain the oop
 
       // 其中BasicObjectLock是一个简单的数据结构
@@ -817,21 +817,29 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
 
     // Load object pointer into obj_reg %c_rarg3
       //进入此方法目标obj要么是无锁状态，要么是对同一个对象的synchronized嵌套情形下的有锁状态
-      //将用于获取锁的实例oop拷贝到obj_reg中
+      //将用于获取锁的实例oop拷贝到obj_reg中，即将加锁对象放入obj_reg寄存器
     movptr(obj_reg, Address(lock_reg, obj_offset));
 
       //UseBiasedLocking默认为true
+      //如果虚拟机参数允许使用偏向锁，那么进入biased_locking_enter（）中
     if (UseBiasedLocking) {
         //首先尝试获取偏向锁，获取成功会跳转到done，否则走到slow_case
+        // lock_reg :存储的是分配的BasicObjectLock的指针
+        // obj_reg :存储的是锁对象的指针
+        // slow_case :即InterpreterRuntime::monitorenter（）；
+        // done :标志着获取锁成功。
+        // slow_case 和 done 也被传入，这样在biased_locking_enter（）中，就可以根据情况跳到这两处了。
       biased_locking_enter(lock_reg, obj_reg, swap_reg, rscratch1, false, done, &slow_case);
     }
 
     // Load immediate 1 into swap_reg %rax
       //如果UseBiasedLocking为false或者目标对象的锁不是偏向锁了会走此逻辑
+      // 加载1到swap_reg
     movl(swap_reg, 1);
 
     // Load (object->mark() | 1) into swap_reg %rax
       //计算 object->mark() | 1，结果保存到swap_reg，跟1做或运算将其标记为无锁状态
+      // 获取加锁对象的对象头，与1做位或运算，结果放入swap_reg
     orptr(swap_reg, Address(obj_reg, 0));
 
     // Save (object->mark() | 1) into BasicLock's displaced header
@@ -881,6 +889,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
       //如果andptr的结果为0，说明当前线程已经获取了轻量级锁则跳转到done
     jcc(Assembler::zero, done);
 
+      // 直接跳到这，需要进入InterpreterRuntime::monitorenter（）中去获取锁。
       //否则执行InterpreterRuntime::monitorenter将轻量级锁膨胀成重量级锁或者获取重量级锁
     bind(slow_case);
 
@@ -889,6 +898,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
             lock_reg);
 
+      // 直接跳到这表明获取锁成功，接下来就会返回到entry_point例程进行字节码的执行了。
     bind(done);
   }
 }

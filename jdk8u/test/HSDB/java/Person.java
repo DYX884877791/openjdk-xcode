@@ -23,6 +23,10 @@ public class Person {
     // int类型成员变量
     private int b=2;
 
+    public String[] flag = { "a", "b", "c" };
+
+    private String name = "test";
+
     /******************get/set方法****************************/
     public static String getFinalStr1() {
         return finalStr1;
