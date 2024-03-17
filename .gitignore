@@ -1,5 +1,6 @@
 build/
 dist/
+*.iml
 .idea/
 .github/
 .DS_Store
