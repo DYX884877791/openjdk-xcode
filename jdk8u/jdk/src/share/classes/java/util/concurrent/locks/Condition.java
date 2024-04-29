@@ -179,6 +179,8 @@ import java.util.Date;
 public interface Condition {
 
     /**
+     * 使当前线程接在收到唤醒信号或者被中断之前都一直处于等待的状态
+     *
      * Causes the current thread to wait until it is signalled or
      * {@linkplain Thread#interrupt interrupted}.
      *
@@ -231,6 +233,8 @@ public interface Condition {
     void await() throws InterruptedException;
 
     /**
+     * 使当前线程接在收到唤醒信号之前都一直处于等待的状态
+     *
      * Causes the current thread to wait until it is signalled.
      *
      * <p>The lock associated with this condition is atomically
@@ -267,6 +271,8 @@ public interface Condition {
     void awaitUninterruptibly();
 
     /**
+     * 使当前线程接在收到唤醒信号或者被中断或到达指定等待时间之前都一直处于等待的状态，返回值表示剩余时间
+     *
      * Causes the current thread to wait until it is signalled or interrupted,
      * or the specified waiting time elapses.
      *
@@ -450,6 +456,8 @@ public interface Condition {
     boolean awaitUntil(Date deadline) throws InterruptedException;
 
     /**
+     * 唤醒一个等待线程
+     *
      * Wakes up one waiting thread.
      *
      * <p>If any threads are waiting on this condition then one
@@ -468,6 +476,8 @@ public interface Condition {
     void signal();
 
     /**
+     * 唤醒所有的等待线程
+     *
      * Wakes up all waiting threads.
      *
      * <p>If any threads are waiting on this condition then they are

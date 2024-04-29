@@ -53,6 +53,12 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.lang.reflect.Constructor;
 
 /**
+ * ForkJoinTask 主要方法：
+ *
+ *  fork()   // 在当前线程运行的线程池中安排一个异步执行。简单的理解就是再创建一个子任务。
+ *  join()    //当任务完成的时候返回计算结果。
+ *  invoke()    //开始执行任务，如果必要，等待计算完成。
+ *
  * Abstract base class for tasks that run within a {@link ForkJoinPool}.
  * A {@code ForkJoinTask} is a thread-like entity that is much
  * lighter weight than a normal thread.  Huge numbers of tasks and
@@ -290,6 +296,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
             } catch (Throwable rex) {
                 return setExceptionalCompletion(rex);
             }
+            // 任务正常完成，设置正常完成状态，通知其他需要join该任务的线程
             if (completed)
                 s = setCompletion(NORMAL);
         }
@@ -680,6 +687,9 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     // public methods
 
     /**
+     * 调用fork方法时，程序会将新创建的子任务放入当前线程的workQueue队列中，Fork/Join框架将根据当前正在并发执行的ForkJoinTask任务的ForkJoinWorkerThread线程状态，
+     * 来决定是让这个任务在队列中等待，还是创建一个新的ForkJoinWorkerThread线程运行它，又或者是唤起其它正在等待任务的ForkJoinWorkerThread线程运行它。
+     *
      * Arranges to asynchronously execute this task in the pool the
      * current task is running in, if applicable, or using the {@link
      * ForkJoinPool#commonPool()} if not {@link #inForkJoinPool}.  While
@@ -699,6 +709,7 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
         if ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)
             ((ForkJoinWorkerThread)t).workQueue.push(this);
         else
+            // 将给定的任务添加到提交者当前队列的提交队列中，如果为 null 或存在竞争，则创建一个。
             ForkJoinPool.common.externalPush(this);
         return this;
     }
@@ -986,6 +997,9 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     }
 
     /**
+     * get方法等待任务执行完成，并返回任务执行结果。
+     * 该方法主要调用doJoin方法等待任务结束，根据任务结束的状态，决定抛出相应的异常，或者返回任务结果。
+     *
      * Waits if necessary for the computation to complete, and then
      * retrieves its result.
      *
@@ -997,13 +1011,17 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
      * member of a ForkJoinPool and was interrupted while waiting
      */
     public final V get() throws InterruptedException, ExecutionException {
+        // 等待任务结束，返回任务结束的状态
         int s = (Thread.currentThread() instanceof ForkJoinWorkerThread) ?
             doJoin() : externalInterruptibleAwaitDone();
         Throwable ex;
+        // 任务被取消了，重新抛出异常
         if ((s &= DONE_MASK) == CANCELLED)
             throw new CancellationException();
+        // 任务执行过程抛出异常，将该异常重新抛出
         if (s == EXCEPTIONAL && (ex = getThrowableException()) != null)
             throw new ExecutionException(ex);
+        // 取任务执行结果，抽象方法，由子类实现
         return getRawResult();
     }
 
@@ -1106,6 +1124,8 @@ public abstract class ForkJoinTask<V> implements Future<V>, Serializable {
     }
 
     /**
+     * 重置任务的状态使得该任务可以被重新执行
+     *
      * Resets the internal bookkeeping state of this task, allowing a
      * subsequent {@code fork}. This method allows repeated reuse of
      * this task, but only if reuse occurs when this task has either

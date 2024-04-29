@@ -498,6 +498,12 @@ public class Executors {
     // Non-public classes supporting the public methods
 
     /**
+     * 转化 Runnable 成 Callable 的工具类
+     *
+     * 首先 RunnableAdapter 实现了 Callable，所以 RunnableAdapter 就是 Callable；
+     * 其次 Runnable 是 RunnableAdapter 的一个属性，在构造 RunnableAdapter 的时候会传进来，并且在 call 方法里面调用 Runnable 的 run 方法。
+     * 这是一个典型的适配模型，我们要把 Runnable 适配成 Callable，首先要实现 Callable 的接口，接着在 Callable 的 call 方法里面调用被适配对象（Runnable）的方法。
+     *
      * A callable that runs given task and returns given result
      */
     static final class RunnableAdapter<T> implements Callable<T> {

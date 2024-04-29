@@ -36,6 +36,9 @@
 package java.util.concurrent;
 
 /**
+ * RunnableFuture接口同时继承了Future 和 Runnable 接口。
+ * RunnableFuture 接口的最大目的，是让 Future 可以对 Runnable 进行管理，可以取消 Runnable，查看 Runnable 是否完成等等。
+ *
  * A {@link Future} that is {@link Runnable}. Successful execution of
  * the {@code run} method causes completion of the {@code Future}
  * and allows access to its results.

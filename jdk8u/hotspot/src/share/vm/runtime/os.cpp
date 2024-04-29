@@ -1536,6 +1536,7 @@ bool os::create_stack_guard_pages(char* addr, size_t bytes) {
 }
 
 char* os::reserve_memory(size_t bytes, char* addr, size_t alignment_hint) {
+    //调用每个操作系统实现不同的 pd_reserve_memory 函数进行 reserve
   char* result = pd_reserve_memory(bytes, addr, alignment_hint);
   if (result != NULL) {
     MemTracker::record_virtual_memory_reserve((address)result, bytes, CALLER_PC);
@@ -1569,6 +1570,7 @@ void os::split_reserved_memory(char *base, size_t size,
 }
 
 bool os::commit_memory(char* addr, size_t bytes, bool executable) {
+    //调用每个操作系统实现不同的 pd_commit_memory 函数进行 commit
   bool res = pd_commit_memory(addr, bytes, executable);
   if (res) {
     MemTracker::record_virtual_memory_commit((address)addr, bytes, CALLER_PC);

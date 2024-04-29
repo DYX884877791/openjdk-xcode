@@ -28,6 +28,8 @@ package java.nio;
 import java.util.Spliterator;
 
 /**
+ * Buffer 我们可以认为他是装载数据的容器，有了容器，还需要传输数据的通道才能完成数据的传输，这个通道就是Channel
+ *
  * A container for data of a specific primitive type.
  *
  * <p> A buffer is a linear, finite sequence of elements of a specific
@@ -182,9 +184,23 @@ public abstract class Buffer {
         Spliterator.SIZED | Spliterator.SUBSIZED | Spliterator.ORDERED;
 
     // Invariants: mark <= position <= limit <= capacity
+    // 标记: mark 仅仅只是一个标识，可以通过 mark() 方法进行设置，设置值为当前的 position
     private int mark = -1;
+    /**
+     * 位置: 含义取决于 Buffer 处于写模式还是读模式：
+     *
+     *  如果是写模式，则写入的地方就是所谓的 position，其初始值是 0，最大值是 capacity - 1，当往 Buffer 中写入一个数据时，position 就会向前移动到下一个待写入的位置。
+     *  如果是读模式，则读取数据的地方就是 position。当执行 flip() 将 buffer 从写模式切换到读模式时，position 会被重置为 0，随着数据不断的读取，position 不断地向前移，直到 limit。
+     */
     private int position = 0;
+    /**
+     * 界限: 与 position 一样，limit 的含义也取决于 Buffer 处于何种模式：
+     *
+     *  写模式：当 Buffer 处于写模式时，limit 是指能够往 Buffer 中写入多少数据，其值等于 capacity
+     *  读模式：当 Buffer 处于读模式时，limit 表示能够从 Buffer 中最多能够读取多少数据出来，所以当 Buffer 从写模式切换到读模式时，limit 会被设置写模式下的 position 的值
+     */
     private int limit;
+    // 容量: Buffer 是一个内存块，其存储数据的最大大小就是 capacity。我们不断地往 Buffer 中写入数据，当 Buffer 被写满后也就是存储的数据达到 capacity 了就需要将其清空，才能继续写入数据。
     private int capacity;
 
     // Used only by direct buffers
@@ -280,6 +296,8 @@ public abstract class Buffer {
     }
 
     /**
+     * 调用 mark() 方法可以标志一个指定的位置（即设置 mark 的值）
+     *
      * Sets this buffer's mark at its position.
      *
      * @return  This buffer
@@ -290,6 +308,8 @@ public abstract class Buffer {
     }
 
     /**
+     * 调用 reset() 时，position 又会回到之前标记的位置。
+     *
      * Resets this buffer's position to the previously-marked position.
      *
      * <p> Invoking this method neither changes nor discards the mark's
@@ -309,6 +329,12 @@ public abstract class Buffer {
     }
 
     /**
+     * flip() 方法用于将 Buffer 从写模式切换到读模式，那怎么将 Buffer 从读模式切换至写模式呢？可以调用 clear() 和 compact() 两个方法。
+     *
+     * 调用 clear() 后，发现 position 的值变成了 0，limit 值变成了 10，也就是 Buffer 被清空了，回归到最初始状态。但是里面的数据仍然是存在的，只是没有标记哪些数据是已读，哪些为未读。
+     *
+     * compact() 与 clear() 区别就在于，它会将所有未读的数据全部复制到 Buffer 的前面，将 position 设置到这些数据后面，所以此时是从未读的数据后面开始写入新的数据
+     *
      * Clears this buffer.  The position is set to zero, the limit is set to
      * the capacity, and the mark is discarded.
      *
@@ -333,6 +359,14 @@ public abstract class Buffer {
     }
 
     /**
+     * 调用 put() 方法向 Buffer 中存储数据后，这时 Buffer 仍然处于写模式状态，在写模式状态下我们是不能直接从 Buffer 中读取数据的，需要调用 flip() 方法将 Buffer 从写模式切换为读模式。
+     *
+     * 其调整的规则如下：
+     *
+     *  设置可读的长度 limit。将写模式写的 Buffer 中内容的最后位置 position 值变成读模式下的 limit 位置值，新的 limit 值作为读越界位置
+     *  设置读的起始位置。将 position 的值设置为 0 ，表示从 0 位置处开始读
+     *  如果之前有 mark 保存的标记位置，也需要消除，因为那是写模式下的 mark 标记
+     *
      * Flips this buffer.  The limit is set to the current position and then
      * the position is set to zero.  If the mark is defined then it is
      * discarded.
@@ -361,6 +395,8 @@ public abstract class Buffer {
     }
 
     /**
+     * position 是随着读取的进度一直往前移动的，那如果我想在读取一遍数据呢？使用 rewind() 方法，可以进行重复读。rewind() 也叫做倒带，就想播放磁带一样，倒回去重新读。
+     *
      * Rewinds this buffer.  The position is set to zero and the mark is
      * discarded.
      *

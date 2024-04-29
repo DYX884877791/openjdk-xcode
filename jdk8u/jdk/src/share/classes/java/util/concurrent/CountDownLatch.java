@@ -155,6 +155,21 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
  */
 public class CountDownLatch {
     /**
+     * 倒计数的同步控制，使用AQS的state表示倒计数，和一般的“锁”实现不一样
+     *
+     * CountDownLatch的Sync实现中，重写了tryAcquireShared和tryReleaseShared方法，很明显是一个共享锁的实现。
+     *
+     * 一般情况下（常见Lock锁的实现中)我们在释放锁的时候会将state资源减少，获得锁的时候会将state资源增加，当state变为0表示释放锁成功或者没有线程获取到锁，
+     * 但是CountDownLatch中state的含义则不一样：
+     *
+     *  1. 在尝试获取锁的tryAcquireShared方法中，虽然名曰获取锁，但却仅仅是在判断如果state为0，就表示获得了锁，state为其他值的情况下都表示没有获得锁，
+     *  它并没有什么诸如“尝试将0变为1之类的获取锁的动作”，而是仅仅判断值的大小。tryAcquireShared方法在awit()系列方法中被调用。
+     *
+     *   2. 在尝试释放锁的tryReleaseShared方法中，虽然名曰释放锁，但却仅仅是在对state尝试自减操作，它的内部是一个循环操作，
+     *  每一次的调用tryReleaseShared都会首先判断state是否为0，如果是，那么返回false表示“释放锁失败”，如果不是那么尝试CAS的将state自减1，
+     *  CAS成功之后会判断此时的值是否为0，如果不是那么表示“释放锁失败”，返回false，否则表示“释放锁成功”，返回true，
+     *  这里的操作可以永远保证只有一个线程能够因为“释放锁成功”而返回true。tryReleaseShared方法在countDown()方法中被调用。
+     *
      * Synchronization control For CountDownLatch.
      * Uses AQS state to represent count.
      */
@@ -162,25 +177,49 @@ public class CountDownLatch {
         private static final long serialVersionUID = 4982264981922014374L;
 
         Sync(int count) {
+            // 设置state初始值
             setState(count);
         }
 
         int getCount() {
+            // 获取计数器值，实际上就是获取state值
             return getState();
         }
 
+        /**
+         * 尝试共享式获取锁
+         * 实际上仅仅是一个判断操作，只有state=0的时候才会返回1
+         *
+         * @param acquires 参数，在实现的时候可以传递自己想要的数据，这里没什么用
+         * @return 返回大于等于0的值表示获取成功，否则失败。
+         */
         protected int tryAcquireShared(int acquires) {
+            // 判断state是否等于0，如果是那么返回1，否则返回-1
             return (getState() == 0) ? 1 : -1;
         }
 
+        /**
+         * 尝试共享式释放锁
+         * 实际上仅仅是一个判断-自减操作，只有state=0的时候才会返回true
+         *
+         * @param releases 参数，在实现的时候可以传递自己想要的数据，这里没什么用
+         * @return 返回true表示释放成功，否则失败。
+         */
         protected boolean tryReleaseShared(int releases) {
             // Decrement count; signal when transition to zero
+            // 开启一个循环，实际上是state的自减以及是否唤醒等待线程的操作
             for (;;) {
+                // 获取state的值c
                 int c = getState();
+                // 如果c为0，那么返回false，表示释放失败
                 if (c == 0)
                     return false;
+                // 否则c大于0，尝试CAS更新state为state-1,更新失败直接重试
                 int nextc = c-1;
                 if (compareAndSetState(c, nextc))
+                    // CAS成功之后再次判断nextc是否为0
+                    // 如果为0，说明是最后一个CAS成功的线程，返回true；如果不为0，说明不是最后一个CAS成功的线程，返回false
+                    // 这样可以通过CAS控制永远只有一条线程能够返回true，随后唤醒因调用CountDownLatch 的await 方法而被阻塞的线程
                     return nextc == 0;
             }
         }
@@ -201,6 +240,11 @@ public class CountDownLatch {
     }
 
     /**
+     * 需要等待的线程调用。调用该方法后，当前线程会被阻塞，直到下面的情况之一发生才会返回：
+     *
+     *  1. 当计数器的值为0 时；
+     *  2. 其他线程调用了当前线程的interrupt()方法中断了当前线程，当前线程就会抛出InterruptedException 异常，然后返回。
+     *
      * Causes the current thread to wait until the latch has counted down to
      * zero, unless the thread is {@linkplain Thread#interrupt interrupted}.
      *
@@ -228,10 +272,17 @@ public class CountDownLatch {
      *         while waiting
      */
     public void await() throws InterruptedException {
+        // 调用了AQS 的acquireSharedInterruptibly方法，共享式可中断获取锁
         sync.acquireSharedInterruptibly(1);
     }
 
     /**
+     * 需要等待的线程调用。调用该方法后，当前线程会被阻塞，直到下面的情况之一发生才会返回：
+     *
+     *  1. 当计数器值为0 时，这时候会返回true ；
+     *  2. 设置的timeout 时间到了，因为超时而返回false ；
+     *  3. 其他线程调用了当前线程的interrupt()方法中断了当前线程，当前线程就会抛出InterruptedException 异常，然后返回。
+     *
      * Causes the current thread to wait until the latch has counted down to
      * zero, unless the thread is {@linkplain Thread#interrupt interrupted},
      * or the specified waiting time elapses.

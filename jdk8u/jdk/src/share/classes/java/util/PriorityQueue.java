@@ -29,6 +29,13 @@ import java.util.function.Consumer;
 import sun.misc.SharedSecrets;
 
 /**
+ * Java PriorityQueue 实现了 Queue 接口，不允许放入 null 元素；
+ * 其通过堆实现，具体说是 通过完全二叉树（complete binary tree）实现的小顶堆（任意一个父节点的值，都不大于其左右子节点的值），
+ * 也就意味着可以通过数组来作为PriorityQueue 的底层实现，数组初始大小为11；也可以用一棵完全二叉树表示。
+ *
+ * 还有一种优先级队列：PriorityBlockingQueue，区别是PriorityQueue是线程不安全的，PriorityBlockingQueue是线程安全的
+ *
+ *
  * An unbounded priority {@linkplain Queue queue} based on a priority heap.
  * The elements of the priority queue are ordered according to their
  * {@linkplain Comparable natural ordering}, or by a {@link Comparator}
@@ -88,6 +95,8 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private static final int DEFAULT_INITIAL_CAPACITY = 11;
 
     /**
+     * 索引为n的节点的左右子节点的索引分别为2*n+1、2*n+2
+     *
      * Priority queue represented as a balanced binary heap: the two
      * children of queue[n] are queue[2*n+1] and queue[2*(n+1)].  The
      * priority queue is ordered by comparator, or by the elements'
@@ -291,6 +300,8 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private void grow(int minCapacity) {
         int oldCapacity = queue.length;
         // Double size if small; else grow by 50%
+        // 如果容量小于64时，是按照oldCapacity的2倍（再加2）方式扩容的
+        // 如果容量大于等于64，是按照oldCapacity的1.5倍方式扩容的
         int newCapacity = oldCapacity + ((oldCapacity < 64) ?
                                          (oldCapacity + 2) :
                                          (oldCapacity >> 1));
@@ -597,6 +608,8 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
+     * 移除堆中的指定索引的元素
+     *
      * Removes the ith element from queue.
      *
      * Normally this method leaves the elements at up to i-1,
@@ -629,6 +642,10 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
+     * 上滤：某个节点向上移动
+     *
+     * 具体操作：该节点与其父节点进行比较，如果该节点小于其父节点，则交换值（节点向上移动），继续循环，直到该节点大于/等于其父节点或者该节点没有父节点
+     *
      * Inserts item x at position k, maintaining heap invariant by
      * promoting x up the tree until it is greater than or equal to
      * its parent, or is the root.
@@ -651,10 +668,13 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     private void siftUpComparable(int k, E x) {
         Comparable<? super E> key = (Comparable<? super E>) x;
         while (k > 0) {
+            // 父节点的索引为该节点索引值-1再除以2
             int parent = (k - 1) >>> 1;
+            // 父节点的值
             Object e = queue[parent];
             if (key.compareTo((E) e) >= 0)
                 break;
+            // 这里做一个优化，用父节点的值覆盖子节点，在循环外面再用传入的x值覆盖父节点
             queue[k] = e;
             k = parent;
         }
@@ -675,6 +695,14 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
+     * 小顶堆的要求是父节点要比子节点都要小或者相等
+     *
+     * 下滤：某个节点向下移动
+     *
+     * 具体操作：该节点（作为父节点）与其子节点进行比较，如果父节点大于子节点（应该是子节点中较小的那一个），则进行交换（节点向下移动），继续循环比较，
+     * 直到父节点都小于/等于子节点（小于/等于子节点中较小的那一个），或者父节点到达叶子节点，在完全二叉树中，叶子节点的最小索引就是节点数量的一半。
+     *
+     *
      * Inserts item x at position k, maintaining heap invariant by
      * demoting x down the tree repeatedly until it is less than or
      * equal to its children or is a leaf.
@@ -692,16 +720,24 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     @SuppressWarnings("unchecked")
     private void siftDownComparable(int k, E x) {
         Comparable<? super E> key = (Comparable<? super E>)x;
+        // 叶子节点的最小索引
         int half = size >>> 1;        // loop while a non-leaf
         while (k < half) {
+            // 左节点索引
             int child = (k << 1) + 1; // assume left child is least
+            // 左节点
             Object c = queue[child];
+            // 右节点索引
             int right = child + 1;
+            // 为啥要判断right < size？因为right是可能大于等于size的，这种情况下就是没有右节点
+            // 左节点与右节点比较一下，取较小的那一个，记录到c里，并用child记录其下标
             if (right < size &&
                 ((Comparable<? super E>) c).compareTo((E) queue[right]) > 0)
                 c = queue[child = right];
+            // 父节点小于/等于子节点中较小的那一个节点，则退出循环
             if (key.compareTo((E) c) <= 0)
                 break;
+            // 用c取代原来的值
             queue[k] = c;
             k = child;
         }
@@ -727,6 +763,11 @@ public class PriorityQueue<E> extends AbstractQueue<E>
     }
 
     /**
+     * 批量建堆的方式有两种
+     * 1. 自上而下的上滤，相当于从头部（实际上是从非根节点）添加元素。
+     * 2. 自下而上的下滤，相当于从尾部（实际上是从非叶子节点）开始各个节点各自构建小顶堆，直到最后一个节点（根节点），
+     * 则根节点的左右子节点都是完整的小顶堆，此时再对根节点做一次下滤即可。
+     *
      * Establishes the heap invariant (described above) in the entire tree,
      * assuming nothing about the order of the elements prior to the call.
      */

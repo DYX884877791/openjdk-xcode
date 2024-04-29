@@ -211,6 +211,8 @@ public abstract class Selector implements Closeable {
     protected Selector() { }
 
     /**
+     * 得到一个选择器Selector对象
+     *
      * Opens a selector.
      *
      * <p> The new selector is created by invoking the {@link
@@ -242,6 +244,9 @@ public abstract class Selector implements Closeable {
     public abstract SelectorProvider provider();
 
     /**
+     * 返回所有 Channel 对应的 SelectionKey 的集合，通过 SelectionKey
+     * 可以找到对应的 Channel
+     *
      * Returns this selector's key set.
      *
      * <p> The key set is not directly modifiable.  A key is removed only after
@@ -259,6 +264,9 @@ public abstract class Selector implements Closeable {
     public abstract Set<SelectionKey> keys();
 
     /**
+     * 返回所有发生事件的 Channel 对应的 SelectionKey 的集合，通过
+     * SelectionKey 可以找到对应的 Channel
+     *
      * Returns this selector's selected-key set.
      *
      * <p> Keys may be removed from, but not directly added to, the
@@ -275,6 +283,8 @@ public abstract class Selector implements Closeable {
     public abstract Set<SelectionKey> selectedKeys();
 
     /**
+     * 立即返回的 select 过程
+     *
      * Selects a set of keys whose corresponding channels are ready for I/O
      * operations.
      *
@@ -297,6 +307,9 @@ public abstract class Selector implements Closeable {
     public abstract int selectNow() throws IOException;
 
     /**
+     * 监控所有注册的 Channel，当其中的 Channel 有 IO 操作可以进行时，
+     * 将这些 Channel 对应的 SelectionKey 找到。参数timeout用于设置超时时间
+     *
      * Selects a set of keys whose corresponding channels are ready for I/O
      * operations.
      *
@@ -330,6 +343,9 @@ public abstract class Selector implements Closeable {
         throws IOException;
 
     /**
+     * 无超时时间的 select 过程，一直等待，直到发现有 Channel 可以进行
+     * IO 操作
+     *
      * Selects a set of keys whose corresponding channels are ready for I/O
      * operations.
      *
@@ -350,6 +366,8 @@ public abstract class Selector implements Closeable {
     public abstract int select() throws IOException;
 
     /**
+     * 唤醒 Selector，对无超时时间的 select 过程起作用，终止其等待
+     *
      * Causes the first selection operation that has not yet returned to return
      * immediately.
      *

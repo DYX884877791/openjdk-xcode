@@ -3167,10 +3167,11 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
       }
       FLAG_SET_CMDLINE(uintx, MaxNewSize, (uintx)long_initial_young_size);
       FLAG_SET_CMDLINE(uintx, NewSize, (uintx)long_initial_young_size);
-    // -Xms
+    // -Xms，如果设置了 Xms
     } else if (match_option(option, "-Xms", &tail)) {
       julong long_initial_heap_size = 0;
       // an initial heap size of 0 means automatically determine
+        //解析 Xms 大小
       ArgsRange errcode = parse_memory_size(tail, &long_initial_heap_size, 0);
       if (errcode != arg_in_range) {
         jio_fprintf(defaultStream::error_stream(),
@@ -3178,13 +3179,16 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         describe_range_error(errcode);
         return JNI_EINVAL;
       }
+        //将解析的值设置到 MinHeapSize
       set_min_heap_size((uintx)long_initial_heap_size);
       // Currently the minimum size and the initial heap sizes are the same.
       // Can be overridden with -XX:InitialHeapSize.
+        //将解析的值设置到 InitialHeapSize
       FLAG_SET_CMDLINE(uintx, InitialHeapSize, (uintx)long_initial_heap_size);
-    // -Xmx
+    // -Xmx，如果设置了 Xmx
     } else if (match_option(option, "-Xmx", &tail) || match_option(option, "-XX:MaxHeapSize=", &tail)) {
       julong long_max_heap_size = 0;
+        //解析 Xmx 大小
       ArgsRange errcode = parse_memory_size(tail, &long_max_heap_size, 1);
       if (errcode != arg_in_range) {
         jio_fprintf(defaultStream::error_stream(),
@@ -3192,6 +3196,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         describe_range_error(errcode);
         return JNI_EINVAL;
       }
+        //将解析的值设置到 MaxHeapSize
       FLAG_SET_CMDLINE(uintx, MaxHeapSize, (uintx)long_max_heap_size);
     // Xmaxf
     } else if (match_option(option, "-Xmaxf", &tail)) {

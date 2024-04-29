@@ -47,6 +47,7 @@ public class IOUtil {
                      NativeDispatcher nd)
         throws IOException
     {
+        // 1. 判断传入的 Buffer 是否为 DirectBuffer，如果是的话，就直接写入
         if (src instanceof DirectBuffer)
             return writeFromNativeBuffer(fd, src, position, nd);
 
@@ -55,13 +56,14 @@ public class IOUtil {
         int lim = src.limit();
         assert (pos <= lim);
         int rem = (pos <= lim ? lim - pos : 0);
+        // 2. 构造一块跟传入缓冲区一样大小的DirectBuffer
         ByteBuffer bb = Util.getTemporaryDirectBuffer(rem);
         try {
             bb.put(src);
             bb.flip();
             // Do not update src until we see how many bytes were written
             src.position(pos);
-
+            // 3. 调用writeFromNativeBuffer写入
             int n = writeFromNativeBuffer(fd, bb, position, nd);
             if (n > 0) {
                 // now update src
@@ -188,15 +190,25 @@ public class IOUtil {
     {
         if (dst.isReadOnly())
             throw new IllegalArgumentException("Read-only buffer");
+        // 如果我们传入的 dst 是 DirectBuffer，那么直接进行文件的读取
+        // 将文件内容读取到 dst 中
         if (dst instanceof DirectBuffer)
             return readIntoNativeBuffer(fd, dst, position, nd);
 
         // Substitute a native buffer
+        // 1 申请一块临时堆外DirectByteBuffer
+        // 如果我们传入的 dst 是一个 HeapBuffer，那么这里就需要创建一个临时的 DirectBuffer
+        // 在调用 native 方法底层利用 read  or write 系统调用进行文件读写的时候
+        // 传入的只能是 DirectBuffer
         ByteBuffer bb = Util.getTemporaryDirectBuffer(dst.remaining());
         try {
+            // 2 先往DirectByteBuffer写入数据，提高效率
+            // 底层通过 read 系统调用将文件内容拷贝到临时 DirectBuffer 中
             int n = readIntoNativeBuffer(fd, bb, position, nd);
             bb.flip();
             if (n > 0)
+                // 3 再拷贝到传入的buffer
+                // 将临时 DirectBuffer 中的文件内容在拷贝到 HeapBuffer 中返回
                 dst.put(bb);
             return n;
         } finally {

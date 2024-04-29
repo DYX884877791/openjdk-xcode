@@ -36,6 +36,8 @@
 package java.util.concurrent;
 
 /**
+ * 一个递归无结果的ForkJoinTask（没有返回值）任务
+ *
  * A recursive resultless {@link ForkJoinTask}.  This class
  * establishes conventions to parameterize resultless actions as
  * {@code Void} {@code ForkJoinTask}s. Because {@code null} is the

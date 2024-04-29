@@ -2797,11 +2797,15 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
     }
   }
 
+   // 如果是volatile操作
   if (is_volatile) {
+      // 非写即读
     if (!is_store) {
+        // 读操作
       Node* mb = insert_mem_bar(Op_MemBarAcquire, load);
       mb->as_MemBar()->set_trailing_load();
     } else {
+        // 写操作
       if (!support_IRIW_for_not_multiple_copy_atomic_cpu) {
         Node* mb = insert_mem_bar(Op_MemBarVolatile, store);
         MemBarNode::set_store_pair(leading_membar->as_MemBar(), mb->as_MemBar());

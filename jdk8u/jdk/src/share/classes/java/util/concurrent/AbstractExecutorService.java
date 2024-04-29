@@ -103,13 +103,18 @@ public abstract class AbstractExecutorService implements ExecutorService {
     }
 
     /**
+     * 利用FutureTask实现了异步提交执行未来任务的功能，可以拿到异步任务结果。
+     *
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
     public Future<?> submit(Runnable task) {
         if (task == null) throw new NullPointerException();
+        // 将任务包装成FutureTask
         RunnableFuture<Void> ftask = newTaskFor(task, null);
+        // 交给execute()方法去执行
         execute(ftask);
+        // 返回futureTask
         return ftask;
     }
 

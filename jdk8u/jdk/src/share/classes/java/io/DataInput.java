@@ -460,6 +460,8 @@ interface DataInput {
     double readDouble() throws IOException;
 
     /**
+     * 读取一行数据。读取到\r会丢弃，读取到\n会丢弃并停止继续读取。
+     *
      * Reads the next line of text from the input stream.
      * It reads successive bytes, converting
      * each byte separately into a character,

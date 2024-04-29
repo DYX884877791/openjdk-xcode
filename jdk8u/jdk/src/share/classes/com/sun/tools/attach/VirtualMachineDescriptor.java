@@ -28,6 +28,9 @@ package com.sun.tools.attach;
 import com.sun.tools.attach.spi.AttachProvider;
 
 /**
+ * VirtualMachineDescriptor是用于描述 Java 虚拟机的容器类。它封装了一个标识目标虚拟机的标识符，以及一个AttachProvider在尝试连接到虚拟机时应该使用的引用。
+ * 标识符依赖于实现，但通常是进程标识符（或 pid）环境，其中每个 Java 虚拟机在其自己的操作系统进程中运行。
+ *
  * Describes a Java virtual machine.
  *
  * <p> A <code>VirtualMachineDescriptor</code> is a container class used to

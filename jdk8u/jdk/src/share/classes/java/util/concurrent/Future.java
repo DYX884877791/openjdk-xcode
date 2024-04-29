@@ -36,6 +36,13 @@
 package java.util.concurrent;
 
 /**
+ * Future接口用于获取异步计算的结果，可通过get()获取结果、cancel()取消、isDone()判断是否完成等操作。
+ *
+ * V 代表了Future执行的任务返回值的类
+ *
+ * Future是个接口。Future就是对于具体的Runnable或者Callable任务的执行结果进行取消、查询是否完成、获取结果。必要时可以通过get方法获取执行结果，该方法会阻塞直到任务返回结果。
+ * 简单理解就是：我有一个任务，提交给了 Future 来处理。任务执行期间我自己可以去做任何想做的事情。并且，在这期间我还可以取消任务以及获取任务的执行状态。一段时间之后，我就可以 Future 那里直接取出任务执行结果。
+ *
  * A {@code Future} represents the result of an asynchronous
  * computation.  Methods are provided to check if the computation is
  * complete, to wait for its completion, and to retrieve the result of
@@ -96,6 +103,12 @@ package java.util.concurrent;
 public interface Future<V> {
 
     /**
+     * 如果任务已经成功了，或已经取消了，是无法再取消的，会直接返回取消成功(true)
+     * 如果任务还没有开始进行时，发起取消，是可以取消成功的。
+     * 如果取消时，任务已经在运行了，mayInterruptIfRunning 为 true 的话，就可以打断运行中的线程
+     * mayInterruptIfRunning 为 false，表示不能打断直接返回
+     *
+     *
      * Attempts to cancel execution of this task.  This attempt will
      * fail if the task has already completed, has already been cancelled,
      * or could not be cancelled for some other reason. If successful,
@@ -119,6 +132,8 @@ public interface Future<V> {
     boolean cancel(boolean mayInterruptIfRunning);
 
     /**
+     * 判断任务是否被取消
+     *
      * Returns {@code true} if this task was cancelled before it completed
      * normally.
      *
@@ -127,6 +142,8 @@ public interface Future<V> {
     boolean isCancelled();
 
     /**
+     * 判断任务是否已经完成
+     *
      * Returns {@code true} if this task completed.
      *
      * Completion may be due to normal termination, an exception, or
@@ -138,6 +155,10 @@ public interface Future<V> {
     boolean isDone();
 
     /**
+     * 获取任务执行结果
+     * 如果任务被取消了，抛 CancellationException 异常
+     * 如果等待过程中被打断了，抛 InterruptedException 异常
+     *
      * Waits if necessary for the computation to complete, and then
      * retrieves its result.
      *
@@ -151,6 +172,8 @@ public interface Future<V> {
     V get() throws InterruptedException, ExecutionException;
 
     /**
+     * 指定时间内没有返回计算结果就抛出 TimeOutException 异常
+     *
      * Waits if necessary for at most the given time for the computation
      * to complete, and then retrieves its result, if available.
      *

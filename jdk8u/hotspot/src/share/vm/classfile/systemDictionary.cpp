@@ -122,8 +122,11 @@ void SystemDictionary::compute_java_system_loader(TRAPS) {
 }
 
 
+// 通过类加载器获取对应的 `ClassLoaderData`
 ClassLoaderData* SystemDictionary::register_loader(Handle class_loader, TRAPS) {
+    // 如果是 null，代表是 BootstrapClassLoader，使用全局的 BootstrapClassLoader 对应的 ClassLoaderData
   if (class_loader() == NULL) return ClassLoaderData::the_null_class_loader_data();
+    //否则，从 ClassLoaderDataGraph 寻找或者创建 class_loader 对应的 ClassLoaderData
   return ClassLoaderDataGraph::find_or_create(class_loader, THREAD);
 }
 

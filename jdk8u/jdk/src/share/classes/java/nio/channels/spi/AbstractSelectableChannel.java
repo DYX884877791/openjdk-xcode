@@ -170,6 +170,9 @@ public abstract class AbstractSelectableChannel
     }
 
     /**
+     * AbstractSelectableChannel 中包含注册方法，SocketChannel 实例
+     * 借助该注册方法注册到 Selector 实例上去，该方法返回 SelectionKey
+     *
      * Registers this channel with the given selector, returning a selection key.
      *
      * <p>  This method first verifies that this channel is open and that the
@@ -195,8 +198,10 @@ public abstract class AbstractSelectableChannel
      *
      * @throws  IllegalArgumentException {@inheritDoc}
      */
-    public final SelectionKey register(Selector sel, int ops,
-                                       Object att)
+    public final SelectionKey register(Selector sel,  // 指明注册到哪个 Selector 实例
+                                       int ops,       // ops 是事件代码，告诉 Selector 应该关注该通道的什么事件
+                                       Object att     // 附加信息 attachment
+                                       )
         throws ClosedChannelException
     {
         synchronized (regLock) {

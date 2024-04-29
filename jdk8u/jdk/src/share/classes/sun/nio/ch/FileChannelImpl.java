@@ -115,10 +115,12 @@ public class FileChannelImpl
 
     protected void implCloseChannel() throws IOException {
         // Release and invalidate any locks that we still hold
+        // 释放文件锁
         if (fileLockTable != null) {
             for (FileLock fl: fileLockTable.removeAll()) {
                 synchronized (fl) {
                     if (fl.isValid()) {
+                        // 释放锁
                         nd.release(fd, fl.position(), fl.size());
                         ((FileLockImpl)fl).invalidate();
                     }
@@ -127,6 +129,7 @@ public class FileChannelImpl
         }
 
         // signal any threads blocked on this channel
+        // 通知当前通道所有被阻塞线程
         threads.signalAndWait();
 
         if (parent != null) {
@@ -143,10 +146,16 @@ public class FileChannelImpl
 
     }
 
+    /**
+     *  1. 首先确保该 Channel 是打开的
+     *  2. 然后加锁，主要是因为写入缓冲区需要保证线程安全
+     *  3. 最后通过 IOUtils.read() 实现
+     */
     public int read(ByteBuffer dst) throws IOException {
         ensureOpen();
         if (!readable)
             throw new NonReadableChannelException();
+        // 加锁
         synchronized (positionLock) {
             int n = 0;
             int ti = -1;
@@ -156,6 +165,7 @@ public class FileChannelImpl
                 if (!isOpen())
                     return 0;
                 do {
+                    // 通过IOUtil.read实现
                     n = IOUtil.read(fd, dst, -1, nd);
                 } while ((n == IOStatus.INTERRUPTED) && isOpen());
                 return IOStatus.normalize(n);

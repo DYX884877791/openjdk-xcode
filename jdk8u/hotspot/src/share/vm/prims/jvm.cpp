@@ -3437,7 +3437,7 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
     THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
   }
 
-    //判断并清除线程中断状态，如果中断状态为true，抛出中断异常
+    //判断并清除线程中断状态，如果中断状态为true，抛出中断异常，注意，这里抛出中断异常之前中断状态已经被清除了.
   if (Thread::is_interrupted (THREAD, true) && !HAS_PENDING_EXCEPTION) {
       //如果已经被中断则抛出异常
     THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");

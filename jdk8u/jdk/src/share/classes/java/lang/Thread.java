@@ -973,6 +973,9 @@ class Thread implements Runnable {
     }
 
     /**
+     * 判断当前线程是否被中断，会清除中断标志位，也就是被中断后，第一次调用该方法返回true，接着第二次调用时会返回false，
+     * 除非在第二次调用前又设置了中断标志位
+     *
      * Tests whether the current thread has been interrupted.  The
      * <i>interrupted status</i> of the thread is cleared by this method.  In
      * other words, if this method were to be called twice in succession, the
@@ -995,6 +998,8 @@ class Thread implements Runnable {
     }
 
     /**
+     * 判断当前线程是否被中断，不会清除中断标志位，也就是被中断后，第一次调用该方法返回true，接着第二次调用时还是会返回true
+     *
      * Tests whether this thread has been interrupted.  The <i>interrupted
      * status</i> of the thread is unaffected by this method.
      *

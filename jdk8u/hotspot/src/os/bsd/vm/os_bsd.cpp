@@ -2675,7 +2675,7 @@ size_t os::read_at(int fd, void *buf, unsigned int nBytes, jlong offset) {
 
 // 通过阅读源码知道，原来sleep是通过pthread_cond_timedwait实现的，那么为什么不通过linux的sleep实现呢？
 //      1、pthread_cond_timedwait既可以堵塞在某个条件变量上，也可以设置超时时间；
-//      2、sleep不能及时唤醒线程,最小精度为秒；
+//      2、sleep不能及时唤醒线程，最小精度为秒；
 //
 // 可以看出pthread_cond_timedwait使用灵活，而且时间精度更高；
 // interruptible表示可中断的，即是否允许被打断

@@ -116,20 +116,29 @@ class Direct$Type$Buffer$RW$$BO$
     //
     Direct$Type$Buffer$RW$(int cap) {                   // package-private
 #if[rw]
+        // 使用父类构造方法初始化ByteBuffer指针
         super(-1, 0, cap, cap);
+        // 判断是否设置了 内存对齐(默认false)
         boolean pa = VM.isDirectMemoryPageAligned();
         int ps = Bits.pageSize();
+        // 如果不设置内存对齐，size和cap值一样
         long size = Math.max(1L, (long)cap + (pa ? ps : 0));
+        // 内存分配的一些检查和回收操作
         Bits.reserveMemory(size, cap);
 
         long base = 0;
         try {
+            // 分配内存，并返回直接内存地址
+            // jvm调用操作系统malloc函数分配虚拟内存(然后在实际使用中通过缺页异常分配实际的物理内存)
+            // 真正分配内存的方法其实是unsafe.allocateMemory(size)
             base = unsafe.allocateMemory(size);
         } catch (OutOfMemoryError x) {
             Bits.unreserveMemory(size, cap);
             throw x;
         }
+        // 以base地址为基准，开辟size个字节的内存，每个字节都以'0'字节填充
         unsafe.setMemory(base, size, (byte) 0);
+        // 将内存地址保存至DirectByteBuffer对象的成员变量address中进行引用
         if (pa && (base % ps != 0)) {
             // Round up to page boundary
             address = base + ps - (base & (ps - 1));

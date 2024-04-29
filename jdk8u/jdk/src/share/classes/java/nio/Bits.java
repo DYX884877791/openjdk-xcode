@@ -644,31 +644,40 @@ class Bits {                            // package-private
     static void reserveMemory(long size, int cap) {
 
         if (!memoryLimitSet && VM.isBooted()) {
+            // 获取最大直接内存大小
             maxMemory = VM.maxDirectMemory();
             memoryLimitSet = true;
         }
 
         // optimist!
+        // 这个方法内检查是否存在剩余直接内存空间
         if (tryReserveMemory(size, cap)) {
+            // 如果还有空间进行分配，直接返回
             return;
         }
 
+        // 获取Reference对象(这里需要Reference的一些知识点)
         final JavaLangRefAccess jlra = SharedSecrets.getJavaLangRefAccess();
 
         // retry while helping enqueue pending Reference objects
         // which includes executing pending Cleaner(s) which includes
         // Cleaner(s) that free direct buffer memory
+        // 通过Cleaner尝试释放一部分直接内存
         while (jlra.tryHandlePendingReference()) {
+            // 再次检查剩余直接内存容量
             if (tryReserveMemory(size, cap)) {
                 return;
             }
         }
 
         // trigger VM's Reference processing
+        // 强制Full GC
+        // 可以看到，如果直接内存余量检查不通过，就会触发Full GC
         System.gc();
 
         // a retry loop with exponential back-off delays
         // (this gives VM some time to do it's job)
+        // 在循环中多次检查剩余直接内存容量
         boolean interrupted = false;
         try {
             long sleepTime = 1;
@@ -682,6 +691,7 @@ class Bits {                            // package-private
                 }
                 if (!jlra.tryHandlePendingReference()) {
                     try {
+                        // 每次循环 睡眠时间 * 2(单位：ms)
                         Thread.sleep(sleepTime);
                         sleepTime <<= 1;
                         sleeps++;
@@ -708,9 +718,15 @@ class Bits {                            // package-private
         // actual memory usage, which will differ when buffers are page
         // aligned.
         long totalCap;
+        // totalCapacity记录当前已使用直接内存大小
+        // 需要分配的大小如果小于  最大直接内存和当前已使用的直接内存的差值，则为true
+        // 否则，返回false
         while (cap <= maxMemory - (totalCap = totalCapacity.get())) {
+            // 通过CAS将当前已使用直接内存大小 更新为 当前新的值
             if (totalCapacity.compareAndSet(totalCap, totalCap + cap)) {
+                // 将已预留直接内存大小 更新 为当前新的值
                 reservedMemory.addAndGet(size);
+                // 计数器自增
                 count.incrementAndGet();
                 return true;
             }

@@ -253,6 +253,8 @@ public interface BlockingQueue<E> extends Queue<E> {
         throws InterruptedException;
 
     /**
+     * 检索并移除队列的顶部元素,如果该元素不可用则等待,直至元素可用
+     *
      * Retrieves and removes the head of this queue, waiting if necessary
      * until an element becomes available.
      *
@@ -325,6 +327,8 @@ public interface BlockingQueue<E> extends Queue<E> {
     public boolean contains(Object o);
 
     /**
+     * 移动到指定的Collection中.
+     *
      * Removes all available elements from this queue and adds them
      * to the given collection.  This operation may be more
      * efficient than repeatedly polling this queue.  A failure

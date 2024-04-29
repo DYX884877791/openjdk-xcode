@@ -30,6 +30,16 @@ import java.io.Closeable;
 
 
 /**
+ * 在 NIO 中，Channel 和 Buffer 是相辅相成的，我们可以从 Channel 读取数据到 Buffer 中，或者从 Buffer 写入数据到 Channel
+ *
+ * NIO 中通过 Channel 封装了对数据源的操作，通过 Channel 我们可以操作数据源，但是又不必关注数据源的具体物理结构，这个数据源可以是文件，也可以是socket。
+ *
+ * 它的主要实现有：
+ *  FileChannel：文件通道，用于文件的数据读写。
+ *  SocketChannel：套接字通道，能通过 TCP 读写网络中的数据。
+ *  ServerSocketChannel：服务器套接字通道，监听新进来的 TCP 连接，像 web 服务器那样，对每一个新进来的连接都会创建一个 SocketChannel。
+ *  DatagramChannel：数据报通道，能通过 UDP 读写网络中的数据。
+ *
  * A nexus for I/O operations.
  *
  * <p> A channel represents an open connection to an entity such as a hardware
@@ -56,6 +66,8 @@ import java.io.Closeable;
 public interface Channel extends Closeable {
 
     /**
+     * Channel 是否打开
+     *
      * Tells whether or not this channel is open.
      *
      * @return <tt>true</tt> if, and only if, this channel is open
@@ -63,6 +75,8 @@ public interface Channel extends Closeable {
     public boolean isOpen();
 
     /**
+     * 关闭 Channel
+     *
      * Closes this channel.
      *
      * <p> After a channel is closed, any further attempt to invoke I/O

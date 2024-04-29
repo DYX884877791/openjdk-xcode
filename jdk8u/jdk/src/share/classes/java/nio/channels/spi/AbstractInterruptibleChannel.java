@@ -97,6 +97,8 @@ public abstract class AbstractInterruptibleChannel
     protected AbstractInterruptibleChannel() { }
 
     /**
+     * 关闭 Channel
+     *
      * Closes this channel.
      *
      * <p> If the channel has already been closed then this method returns

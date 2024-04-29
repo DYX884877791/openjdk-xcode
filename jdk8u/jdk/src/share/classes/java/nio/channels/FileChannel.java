@@ -37,6 +37,8 @@ import java.util.HashSet;
 import java.util.Collections;
 
 /**
+ * FileChannel 主要是用来读写和映射一个系统文件的 Channel，它是一个抽象类，具体由 FileChannelImpl 来实现。
+ *
  * A channel for reading, writing, mapping, and manipulating a file.
  *
  * <p> A file channel is a {@link SeekableByteChannel} that is connected to
@@ -162,6 +164,8 @@ public abstract class FileChannel
     protected FileChannel() { }
 
     /**
+     * 打开或创建一个文件，返回一个文件通道来访问文件
+     *
      * Opens or creates a file, returning a file channel to access the file.
      *
      * <p> The {@code options} parameter determines how the file is opened.
@@ -291,6 +295,8 @@ public abstract class FileChannel
     private static final FileAttribute<?>[] NO_ATTRIBUTES = new FileAttribute[0];
 
     /**
+     * 打开或创建一个文件，返回一个文件通道来访问文件
+     *
      * Opens or creates a file, returning a file channel to access the file.
      *
      * <p> An invocation of this method behaves in exactly the same way as the
@@ -338,6 +344,11 @@ public abstract class FileChannel
     // -- Channel operations --
 
     /**
+     * 从这个通道读入字节序列到给定的缓冲区buffer中。字节从通道的当前position开始读取。然后用实际读取的字节数更新position。
+     *
+     * 调用 FileChannel 的 read() 方法即可从 FileChannel 中获取数据，当然不是直接获取，而是需要先写入到 Buffer 中，所以调用 read() 之前，
+     * 我们需要分配一个 Buffer，然后调用 read() ，该方法返回 int 表示有多少数据读取到了 Buffer 中了，如果返回 -1 表示已经到文件末尾了。
+     *
      * Reads a sequence of bytes from this channel into the given buffer.
      *
      * <p> Bytes are read starting at this channel's current file position, and
@@ -348,6 +359,8 @@ public abstract class FileChannel
     public abstract int read(ByteBuffer dst) throws IOException;
 
     /**
+     * 从这个通道读入指定开始位置和长度的字节序列到给定的缓冲区
+     *
      * Reads a sequence of bytes from this channel into a subsequence of the
      * given buffers.
      *
@@ -372,6 +385,8 @@ public abstract class FileChannel
     }
 
     /**
+     * write()方法则是从 ByteBuffer中读取数据写入到 Channel 中。调用 write() 需要先申请一个 ByteBuffer
+     *
      * Writes a sequence of bytes to this channel from the given buffer.
      *
      * <p> Bytes are written starting at this channel's current file position
@@ -504,6 +519,10 @@ public abstract class FileChannel
     public abstract FileChannel truncate(long size) throws IOException;
 
     /**
+     * write方法写入文件可能只是写入了PageCache，如果此时系统崩溃，那么只存在于PageCache而没有刷入磁盘的数据就有可能丢失。
+     * 使用force方法，我们就可以强制将文件内容和元数据信息（参数boolean metaData就是用来决定是否将元数据也写入磁盘）写入磁盘。
+     * 该方法对一些关键性的操作，比如事务操作，就是非常关键的，使用force方法可以保证数据的完整性和可靠恢复。
+     *
      * Forces any updates to this channel's file to be written to the storage
      * device that contains it.
      *
@@ -920,6 +939,14 @@ public abstract class FileChannel
     // -- Locks --
 
     /**
+     * 从file的position位置开始，锁定长度为size，锁定类别共享锁（true）或独占锁（false）
+     *
+     * 首先，我们需要明白的是：锁定针对的是文件本身，而不是Channel或者线程。
+     *
+     *   FileLock可以是共享的，也可以是独占的。
+     *
+     * 锁的实现很大程度上依赖于本地的操作系统实现。当操作系统不支持共享锁时，则会主动升级共享锁为独占锁。
+     *
      * Acquires a lock on the given region of this channel's file.
      *
      * <p> An invocation of this method will block until the region can be
@@ -1012,6 +1039,8 @@ public abstract class FileChannel
         throws IOException;
 
     /**
+     * 基本独占全文件
+     *
      * Acquires an exclusive lock on this channel's file.
      *
      * <p> An invocation of this method of the form <tt>fc.lock()</tt> behaves
@@ -1054,6 +1083,8 @@ public abstract class FileChannel
     }
 
     /**
+     * 尝试进行文件锁定
+     *
      * Attempts to acquire a lock on the given region of this channel's file.
      *
      * <p> This method does not block.  An invocation always returns

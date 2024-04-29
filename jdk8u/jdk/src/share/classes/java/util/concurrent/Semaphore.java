@@ -38,6 +38,11 @@ import java.util.Collection;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 
 /**
+ * Semaphore在多线程协作中常常用来控制公共资源的访问，限制同时访问数量。
+ *
+ *  打个比方，Semaphore就像是一个装有令牌（permit）的黑箱子，拿到令牌的人才能去执行自己的逻辑，谁都可以从里面拿走若干令牌，
+ *  谁都可以把新的令牌扔到里面去，但Semaphore从来不记载谁拿走的令牌。
+ *
  * A counting semaphore.  Conceptually, a semaphore maintains a set of
  * permits.  Each {@link #acquire} blocks if necessary until a permit is
  * available, and then takes it.  Each {@link #release} adds a permit,
@@ -254,6 +259,8 @@ public class Semaphore implements java.io.Serializable {
     }
 
     /**
+     * 默认构造器使用非公平锁，可以通过参数fair来得到公平锁。参数permits最终会赋值给AQS的state成员。
+     *
      * Creates a {@code Semaphore} with the given number of
      * permits and nonfair fairness setting.
      *

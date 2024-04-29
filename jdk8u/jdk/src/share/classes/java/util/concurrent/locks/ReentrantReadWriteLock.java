@@ -223,6 +223,10 @@ public class ReentrantReadWriteLock
     final Sync sync;
 
     /**
+     * ReentrantReadWriteLock的构造器默认使用非公平锁。
+     * 在ReentrantReadWriteLock的构造器中又会去构造ReadLock和WriteLock，从这二者的构造器中可见，它持有的AQS对象是同一个，也就是ReentrantReadWriteLock的AQS成员。
+     * 重点在于，ReadLock和WriteLock使用的同一个AQS对象，使得可以读写互斥。
+     *
      * Creates a new {@code ReentrantReadWriteLock} with
      * default (nonfair) ordering properties.
      */
@@ -246,6 +250,9 @@ public class ReentrantReadWriteLock
     public ReentrantReadWriteLock.ReadLock  readLock()  { return readerLock; }
 
     /**
+     * 由于写锁和读锁都可以重入，而且读锁还可以被多个线程所持有，但现在AQS的state只是一个int型的变量，
+     * 所以把state的高16bit作为读锁的计数范围，低16bit作为写锁的计数范围，现在它们各有0 ∼ 2^16−1的计数范围了，皆大欢喜。
+     *
      * Synchronization implementation for ReentrantReadWriteLock.
      * Subclassed into fair and nonfair versions.
      */
@@ -270,16 +277,22 @@ public class ReentrantReadWriteLock
         static int exclusiveCount(int c) { return c & EXCLUSIVE_MASK; }
 
         /**
+         * HoldCounter是一个计数器，用来缓存当前线程的id以及当前线程获取读锁的次数
+         * AQS需要记录当前读锁总共被拿走了多少，这个是通过AQS的state的高16bit记录。但还需要分别记录各个线程分别拿走了多少读锁，即重入的读锁次数。
+         *
          * A counter for per-thread read hold counts.
          * Maintained as a ThreadLocal; cached in cachedHoldCounter
          */
         static final class HoldCounter {
             int count = 0;
             // Use id, not reference, to avoid garbage retention
+            // 使用线程id，而不是线程的引用。这样可以防止垃圾不被回收
             final long tid = getThreadId(Thread.currentThread());
         }
 
         /**
+         * 继承了ThreadLocal类，主要是用来缓存每个线程对应的HoldCounter
+         *
          * ThreadLocal subclass. Easiest to explicitly define for sake
          * of deserialization mechanics.
          */
@@ -298,6 +311,8 @@ public class ReentrantReadWriteLock
         private transient ThreadLocalHoldCounter readHolds;
 
         /**
+         * cachedHoldCounter作为共享变量，用来缓存最近一次成功获取读锁的线程对应的计数器。好处是在部分情况下提高性能，避免每次都从ThreadLocal中取
+         *
          * The hold count of the last thread to successfully acquire
          * readLock. This saves ThreadLocal lookup in the common case
          * where the next thread to release is the last one to
@@ -377,6 +392,9 @@ public class ReentrantReadWriteLock
             return free;
         }
 
+        /**
+         * 若返回true代表获取独占锁成功，若返回false代表获取独占锁失败。
+         */
         protected final boolean tryAcquire(int acquires) {
             /*
              * Walkthrough:
@@ -389,22 +407,35 @@ public class ReentrantReadWriteLock
              *    queue policy allows it. If so, update state
              *    and set owner.
              */
+            // 获得当前线程
             Thread current = Thread.currentThread();
+            // 获得同步器状态
             int c = getState();
+            // 获得写锁计数
             int w = exclusiveCount(c);
+            // 如果c不为0，说明有锁，但不知道是什么锁
             if (c != 0) {
                 // (Note: if c != 0 and w == 0 then shared count != 0)
+                // 进入分支有两种情况：
+                // 1.写锁计数为0。说明此时只有读锁，不能将读锁升级为写锁，所以直接返回false
+                // 2.写锁计数不为0，但不是当前线程持有的写锁。直接返回false。
                 if (w == 0 || current != getExclusiveOwnerThread())
                     return false;
+                // 加上参数的写锁计数，如果溢出了，就抛出异常
                 if (w + exclusiveCount(acquires) > MAX_COUNT)
                     throw new Error("Maximum lock count exceeded");
                 // Reentrant acquire
+                // 执行到这里，说明肯定是当前线程持有的写锁，那么此时没有线程竞争，
+                // 直接set新的写锁计数
                 setState(c + acquires);
                 return true;
             }
-            if (writerShouldBlock() ||
-                !compareAndSetState(c, c + acquires))
+            // 执行到这里，肯定是c == 0，当前既没有读锁，也没有写锁。
+            // 但可能有多个线程来竞争这个状态下的任何锁，所以接下来需要通过CAS来竞争
+            if (writerShouldBlock() ||  // 此函数对公平非公平进行了封装，返回false代表在当前公平模式判断下，接下来可以尝试获得锁
+                !compareAndSetState(c, c + acquires))   // 如果CAS成功，则不会进入此分支
                 return false;
+            // 执行到这里，说明该函数开始检测到 没有任何锁，然后当前线程还获得到了写锁
             setExclusiveOwnerThread(current);
             return true;
         }

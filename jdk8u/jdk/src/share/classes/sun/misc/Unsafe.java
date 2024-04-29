@@ -956,6 +956,20 @@ public final class Unsafe {
     public native void    putDoubleVolatile(Object o, long offset, double x);
 
     /**
+     * 从JVM层面来看，该方法与该类中的putObjectVolatile方法的CPP代码是一样的，
+     * hotspot/src/share/vm/prims/unsafe.cpp:Unsafe_SetObjectVolatile
+     * hotspot/src/share/vm/prims/unsafe.cpp:Unsafe_SetOrderedObject
+     * 但是在x86 cpu下，测试这两个方法，通过查看汇编指令，putObjectVolatile在指令上多了一个`lock addl`指令前缀，这里就有疑问了：
+     * 两份相同的cpp代码，却有不同的汇编代码，是怎么实现的呢？
+     *
+     * 在hotspot/src/share/vm/classfile/vmSymbols.hpp中，有对_putOrderedObject、_putObjectVolatile方法分别处理，
+     * 具体生成指令的地方在hotspot/src/share/vm/opto/library_call.cpp中的LibraryCallKit::try_to_inline函数中
+     *  case vmIntrinsics::_putOrderedObject:         return inline_unsafe_ordered_store(T_OBJECT);
+     * ...
+     *  case vmIntrinsics::_putObjectVolatile:        return inline_unsafe_access(!is_native_ptr,  is_store, T_OBJECT,   is_volatile, false);
+     *
+     * inline_unsafe_access的函数中，会插入一个屏障...
+     *
      * Version of {@link #putObjectVolatile(Object, long, Object)}
      * that does not guarantee immediate visibility of the store to
      * other threads. This method is generally only useful if the

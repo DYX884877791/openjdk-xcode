@@ -2869,6 +2869,7 @@ static void warn_fail_commit_memory(char* addr, size_t size,
 //       left at the time of mmap(). This could be a potential
 //       problem.
 int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
+    //这里的关键是 PROT_READ|PROT_WRITE，即申请需要读写这块内存
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
   uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
                                    MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
@@ -3376,6 +3377,8 @@ static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed) {
   // Map reserved/uncommitted pages PROT_NONE so we fail early if we
   // touch an uncommitted page. Otherwise, the read/write might
   // succeed if we have enough swap space to back the physical page.
+    //这里的关键是 PROT_NONE，代表仅仅是在虚拟空间保留，不实际映射物理内存
+    //fd 传入的是 -1，因为没有实际映射文件，我们这里目的是为了分配内存，不是将某个文件映射到内存中
   addr = (char*)::mmap(requested_addr, bytes, PROT_NONE,
                        flags, -1, 0);
 
@@ -5175,6 +5178,7 @@ void os::init(void) {
 
   ThreadCritical::initialize();
 
+    //设置全局默认页大小，通过 Linux::page_size() 可以获取全局默认页大小
   Linux::set_page_size(sysconf(_SC_PAGESIZE));
   if (Linux::page_size() == -1) {
     fatal(err_msg("os_linux.cpp: os::init: sysconf failed (%s)",

@@ -118,6 +118,8 @@ public abstract class SelectionKey {
     // -- Channel and selector operations --
 
     /**
+     *  获取该 SelectionKey 对应的 Channel
+     *
      * Returns the channel for which this key was created.  This method will
      * continue to return the channel even after the key is cancelled.
      *
@@ -126,6 +128,8 @@ public abstract class SelectionKey {
     public abstract SelectableChannel channel();
 
     /**
+     * 获取该 SelectionKey 对应的 Selector
+     *
      * Returns the selector for which this key was created.  This method will
      * continue to return the selector even after the key is cancelled.
      *
@@ -214,6 +218,8 @@ public abstract class SelectionKey {
 
     // -- Operation bits and bit-testing convenience methods --
 
+    // 事件代码，AbstractSelectableChannel类中register方法的第二个参数ops取这里的值
+
     /**
      * Operation-set bit for read operations.
      *
@@ -267,6 +273,8 @@ public abstract class SelectionKey {
     public static final int OP_ACCEPT = 1 << 4;
 
     /**
+     * 检查该 SelectionKey 对应的 Channel 是否可读
+     *
      * Tests whether this key's channel is ready for reading.
      *
      * <p> An invocation of this method of the form <tt>k.isReadable()</tt>
@@ -290,6 +298,8 @@ public abstract class SelectionKey {
     }
 
     /**
+     * 检查该 SelectionKey 对应的 Channel 是否可写
+     *
      * Tests whether this key's channel is ready for writing.
      *
      * <p> An invocation of this method of the form <tt>k.isWritable()</tt>
@@ -313,6 +323,8 @@ public abstract class SelectionKey {
     }
 
     /**
+     * 检查该 SelectionKey 对应的 Channel 是否已经建立起 socket 连接
+     *
      * Tests whether this key's channel has either finished, or failed to
      * finish, its socket-connection operation.
      *
@@ -337,6 +349,8 @@ public abstract class SelectionKey {
     }
 
     /**
+     * 检查该 SelectionKey 对应的 Channel 是否准备好接受一个新的 socket 连接
+     *
      * Tests whether this key's channel is ready to accept a new socket
      * connection.
      *
@@ -371,6 +385,8 @@ public abstract class SelectionKey {
         );
 
     /**
+     * 添加附件（例如 Buffer）
+     *
      * Attaches the given object to this key.
      *
      * <p> An attached object may later be retrieved via the {@link #attachment()
@@ -389,6 +405,8 @@ public abstract class SelectionKey {
     }
 
     /**
+     * 获取附件
+     *
      * Retrieves the current attachment.
      *
      * @return  The object currently attached to this key,

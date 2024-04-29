@@ -850,6 +850,8 @@ public class ForkJoinPool extends AbstractExecutorService {
         }
 
         /**
+         * push方法把当前任务存放在 ForkJoinTask 数组队列里。然后再调用 ForkJoinPool 的 signalWork()方法唤醒或创建一个工作线程来执行任务。
+         *
          * Pushes a task. Call only by owner in unshared queues.  (The
          * shared-queue version is embedded in method externalPush.)
          *

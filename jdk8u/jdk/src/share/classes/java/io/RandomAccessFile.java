@@ -203,14 +203,18 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
     public RandomAccessFile(File file, String mode)
         throws FileNotFoundException
     {
+        // File用于检查文件路径是否有效
         String name = (file != null ? file.getPath() : null);
         int imode = -1;
+        // 判断文件访问方式
         if (mode.equals("r"))
             imode = O_RDONLY;
         else if (mode.startsWith("rw")) {
             imode = O_RDWR;
             rw = true;
             if (mode.length() > 2) {
+                // 还有s和d，分别对应于O_SYNC、O_DSYNC
+                // O_SYNC、O_DSYNC这两个分别代表什么呢？https://zhuanlan.zhihu.com/p/104994838
                 if (mode.equals("rws"))
                     imode |= O_SYNC;
                 else if (mode.equals("rwd"))
@@ -224,6 +228,7 @@ public class RandomAccessFile implements DataOutput, DataInput, Closeable {
                                                + "\" must be one of "
                                                + "\"r\", \"rw\", \"rws\","
                                                + " or \"rwd\"");
+        // 检查读写权限
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
             security.checkRead(name);

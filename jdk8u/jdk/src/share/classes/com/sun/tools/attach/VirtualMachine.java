@@ -98,8 +98,18 @@ import java.io.IOException;
 
 @jdk.Exported
 public abstract class VirtualMachine {
+    /**
+     * VirtualMachine工厂
+     */
     private AttachProvider provider;
+    /**
+     * pid
+     */
     private String id;
+    /**
+     * hash缓存
+     * 0 => not computed
+     */
     private volatile int hash;        // 0 => not computed
 
     /**

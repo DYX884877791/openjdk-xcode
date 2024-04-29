@@ -177,16 +177,31 @@ public class ScheduledThreadPoolExecutor
         return System.nanoTime();
     }
 
+    /**
+     * JDK 1.5提供的ScheduledThreadPoolExecutor执行定时任务时，会将任务封装成ScheduledFutureTask对象.
+     */
     private class ScheduledFutureTask<V>
             extends FutureTask<V> implements RunnableScheduledFuture<V> {
 
-        /** Sequence number to break ties FIFO */
+        /**
+         * 任务添加到ScheduledThreadPoolExecutor中被分配的唯一序列号，任务添加到ScheduledThreadPoolExecutor中被分配的唯一序列号，
+         * 可以根据这个序列号确定唯一的一个任务，如果在定时任务中，如果一个任务是周期性执行的，但是它们的sequenceNumber的值相同，则被视为是同一个任务。
+         *
+         * Sequence number to break ties FIFO
+         */
         private final long sequenceNumber;
 
-        /** The time the task is enabled to execute in nanoTime units */
+        /**
+         * 下次执行任务的时间，表示这个任务将要被执行的具体（绝对）时间（以纳秒为单位）。
+         *
+         * The time the task is enabled to execute in nanoTime units
+         */
         private long time;
 
         /**
+         * 表示任务执行的间隔周期（以纳秒为单位）。 正值表示fixed-rate执行任务的时间间隔（每次任务开始的时间间隔）。
+         * 负值表示fixed-delay执行任务的时间间隔（一次任务结束与下次任务开始的时间间隔）。 值为0表示非周期性任务(只执行一次的任务)。
+         *
          * Period in nanoseconds for repeating tasks.  A positive
          * value indicates fixed-rate execution.  A negative value
          * indicates fixed-delay execution.  A value of 0 indicates a
@@ -194,25 +209,37 @@ public class ScheduledThreadPoolExecutor
          */
         private final long period;
 
-        /** The actual task to be re-enqueued by reExecutePeriodic */
+        /**
+         * ScheduledFutureTask对象，实际指向当前对象本身，此对象的引用会被传入到周期性执行任务的ScheduledThreadPoolExecutor类的reExecutePeriodic方法中。
+         *
+         * 该任务在延迟队列中的节点，延迟队列存储任务的容器就是RunnableScheduledFuture类型的数组，ScheduledFutureTask和RunnableScheduledFuture是建立起了关联关系的
+         *
+         * The actual task to be re-enqueued by reExecutePeriodic
+         */
         RunnableScheduledFuture<V> outerTask = this;
 
         /**
+         * 当前任务在延迟队列中的索引，这个索引能够更加方便的取消当前任务。
+         * 该任务在延迟队列中的索引下标，延迟队列存储任务的容器就是RunnableScheduledFuture类型的数组
+         *
          * Index into delay queue, to support faster cancellation.
          */
         int heapIndex;
 
         /**
+         * 创建一个只执行一次的延时任务
          * Creates a one-shot action with given nanoTime-based trigger time.
          */
         ScheduledFutureTask(Runnable r, V result, long ns) {
             super(r, result);
             this.time = ns;
             this.period = 0;
+            // getAndIncrement是外部类ScheduledThreadPoolExecutor的静态变量
             this.sequenceNumber = sequencer.getAndIncrement();
         }
 
         /**
+         * 创建一个多次执行的周期性任务
          * Creates a periodic action with given nano time and period.
          */
         ScheduledFutureTask(Runnable r, V result, long ns, long period) {
@@ -223,6 +250,7 @@ public class ScheduledThreadPoolExecutor
         }
 
         /**
+         * 创建一个只执行一次的延时任务
          * Creates a one-shot action with given nanoTime-based trigger time.
          */
         ScheduledFutureTask(Callable<V> callable, long ns) {
@@ -232,14 +260,28 @@ public class ScheduledThreadPoolExecutor
             this.sequenceNumber = sequencer.getAndIncrement();
         }
 
+        /**
+         * getDelay返回当前定时任务(对象)的剩余延迟（即多少时间后将立即执行任务）.若返回值为非正数时，表示此任务可以出队了.
+         */
         public long getDelay(TimeUnit unit) {
             return unit.convert(time - now(), NANOSECONDS);
         }
 
+        /**
+         * ScheduledFutureTask类在类的结构上实现了Comparable接口，compareTo方法主要是对Comparable接口定义的compareTo方法的实现。
+         *
+         * 这段代码看上去好像是对各种数值类型数据的比较，本质上是对延迟队列中的任务进行排序。排序规则为：首先比较延迟队列中每个任务下次执行的时间，
+         * 下次执行时间距离当前时间短的任务会排在前面；如果下次执行任务的时间相同，则会比较任务的sequenceNumber值，sequenceNumber值小的任务会排在前面。
+         *
+         * 此方法会被优先级队列DelayedWorkQueue作为“入队位置、出队先后“的参考依据。
+         */
         public int compareTo(Delayed other) {
             if (other == this) // compare zero if same object
+                //与自身比，返回0
                 return 0;
             if (other instanceof ScheduledFutureTask) {
+                // 执行时间早的任务排在队列前，
+                // 若是同样早，就看谁先提交，先提交的任务排在队列前
                 ScheduledFutureTask<?> x = (ScheduledFutureTask<?>)other;
                 long diff = time - x.time;
                 if (diff < 0)
@@ -251,11 +293,16 @@ public class ScheduledThreadPoolExecutor
                 else
                     return 1;
             }
+            // 不是ScheduledFutureTask类型任务，就根据任务的剩余延迟决定入队的的位置
+            // 剩余延迟小的任务排在队列前
             long diff = getDelay(NANOSECONDS) - other.getDelay(NANOSECONDS);
             return (diff < 0) ? -1 : (diff > 0) ? 1 : 0;
         }
 
         /**
+         * 判断是否是周期性任务，这个方法的作用比较简单，主要是用来判断当前任务是否是周期性任务。
+         * 这里只要判断运行任务的执行周期不等于0就能确定为周期性任务了。因为无论period的值是大于0还是小于0，当前任务都是周期性任务。
+         *
          * Returns {@code true} if this is a periodic (not a one-shot) action.
          *
          * @return {@code true} if periodic
@@ -265,46 +312,88 @@ public class ScheduledThreadPoolExecutor
         }
 
         /**
+         * setNextRunTime设置周期性任务的下次执行时间（单次执行的定时任务不会用到此方法）
+         *
+         * 设置当前任务下次执行的时间
+         * 这里，再一次证明了使用isPeriodic方法判断当前任务是否为周期性任务时，只要判断period的值是否不等于0就可以了。
+         * 因为如果当前任务时固定频率执行的周期性任务，会将周期period当作正数来处理；如果是相对固定的延迟执行当前任务，则会将周期period当作负数来处理。
+         *
          * Sets the next time to run for a periodic task.
          */
         private void setNextRunTime() {
             long p = period;
             if (p > 0)
+                // 固定频率，上次执行任务的时间加上任务的执行周期
+                // period为正，表示fixed-rate执行任务的时间间隔（每次任务开始的时间间隔）
+                // 只需要time加上period间隔就行
                 time += p;
             else
+                // 相对固定的延迟执行，当前系统时间加上任务的执行周期
+                // period负值表示fixed-delay执行任务的时间间隔（一次任务结束与下次任务开始的时间间隔）
+                // 需要调用外部类的triggerTime计算出结果，time=当前时间+周期间隔。
                 time = triggerTime(-p);
         }
 
+        /**
+         * 取消当前任务的执行
+         */
         public boolean cancel(boolean mayInterruptIfRunning) {
+            // 取消任务，返回任务是否取消的标识
             boolean cancelled = super.cancel(mayInterruptIfRunning);
+            // removeOnCancel是外部类的属性，表示在任务被取消后是否从并且队列中移除此任务
+            // 如果任务已经取消
+            // 并且需要将任务从延迟队列中删除
+            // 并且任务在延迟队列中的索引大于或者等于0
             if (cancelled && removeOnCancel && heapIndex >= 0)
+                // 将当前任务从延迟队列中删除
+                // romove是ScheduledThreadPoolExecutor的父类ThreadPoolExecutor中的方法
                 remove(this);
+            // 返回是否成功取消任务的标识
             return cancelled;
         }
 
         /**
+         * run方法可以说是ScheduledFutureTask类的核心方法，是对Runnable接口的实现，
+         * 整个方法的逻辑就是：
+         * 1. 首先判断当前任务是否是周期性任务。如果线程池当前运行状态下不能执行周期性任务，则取消任务的执行。
+         * 2. 如果当前任务不是周期性任务，则直接调用FutureTask类的run方法执行任务；
+         * 3. 如果当前任务是周期性任务，则调用FutureTask类的runAndReset方法执行任务，并且如果任务执行成功，则设置下次执行任务的时间，同时将任务设置为重复执行。
+         *
          * Overrides FutureTask version so as to reset/requeue if periodic.
          */
         public void run() {
+            // 当前任务是否是周期性任务
             boolean periodic = isPeriodic();
+            // 线程池当前运行状态下不能执行周期性任务
             if (!canRunInCurrentRunState(periodic))
+                // 取消任务的执行
                 cancel(false);
+            // 如果不是周期性任务，即单次执行
             else if (!periodic)
+                // 则直接调用FutureTask类的run方法执行任务
                 ScheduledFutureTask.super.run();
+            // 如果是周期性任务，则调用FutureTask类的runAndReset方法执行任务
+            // 如果任务执行成功
             else if (ScheduledFutureTask.super.runAndReset()) {
+                // 设置下次执行任务的时间
                 setNextRunTime();
+                // 重复执行任务
+                // 并将此任务重新放入队列中，reExecutePeriodic是外部类的方法
                 reExecutePeriodic(outerTask);
             }
         }
     }
 
     /**
+     * 根据任务的类型判断执行器关闭后是否执行任务。
      * Returns true if can run a task given current run state
      * and run-after-shutdown parameters.
      *
      * @param periodic true if this task periodic, false if delayed
      */
     boolean canRunInCurrentRunState(boolean periodic) {
+        // 周期性任务返回continueExistingPeriodicTasksAfterShutdown(默认为false)
+        // 非周期性任务返回continueExistingPeriodicTasksAfterShutdown(默认为true)
         return isRunningOrShutdown(periodic ?
                                    continueExistingPeriodicTasksAfterShutdown :
                                    executeExistingDelayedTasksAfterShutdown);
@@ -322,20 +411,30 @@ public class ScheduledThreadPoolExecutor
      * @param task the task
      */
     private void delayedExecute(RunnableScheduledFuture<?> task) {
+        // 执行器已关闭，使用拒绝策略处理新任务
         if (isShutdown())
             reject(task);
         else {
+            // 执行器未关闭，将新任务入队列
             super.getQueue().add(task);
+            // 在任务入队列后，执行器被关闭 、当前状态不可执行任务 且从队列中成功移除任务时，取消此任务
             if (isShutdown() &&
                 !canRunInCurrentRunState(task.isPeriodic()) &&
                 remove(task))
                 task.cancel(false);
             else
+                // 反之就启动一个新Worker线程，此线程会到任务队列中等待任务出队（若当前有效线程数大于corePoolSize，不启动新线程)
+                // ensurePrestart是父类ThreadPoolExecutor中的方法
                 ensurePrestart();
         }
     }
 
     /**
+     * reExecutePeriodic用于入周期性任务的重新入队。主要逻辑是：
+     * ①若当前状态可执行任务，就将任务入队。在任务入队后，
+     * ②若当前状态不可执行任务且从队列中成功移除任务，则取消此任务。
+     * ③反之则启动新Worker线程（此线程会等待任务队列中任务出队，然后执行任务） 。
+     *
      * Requeues a periodic task unless current run state precludes it.
      * Same idea as delayedExecute except drops task rather than rejecting.
      *
@@ -347,27 +446,37 @@ public class ScheduledThreadPoolExecutor
             if (!canRunInCurrentRunState(true) && remove(task))
                 task.cancel(false);
             else
+                // 有效线程数<corePoolSize,启动一个新线程
                 ensurePrestart();
         }
     }
 
     /**
+     *  onShutdown()是一个钩子函数，它会被父类的shutdown()方法回调。
+     *  onShutdown主要的逻辑：在执行器关闭后，将不可继续执行的任务从任务队列中移除、并取消此任务。
+     *
      * Cancels and clears the queue of all tasks that should not be run
      * due to shutdown policy.  Invoked within super.shutdown.
      */
     @Override void onShutdown() {
         BlockingQueue<Runnable> q = super.getQueue();
+        //执行器关闭后，非周期性任务是否执行
         boolean keepDelayed =
             getExecuteExistingDelayedTasksAfterShutdownPolicy();
+        //执行器关闭后，周期性任务是否执行
         boolean keepPeriodic =
             getContinueExistingPeriodicTasksAfterShutdownPolicy();
         if (!keepDelayed && !keepPeriodic) {
+            // 若执行器关闭后，非周期性任务、周期性任务都不能继续执行 ，
+            // 则将任务队列中的所有任务取消，从队列中移除（清除）
             for (Object e : q.toArray())
                 if (e instanceof RunnableScheduledFuture<?>)
                     ((RunnableScheduledFuture<?>) e).cancel(false);
             q.clear();
         }
         else {
+            // 若执行器关闭后，非周期性任务、周期性任务至少有一种类型任务可以继续执行
+            // 就从队列中移除不可继续执行的任务，并取消此任务。
             // Traverse snapshot to avoid iterator exceptions
             for (Object e : q.toArray()) {
                 if (e instanceof RunnableScheduledFuture) {
@@ -375,16 +484,21 @@ public class ScheduledThreadPoolExecutor
                         (RunnableScheduledFuture<?>)e;
                     if ((t.isPeriodic() ? !keepPeriodic : !keepDelayed) ||
                         t.isCancelled()) { // also remove if already cancelled
+                        // 任务不可继续执行或任务是被取消状态，都将其从队列中移除
                         if (q.remove(t))
+                            // 再取消任务
                             t.cancel(false);
                     }
                 }
             }
         }
+        // 父类的方法，尝试终止执行器
         tryTerminate();
     }
 
     /**
+     * decorateTask方法啥也没干，就做了一个向上转型，但子类中可重写此方法以改变这种默认的行为。
+     *
      * Modifies or replaces the task used to execute a runnable.
      * This method can be used to override the concrete
      * class used for managing internal tasks.
@@ -487,6 +601,9 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
+     * 用于获取延迟队列中的任务下一次执行的具体时间，这两个triggerTime方法的代码比较简单，就是获取下一次执行任务的具体时间。
+     * 有一点需要注意的是：delay < (Long.MAX_VALUE >> 1判断delay的值是否小于Long.MAX_VALUE的一半，如果小于Long.MAX_VALUE值的一半，则直接返回delay，否则需要处理溢出的情况。
+     *
      * Returns the trigger time of a delayed action.
      */
     private long triggerTime(long delay, TimeUnit unit) {
@@ -497,6 +614,7 @@ public class ScheduledThreadPoolExecutor
      * Returns the trigger time of a delayed action.
      */
     long triggerTime(long delay) {
+        // overflowFree主要是将延迟时间限制在Long.MAX_VALUE范围内
         return now() +
             ((delay < (Long.MAX_VALUE >> 1)) ? delay : overflowFree(delay));
     }
@@ -509,16 +627,28 @@ public class ScheduledThreadPoolExecutor
      * Long.MAX_VALUE.
      */
     private long overflowFree(long delay) {
+        // 获取队列中的节点
         Delayed head = (Delayed) super.getQueue().peek();
+        // 获取的节点不为空，则进行后续处理
         if (head != null) {
+            // 从队列节点中获取延迟时间
             long headDelay = head.getDelay(NANOSECONDS);
+            // 如果从队列中获取的延迟时间小于0，并且传递的delay值减去从队列节点中获取延迟时间小于0
             if (headDelay < 0 && (delay - headDelay < 0))
+                // 将delay的值设置为Long.MAX_VALUE + headDelay
                 delay = Long.MAX_VALUE + headDelay;
         }
+        // 返回延迟时间
         return delay;
     }
 
     /**
+     * 延迟不循环任务schedule方法
+     *  参数1：任务
+     *  参数2：方法第一次执行的延迟时间
+     *  参数3：延迟单位
+     *  说明：延迟任务，只执行一次(不会再次执行)，参数2为延迟时间
+     *
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      */
@@ -527,9 +657,12 @@ public class ScheduledThreadPoolExecutor
                                        TimeUnit unit) {
         if (command == null || unit == null)
             throw new NullPointerException();
+        // 将Runnable包装成RunnableScheduledFuture任务
         RunnableScheduledFuture<?> t = decorateTask(command,
             new ScheduledFutureTask<Void>(command, null,
+                                          // triggerTime计算下次任务执行的具体时间
                                           triggerTime(delay, unit)));
+        // 延迟执行任务
         delayedExecute(t);
         return t;
     }
@@ -551,6 +684,25 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
+     * 延迟且循环scheduleAtFixedRate方法
+     *  参数1：任务
+     *  参数2：初始化完成后延迟多长时间执行第一次任务
+     *  参数3：任务时间间隔
+     *  参数4：单位
+     *  方法解释：是以上一个任务开始的时间计时，比如period为5，那5秒后，检测上一个任务是否执行完毕，如果上一个任务执行完毕，则当前任务立即执行，
+     * 如果上一个任务没有执行完毕，则需要等上一个任务执行完毕后立即执行，如果你的任务执行时间超过5秒，那么任务时间间隔参数将无效，任务会不停地循环执行，
+     * 由此可得出该方法不能严格保证任务按一定时间间隔执行
+     *
+     * 在给定的初始化延时initialDelay之后，固定频率地周期性执行任务command。
+     * 也就是说任务第一次运行时间是initialDelay，第二次运行时间是initialDelay+period，
+     * 第三次是initialDelay + period*2等等。 所以频率是相同地。
+     *
+     * 但是有一个问题，如果任务运行时间大于周期时间period该怎么办？
+     * 其实是这样的，在initialDelay之后开始运行任务，当任务完成之后，
+     * 将当前时间与initialDelay+period时间进行比较，如果小于initialDelay+period时间，那么等待，
+     * 如果大于initialDelay+period时间，那么就直接执行第二次任务
+     * 固定速率就是说每一次执行的时间就是上一次执行的时间加一个固定的时长
+     *
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      * @throws IllegalArgumentException   {@inheritDoc}
@@ -575,6 +727,15 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
+     *  严格按照一定时间间隔执行
+     *   scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit);
+     *   参数1：任务
+     *   参数2：初始化完成后延迟多长时间执行第一次任务
+     *   参数3：任务执行时间间隔
+     *   参数4：单位
+     *   解释：以上一次任务执行结束时间为准，加上任务时间间隔作为下一次任务开始时间，由此可以得出，任务可以严格按照时间间隔执行
+     *
+     *
      * @throws RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException       {@inheritDoc}
      * @throws IllegalArgumentException   {@inheritDoc}
@@ -661,6 +822,7 @@ public class ScheduledThreadPoolExecutor
      */
     public void setContinueExistingPeriodicTasksAfterShutdownPolicy(boolean value) {
         continueExistingPeriodicTasksAfterShutdown = value;
+        // 执行器关闭后不能继续执行任务，就调用onShutdown。
         if (!value && isShutdown())
             onShutdown();
     }
@@ -693,6 +855,7 @@ public class ScheduledThreadPoolExecutor
      */
     public void setExecuteExistingDelayedTasksAfterShutdownPolicy(boolean value) {
         executeExistingDelayedTasksAfterShutdown = value;
+        // 执行器关闭后不能继续执行任务，就调用onShutdown。
         if (!value && isShutdown())
             onShutdown();
     }
@@ -802,6 +965,12 @@ public class ScheduledThreadPoolExecutor
     }
 
     /**
+     * DelayedWorkQueue封装了一个RunnableScheduledFuture数组，它利用这个数组实现一个基于堆结构的优先级队列，其原理与PriorityQueue类似。
+     *
+     *  这个类是专门用来存放RunnableScheduledFuture任务的队列，此队列的出队顺序与一般的队列的先进先出不同，它按照优先级高低顺序出队，即优先级高的元素先出队。
+     *  这里优先级的定义是: 执行时间早的任务优先级高，若是同样早就比较任务的提交时间，先提交的任务优先级高。
+     *  另外，只有当任务的剩余延时不大于零时，任务才可能成功出队，否则将一直等待直到其剩余延时不大于零。
+     *
      * Specialized delay queue. To mesh with TPE declarations, this
      * class must be declared as a BlockingQueue<Runnable> even though
      * it can only hold RunnableScheduledFutures.
@@ -832,13 +1001,19 @@ public class ScheduledThreadPoolExecutor
          * identified by heapIndex.
          */
 
+        //数组的初始容量
         private static final int INITIAL_CAPACITY = 16;
+        //优先级队列，存放任务的数组
         private RunnableScheduledFuture<?>[] queue =
             new RunnableScheduledFuture<?>[INITIAL_CAPACITY];
+        //锁，保证并发操作时数据的一致性
         private final ReentrantLock lock = new ReentrantLock();
+        //队列中的任务个数
         private int size = 0;
 
         /**
+         * 在队列头部等待任务出队的线程。
+         *
          * Thread designated to wait for the task at the head of the
          * queue.  This variant of the Leader-Follower pattern
          * (http://www.cs.wustl.edu/~schmidt/POSA/POSA2/) serves to
@@ -857,6 +1032,8 @@ public class ScheduledThreadPoolExecutor
         private Thread leader = null;
 
         /**
+         * 新任务在队列头部可获取(延时已到)或新的线程成为leader属性时，可使用此Condition条件发出通知信号。
+         *
          * Condition signalled when a newer task becomes available at the
          * head of the queue or a new thread may need to become leader.
          */

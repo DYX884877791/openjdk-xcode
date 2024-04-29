@@ -30,6 +30,9 @@ import sun.misc.Unsafe;
 
 
 /**
+ * MappedByteBuffer VS FileChannel：从内核层面对比两者的性能差异
+ * https://www.cnblogs.com/binlovetech/p/18101357
+ *
  * A direct byte buffer whose content is a memory-mapped region of a file.
  *
  * <p> Mapped byte buffers are created via the {@link

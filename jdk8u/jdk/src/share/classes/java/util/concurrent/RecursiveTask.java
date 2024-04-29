@@ -36,6 +36,8 @@
 package java.util.concurrent;
 
 /**
+ * 一个递归有结果的ForkJoinTask（有返回值）任务
+ *
  * A recursive result-bearing {@link ForkJoinTask}.
  *
  * <p>For a classic example, here is a task computing Fibonacci numbers:
