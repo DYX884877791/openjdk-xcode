@@ -176,12 +176,16 @@ public final class Unsafe {
     public native void putInt(Object o, long offset, int x);
 
     /**
+     * 获得给定对象的指定地址偏移量的值，与此类似操作还有：getInt，getDouble，getLong，getChar等
+     *
      * Fetches a reference value from a given Java variable.
      * @see #getInt(Object, long)
      */
     public native Object getObject(Object o, long offset);
 
     /**
+     * 给定对象的指定地址偏移量设值，与此类似操作还有：putInt，putDouble，putLong，putChar等
+     *
      * Stores a reference value into a given Java variable.
      * <p>
      * Unless the reference <code>x</code> being stored is either null
@@ -464,6 +468,11 @@ public final class Unsafe {
     /// wrappers for malloc, realloc, free:
 
     /**
+     * 分配内存, 相当于C的malloc函数
+     * 典型应用：
+     *      DirectByteBuffer是Java用于实现堆外内存的一个重要类，通常用在通信过程中做缓冲池，如在Netty、MINA等NIO框架中应用广泛。
+     *      DirectByteBuffer对于堆外内存的创建、使用、销毁等逻辑均由Unsafe提供的堆外内存API来实现。
+     *
      * Allocates a new block of native memory, of the given size in bytes.  The
      * contents of the memory are uninitialized; they will generally be
      * garbage.  The resulting native pointer will never be zero, and will be
@@ -481,6 +490,8 @@ public final class Unsafe {
     public native long allocateMemory(long bytes);
 
     /**
+     * 重新分配内存, 相当于C的realloc函数
+     *
      * Resizes a new block of native memory, to the given size in bytes.  The
      * contents of the new block past the size of the old block are
      * uninitialized; they will generally be garbage.  The resulting native
@@ -500,6 +511,8 @@ public final class Unsafe {
     public native long reallocateMemory(long address, long bytes);
 
     /**
+     * 在给定的内存块中设置指定的值，如果第一个参数o是null的话，第二个参数offset就是绝对地址，否则为相对地址
+     *
      * Sets all bytes in a given block of memory to a fixed value
      * (usually zero).
      *
@@ -530,6 +543,8 @@ public final class Unsafe {
     }
 
     /**
+     * 内存拷贝
+     *
      * Sets all bytes in a given block of memory to a copy of another
      * block.
      *
@@ -561,6 +576,8 @@ public final class Unsafe {
     }
 
     /**
+     * 释放内存, 相当于C的free函数
+     *
      * Disposes of a block of native memory, as obtained from {@link
      * #allocateMemory} or {@link #reallocateMemory}.  The address passed to
      * this method may be null, in which case no action is taken.
@@ -631,6 +648,8 @@ public final class Unsafe {
     }
 
     /**
+     * 获取给定静态字段的内存地址偏移量，这个值对于给定的字段是唯一且固定不变的
+     *
      * Report the location of a given field in the storage allocation of its
      * class.  Do not expect to perform any sort of arithmetic on this offset;
      * it is just a cookie which is passed to the unsafe heap memory accessors.
@@ -651,6 +670,8 @@ public final class Unsafe {
     public native long staticFieldOffset(Field f);
 
     /**
+     * 返回对象成员属性在内存地址相对于此对象的内存地址的偏移量
+     *
      * Report the location of a given static field, in conjunction with {@link
      * #staticFieldBase}.
      * <p>Do not expect to perform any sort of arithmetic on this offset;
@@ -670,6 +691,8 @@ public final class Unsafe {
     public native long objectFieldOffset(Field f);
 
     /**
+     * 获取一个静态类中给定字段的对象指针
+     *
      * Report the location of a given static field, in conjunction with {@link
      * #staticFieldOffset}.
      * <p>Fetch the base "Object", if any, with which static fields of the
@@ -682,6 +705,8 @@ public final class Unsafe {
     public native Object staticFieldBase(Field f);
 
     /**
+     * 判断是否需要初始化一个类，通常在获取一个类的静态属性的时候（因为一个类如果没初始化，它的静态属性也不会初始化）使用。 当且仅当ensureClassInitialized方法不生效时返回false。
+     *
      * Detect if the given class may need to be initialized. This is often
      * needed in conjunction with obtaining the static field base of a
      * class.
@@ -690,6 +715,8 @@ public final class Unsafe {
     public native boolean shouldBeInitialized(Class<?> c);
 
     /**
+     * 检测给定的类是否已经初始化。通常在获取一个类的静态属性的时候（因为一个类如果没初始化，它的静态属性也不会初始化）使用。
+     *
      * Ensure the given class has been initialized. This is often
      * needed in conjunction with obtaining the static field base of a
      * class.
@@ -697,6 +724,8 @@ public final class Unsafe {
     public native void ensureClassInitialized(Class<?> c);
 
     /**
+     * 返回数组中第一个元素的偏移地址
+     *
      * Report the offset of the first element in the storage allocation of a
      * given array class.  If {@link #arrayIndexScale} returns a non-zero value
      * for the same class, you may use that scale factor, together with this
@@ -745,6 +774,22 @@ public final class Unsafe {
             = theUnsafe.arrayBaseOffset(Object[].class);
 
     /**
+     * 返回数组中一个元素占用的大小，也就是数组中元素的增量地址
+     *
+     * 这两个与数据操作相关的方法，在java.util.concurrent.atomic包下的AtomicIntegerArray（可以实现对Integer数组中每个元素的原子性操作）中有典型的应用，
+     * 如AtomicIntegerArray源码所示，通过Unsafe的arrayBaseOffset、arrayIndexScale分别获取数组首元素的偏移地址base及单个元素大小因子scale。
+     * 后续相关原子性操作，均依赖于这两个值进行数组中元素的定位，如getAndAdd方法即通过checkedByteOffset方法获取某数组元素的偏移地址，而后通过CAS实现原子性操作。
+     *
+     *
+     * 索引为 i 的元素可以使用如下代码定位：
+     * int baseOffset = unsafe.arrayBaseOffset(array.getClass());
+     * int indexScale = unsafe.arrayIndexScale(array.getClass());
+     * baseOffset + i * indexScale
+     *
+     * 在 ConcurrentHashMap 的源码中又发现了一种新的元素定位方式：
+     * int asfit = 31 - Integer.numberOfLeadingZeros(indexScale);
+     * (i << asfit) + baseOffset
+     *
      * Report the scale factor for addressing elements in the storage
      * allocation of a given array class.  However, arrays of "narrow" types
      * will generally not work properly with accessors like {@link
@@ -794,6 +839,8 @@ public final class Unsafe {
             = theUnsafe.arrayIndexScale(Object[].class);
 
     /**
+     * 返回系统指针的大小。返回值为4（32位系统）或 8（64位系统）。
+     *
      * Report the size in bytes of a native pointer, as stored via {@link
      * #putAddress}.  This value will be either 4 or 8.  Note that the sizes of
      * other primitive types (as stored in native memory blocks) is determined
@@ -805,6 +852,10 @@ public final class Unsafe {
     public static final int ADDRESS_SIZE = theUnsafe.addressSize();
 
     /**
+     * 内存页的大小，此值为2的幂次方。
+     * 典型应用：
+     *      java.nio下的工具类Bits中计算待申请内存所需内存页数量的静态方法，其依赖于Unsafe中pageSize方法获取系统内存页大小实现后续计算逻辑。
+     *
      * Report the size in bytes of a native memory page (whatever that is).
      * This value will always be a power of two.
      */
@@ -814,6 +865,8 @@ public final class Unsafe {
     /// random trusted operations from JNI:
 
     /**
+     * 定义一个类，此方法会跳过JVM的所有安全检查，默认情况下，ClassLoader（类加载器）和ProtectionDomain（保护域）实例来源于调用者
+     *
      * Tell the VM to define a class, without security checks.  By default, the
      * class loader and protection domain come from the caller's class.
      */
@@ -822,6 +875,8 @@ public final class Unsafe {
                                        ProtectionDomain protectionDomain);
 
     /**
+     * 定义一个匿名类
+     *
      * Define a class but do not make it known to the class loader or system dictionary.
      * <p>
      * For each CP entry, the corresponding CP patch must either be null or have
@@ -840,8 +895,15 @@ public final class Unsafe {
     public native Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] cpPatches);
 
 
-    /** Allocate an instance but do not run any constructor.
-        Initializes the class if it has not yet been. */
+    /**
+     * 绕过构造方法、初始化代码来创建对象
+     *
+     * Allocate an instance but do not run any constructor.
+     * Initializes the class if it has not yet been.
+     *
+     * 仅通过Class对象就可以创建此类的实例对象，而且不需要调用其构造函数、初始化代码、JVM安全检查等。它抑制修饰符检测，也就是即使构造器是private修饰的也能通过此方法实例化，
+     * 只需提类对象即可创建相应的对象。由于这种特性，allocateInstance在java.lang.invoke、Objenesis（提供绕过类构造器的对象生成方式）、Gson（反序列化时用到）中都有相应的应用。
+     */
     public native Object allocateInstance(Class<?> cls)
         throws InstantiationException;
 
@@ -896,12 +958,16 @@ public final class Unsafe {
                                                    long x);
 
     /**
+     * 从对象的指定偏移量处获取变量的引用，使用volatile的加载语义
+     *
      * Fetches a reference value from a given Java variable, with volatile
      * load semantics. Otherwise identical to {@link #getObject(Object, long)}
      */
     public native Object getObjectVolatile(Object o, long offset);
 
     /**
+     * 存储变量的引用到对象的指定的偏移量处，使用volatile的存储语义
+     *
      * Stores a reference value into a given Java variable, with
      * volatile store semantics. Otherwise identical to {@link #putObject(Object, long, Object)}
      */
@@ -956,6 +1022,8 @@ public final class Unsafe {
     public native void    putDoubleVolatile(Object o, long offset, double x);
 
     /**
+     * 有序、延迟版本的putObjectVolatile方法，不保证值的改变被其他线程立即看到。只有在field被volatile修饰符修饰时有效
+     *
      * 从JVM层面来看，该方法与该类中的putObjectVolatile方法的CPP代码是一样的，
      * hotspot/src/share/vm/prims/unsafe.cpp:Unsafe_SetObjectVolatile
      * hotspot/src/share/vm/prims/unsafe.cpp:Unsafe_SetOrderedObject
@@ -969,6 +1037,7 @@ public final class Unsafe {
      *  case vmIntrinsics::_putObjectVolatile:        return inline_unsafe_access(!is_native_ptr,  is_store, T_OBJECT,   is_volatile, false);
      *
      * inline_unsafe_access的函数中，会插入一个屏障...
+     *
      *
      * Version of {@link #putObjectVolatile(Object, long, Object)}
      * that does not guarantee immediate visibility of the store to
@@ -1133,6 +1202,10 @@ public final class Unsafe {
 
 
     /**
+     * 内存屏障，禁止load操作重排序。屏障前的load操作不能被重排序到屏障后，屏障后的load操作不能被重排序到屏障前
+     * 典型应用：
+     *      在Java 8中引入了一种锁的新机制——StampedLock，它可以看成是读写锁的一个改进版本。
+     *
      * Ensures lack of reordering of loads before the fence
      * with loads or stores after the fence.
      * @since 1.8
@@ -1140,6 +1213,8 @@ public final class Unsafe {
     public native void loadFence();
 
     /**
+     * 内存屏障，禁止store操作重排序。屏障前的store操作不能被重排序到屏障后，屏障后的store操作不能被重排序到屏障前
+     *
      * Ensures lack of reordering of stores before the fence
      * with loads or stores after the fence.
      * @since 1.8
@@ -1147,6 +1222,8 @@ public final class Unsafe {
     public native void storeFence();
 
     /**
+     * 内存屏障，禁止load、store操作重排序
+     *
      * Ensures lack of reordering of loads or stores before the fence
      * with loads or stores after the fence.
      * @since 1.8
