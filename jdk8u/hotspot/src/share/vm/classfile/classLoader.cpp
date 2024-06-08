@@ -864,21 +864,26 @@ void ClassLoader::load_zip_library() {
   assert(ZipOpen == NULL, "should not load zip library twice");
   // First make sure native library is loaded
     //首先确保java依赖的本地基础库文件已经加载
+    // 首先保证本地函数库（libverify.so、libjava.so、libnet.so）已经加载
   os::native_java_library();
   // Load zip library
   char path[JVM_MAXPATHLEN];
   char ebuf[1024];
   void* handle = NULL;
     //获取动态链接库的地址，并加载下面的zip库
+    // 构建（实际上就是拼接和格式化）动态函数库完整路径文件名，这里是要构建libzip.so的完整路径文件名，路径从Arguments::get_dll_dir()函数获取，这个函数实际就是取属性sun.boot.library.path的值，这个值用户也可以在启动java时通过参数-Dsun.boot.library.path=来设置，函数库文件，如图15-2，其中图15-1展示出了日常需要使用的几个java运行时环境地址
   if (os::dll_build_name(path, sizeof(path), Arguments::get_dll_dir(), "zip")) {
+      // 加载libzip.so到内存，并返回加载后的句柄，供后续符号解析使用
     handle = os::dll_load(path, ebuf, sizeof ebuf);
   }
     //如果加载失败抛出异常
   if (handle == NULL) {
+      // 加载不到，那就是文件不存在，或者是不可读取，打印日志，并退出虚拟机
     vm_exit_during_initialization("Unable to load ZIP library", path);
   }
   // Lookup zip entry points
     //从动态链接库中查找对应方法的实现，ZipOpen等是方法指针的别名
+    // 查找libzip.so文件中以下函数符号引用，并通过类型转换成，各自函数的句柄，比如符号解析"ZIP_Open"函数后，先将解析后的结果强制类型转换成ZipOpen_t（其实就是一个函数指针），最后用ZipOpen变量来指向，其他几个函数也是依此类推，其实后续有很多这种调用动态函数库的逻辑都是经过这几步：加载函数库文件->解析符号引用->用句柄指向，大家可以把加载想像成java中import某个类
   ZipOpen      = CAST_TO_FN_PTR(ZipOpen_t, os::dll_lookup(handle, "ZIP_Open"));
   ZipClose     = CAST_TO_FN_PTR(ZipClose_t, os::dll_lookup(handle, "ZIP_Close"));
   FindEntry    = CAST_TO_FN_PTR(FindEntry_t, os::dll_lookup(handle, "ZIP_FindEntry"));
@@ -888,6 +893,7 @@ void ClassLoader::load_zip_library() {
 
   // ZIP_Close is not exported on Windows in JDK5.0 so don't abort if ZIP_Close is NULL
     //如果查找方法实现失败
+    // 以下几个函数是不能为空的，否则打印错误日志，并退出虚拟机，但是ZIP_Close在jdk5的windows版本中不支持，所以这个函数为空时，不做退出处理
   if (ZipOpen == NULL || FindEntry == NULL || ReadEntry == NULL ||
       GetNextEntry == NULL || Crc32 == NULL) {
     vm_exit_during_initialization("Corrupted ZIP library", path);
@@ -895,9 +901,11 @@ void ClassLoader::load_zip_library() {
 
   // Lookup canonicalize entry in libjava.dll
     //从libjava.dll查找CanonicalizeEntry，不过从1.3开始不再使用，所以未检查是否加载成功
+    // 从libjava.so文件中解析出canonicalize函数地址，并通过CanonicalizeEntry来持有
   void *javalib_handle = os::native_java_library();
   CanonicalizeEntry = CAST_TO_FN_PTR(canonicalize_fn_t, os::dll_lookup(javalib_handle, "Canonicalize"));
   // This lookup only works on 1.3. Do not check for non-null here
+    // 到此为止，libzip.so的加载已完成
 }
 
 int ClassLoader::crc32(int crc, const char* buf, int len) {
@@ -1278,6 +1286,7 @@ void ClassLoader::initialize() {
     //如果开始性能检测则初始化各计数器
   if (UsePerfData) {
     // jvmstat performance counters
+      // jvmstat 性能统计相关变量，这个忽略
     NEWPERFTICKCOUNTER(_perf_accumulated_time, SUN_CLS, "time");
     NEWPERFTICKCOUNTER(_perf_class_init_time, SUN_CLS, "classInitTime");
     NEWPERFTICKCOUNTER(_perf_class_init_selftime, SUN_CLS, "classInitTime.self");
@@ -1338,6 +1347,7 @@ void ClassLoader::initialize() {
 
   // lookup zip library entry points
     //加载读写zip文件的动态链接库
+    // 加载libzip.so函数库，解析出一些需要用到的函数出来，并用相应的函数指针来持有解析后的函数，方便后续使用
   load_zip_library();
 #if INCLUDE_CDS
   // initialize search path
@@ -1347,6 +1357,7 @@ void ClassLoader::initialize() {
 #endif
     //设置加载核心jar包的搜索路径，从系统参数Arguments中获取
     //设置bootstrap加载器路径
+    // 遍历class path值，并将所有classpath路径，封装成一个ClassPathEntry对象，然后形成一个链表，并由ClassLoader类的_first_entry属性指向该链表的表头，_last_entry指向表尾
   setup_bootstrap_search_path();
     //如果是惰性启动加载，即启动时不加载rt.jar等文件
   if (LazyBootClassLoader) {
@@ -1393,11 +1404,31 @@ jlong ClassLoader::class_link_time_ms() {
     Management::ticks_to_ms(_perf_class_link_time->get_value()) : -1;
 }
 
+/**
+ * 在Java中所有的类都是默认继承自Object类的，所以这里要计算Object类的初始 vtable的大小，默认JDK_1_2_Object_vtable_size = 5，为什么是5呢？因为Object提供了5个可使用和继承的方法，如下：
+ *
+ * public native int hashCode();
+ *
+ * public boolean equals(Object obj) {
+ * return (this == obj);
+ * }
+ *
+ * protected native Object clone() throws CloneNotSupportedException;
+ *
+ * public String toString() {
+ * return getClass().getName() + “@” + Integer.toHexString(hashCode());
+ * }
+ *
+ * protected void finalize() throws Throwable { }
+ * @return
+ */
 int ClassLoader::compute_Object_vtable() {
   // hardwired for JDK1.2 -- would need to duplicate class file parsing
   // code to determine actual value from file
   // Would be value '11' if finals were in vtable
+    // 5个
   int JDK_1_2_Object_vtable_size = 5;
+    // 占用内存为5 * 每个的大小（vtableEntry::size()）
   return JDK_1_2_Object_vtable_size * vtableEntry::size();
 }
 

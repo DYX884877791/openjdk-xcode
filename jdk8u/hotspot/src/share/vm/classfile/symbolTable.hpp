@@ -75,6 +75,8 @@ class TempNewSymbol : public StackObj {
   operator Symbol*()                             { return _temp; }
 };
 
+// （符号表）：符号是指字节码中产生的各种元数据的utf-8字符表示，所以符号表就是用来存放这些utf-8字符的
+//
 // SymbolTable和StringTable类的定义位于classfile/symbolTable.hpp中，对应于C/C++编译过程的符号表，用于保存管理所有的Symbol实例，StringTable就是Java特有的字符串常量池。
 // 实际是一个支持自动扩容的HashMap。
 // https://blog.csdn.net/qq_43799161/article/details/131529592
@@ -161,6 +163,7 @@ public:
     slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.hpp中的create_table函数...");
     assert(_the_table == NULL, "One symbol table allowed.");
     _the_table = new SymbolTable();
+      // 预先创建并分配存放符号的内存chunk，symbol_alloc_arena_size = 360K
     initialize_symbols(symbol_alloc_arena_size);
   }
 
@@ -271,6 +274,8 @@ public:
   static int parallel_claimed_index()        { return _parallel_claimed_idx; }
 };
 
+// （字符串表）：就是存放Java中String对象的，把StringTable表中的数据都可以想像成与Java中String对应
+//
 // key是oop，oop可以理解为Java对象地址（实际上存放的就是Java的String对象）
 //
 // value是mtSymbol，这是一个枚举值，仅仅表示内存的解释，不起实际作用

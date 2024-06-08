@@ -367,14 +367,17 @@ CreateExecutionEnvironment(int *pargc, char ***pargv,
     jboolean jvmpathExists;
 
     /* Compute/set the name of the executable */
+    // 设置执行程序的路径
     SetExecname(*pargv);
 
     /* Check data model flags, and exec process, if needed */
     {
+        // 得到linux平台下执行的架构：LIBARCH32NAME-32位机器、LIBARCH64NAME-64位机器、LIBARCHNAME-默认
       char *arch        = (char *)GetArch(); /* like sparc or sparcv9 */
       char * jvmtype    = NULL;
       int  argc         = *pargc;
       char **argv       = *pargv;
+        // 表示正在执行的机器位数
       int running       = CURRENT_DATA_MODEL;
 
       int wanted        = running;      /* What data mode is being
@@ -837,6 +840,12 @@ GetJREPath(char *path, jint pathsize, const char * arch, jboolean speculative)
     return JNI_FALSE;
 }
 
+/**
+ * 加载Java虚拟机，就是加载动态库libjvm.so，并解析几个用得上的函数CreateJavaVM、GetDefaultJavaVMInitArgs、GetCreatedJavaVMs
+ * @param jvmpath
+ * @param ifn
+ * @return
+ */
 jboolean
 LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 {
@@ -844,14 +853,21 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 
     JLI_TraceLauncher("JVM path is %s\n", jvmpath);
 
+    /*
+     * 通过dlopen函数打开jvm的动态库libjvm.so，并把它装入内存中，为了后面做符号解析和重定位
+     * RTLD_NOW：在dlopen返回前，需要解析出所有未定义符号，否则，在dlopen会返回NULL
+     * RTLD_GLOBAL：动态库中定义的符号可被其后打开的其它库重定位
+     */
     libjvm = dlopen(jvmpath, RTLD_NOW + RTLD_GLOBAL);
     if (libjvm == NULL) {
+        // 无法通过dlopen打开，那就按正常文件的方式读取，以下都是solaris的实现
 #if defined(__solaris__) && defined(__sparc) && !defined(_LP64) /* i.e. 32-bit sparc */
       FILE * fp;
       Elf32_Ehdr elf_head;
       int count;
       int location;
 
+      // 打开文件
       fp = fopen(jvmpath, "r");
       if (fp == NULL) {
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
@@ -859,6 +875,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
       }
 
       /* read in elf header */
+      // 读取 elf 文件头
       count = fread((void*)(&elf_head), sizeof(Elf32_Ehdr), 1, fp);
       fclose(fp);
       if (count < 1) {
@@ -896,13 +913,16 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         return JNI_FALSE;
     }
 
+    // dlsym函数对动态库libjvm.so做符号解析，如果库中有函数 JNI_CreateJavaVM 的符号，则把对应符号的函数地址赋值给 CreateJavaVM
     ifn->CreateJavaVM = (CreateJavaVM_t)
         dlsym(libjvm, "JNI_CreateJavaVM");
     if (ifn->CreateJavaVM == NULL) {
+        // 解析失败，就报错并退出函数
         JLI_ReportErrorMessage(DLL_ERROR2, jvmpath, dlerror());
         return JNI_FALSE;
     }
 
+    // dlsym函数对动态库libjvm.so做符号解析，如果库中有函数 JNI_GetDefaultJavaVMInitArgs 的符号，则把对应符号的函数地址赋值给 GetDefaultJavaVMInitArgs
     ifn->GetDefaultJavaVMInitArgs = (GetDefaultJavaVMInitArgs_t)
         dlsym(libjvm, "JNI_GetDefaultJavaVMInitArgs");
     if (ifn->GetDefaultJavaVMInitArgs == NULL) {
@@ -910,6 +930,7 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
         return JNI_FALSE;
     }
 
+    // dlsym函数对动态库libjvm.so做符号解析，如果库中有函数 JNI_GetCreatedJavaVMs 的符号，则把对应符号的函数地址赋值给 GetCreatedJavaVMs
     ifn->GetCreatedJavaVMs = (GetCreatedJavaVMs_t)
         dlsym(libjvm, "JNI_GetCreatedJavaVMs");
     if (ifn->GetCreatedJavaVMs == NULL) {
@@ -921,6 +942,12 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 }
 
 /*
+ * 这个函数就是找出执行程序的路径，也就是java命令所在的路径，主要按4种方式找，下面按查找优先顺序列出
+ * 1、/proc/self/exe 链接路径
+ * 2、绝对路径
+ * 3、相对路径
+ * 4、全局搜索
+ *
  * Compute the name of the executable
  *
  * In order to re-exec securely we need the absolute path of the
@@ -937,6 +964,7 @@ const char*
 SetExecname(char **argv)
 {
     char* exec_path = NULL;
+    // 这块是针对solaris操作系统的，不做解析
 #if defined(__solaris__)
     {
         Dl_info dlinfo;
@@ -960,11 +988,15 @@ SetExecname(char **argv)
     }
 #elif defined(__linux__)
     {
+        // 在linux操作系统中"/proc/self/exe"链接到当前进程的执行程序目录，比如，当我们在linux操作脚本的时候，这个目录就会链接到bash脚本程序目录，
+        // 这里是链接到java程序，也就是我们的java命令的目录
         const char* self = "/proc/self/exe";
         char buf[PATH_MAX+1];
+        // 把链接的目录读进buf字符数组中
         int len = readlink(self, buf, PATH_MAX);
         if (len >= 0) {
             buf[len] = '\0';            /* readlink(2) doesn't NUL terminate */
+            // 将buf数组转成字符串（字符指针指向），供后面逻辑使用
             exec_path = JLI_StringDup(buf);
         }
     }
@@ -974,10 +1006,17 @@ SetExecname(char **argv)
     }
 #endif
 
+    /* 到这一步，还没拿到执行程序路径，那就再通过别的方式去找，具体方式如下：
+     *  1、如果命令是/开头的，那就按绝对路径去找
+     *  2、绝对路径找不到，那再相对路径找
+     *  3、还找不到，就通过系统搜索的方式
+     */
     if (exec_path == NULL) {
         exec_path = FindExecName(argv[0]);
     }
+    // 将得到的执行程序路径存储到全局变量execname中，方便后续逻辑使用
     execname = exec_path;
+    // 返回执行程序路径
     return exec_path;
 }
 
@@ -1034,12 +1073,20 @@ ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void
     pthread_t tid;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
+    /* 设置线程的分离状态
+     * detachstate：
+     * 		PTHREAD_CREATE_DETACHED 表示分离
+     * 		PTHREAD_CREATE_JOINABLE 表示结合
+     * 如果设置成分离状态，表示无需关注新创建的线程执行结果，由它自行完成，并在完成后由操作系统回收资源；
+     * 如果设置成非分离状态，表示父线程需要拿到创建的子线程的执行结果
+     */
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     if (stack_size > 0) {
       pthread_attr_setstacksize(&attr, stack_size);
     }
 
+    // 通过调用系统调用api pthread_create 创建一个新的线程，并指定线程创建后需要执行的任务函数是continuation，返回0表示创建成功。continuation是一个函数指针，指向要执行的函数
     if (pthread_create(&tid, &attr, (void *(*)(void*))continuation, (void*)args) == 0) {
       void * tmp;
       pthread_join(tid, &tmp);

@@ -158,11 +158,13 @@ void CollectedHeap::trace_heap_after_gc(GCTracer* gc_tracer) {
 
 CollectedHeap::CollectedHeap() : _n_par_threads(0)
 {
+    // 下面这几步就是得到最大数组的大小，用于后期判断一个对象最大占用内存大小的限制
   const size_t max_len = size_t(arrayOopDesc::max_array_length(T_INT));
   const size_t elements_per_word = HeapWordSize / sizeof(jint);
   _filler_array_max_size = align_object_size(filler_array_hdr_size() +
                                              max_len / elements_per_word);
 
+    // 以下都是赋初始值操作
   _barrier_set = NULL;
   _is_gc_active = false;
   _total_collections = _total_full_collections = 0;
@@ -183,6 +185,7 @@ CollectedHeap::CollectedHeap() : _n_par_threads(0)
   }
   _defer_initial_card_mark = false; // strengthened by subclass in pre_initialize() below.
   // Create the ring log
+    // gc日志事件
   if (LogEvents) {
     _gc_heap_log = new GCHeapLog();
   } else {

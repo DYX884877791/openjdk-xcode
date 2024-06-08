@@ -124,9 +124,11 @@ public:
     x = (x + (4-1)) & ((unsigned)(-4));
 #endif
     if (_hwm + x > _max) {
+        // 该区域内存不够了，要扩容
       return grow(x);
     } else {
       char *old = _hwm;
+        // 看这里，就是把_hwm往上升x的字节
       _hwm += x;
       return old;
     }

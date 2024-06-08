@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -ex
 
 BUILD_LOG="LOG=debug"
 BUILD_MODE=normal
@@ -20,9 +20,14 @@ set_os() {
 }
 
 set_os
+JAVA_HOME_DIR=`echo "$JAVA_HOME"`
+echo $JAVA_HOME_DIR
+if [ -z $JAVA_HOME_DIR ] ; then
+  echo "请配置JAVA_HOME"
+fi
 
 BOOT_JDK_MACOS="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
-BOOT_JDK_LINUX="/home/dengyouxu/Development/Software/jdk-8u351-linux-x64/jdk1.8.0_351"
+BOOT_JDK_LINUX=$JAVA_HOME_DIR
 
 if $IS_LINUX ; then
     BOOT_JDK=$BOOT_JDK_LINUX
@@ -138,26 +143,34 @@ configurejdk() {
 			--with-toolchain-type=clang \
             --with-xcode-path="$XCODE_APP" \
             --includedir="$XCODE_DEVELOPER_PREFIX/Toolchains/XcodeDefault.xctoolchain/usr/include" \
-            --with-boot-jdk="$BOOT_JDK""
+            --with-boot-jdk="$BOOT_JDK" \
+            --with-jtreg="$BUILD_DIR/tools/jtreg" \
+            --with-freetype-include="$TOOL_DIR/freetype/include" \
+            --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs
+            "
 	fi
-	./configure $DARWIN_CONFIG $BUILD_VERSION_CONFIG \
+	unset LINUX_CONFIG
+	if $IS_LINUX ; then
+    LINUX_CONFIG="--with-freetype-include="/usr/include/freetype2" \
+                  --with-freetype-lib=/usr/lib/x86_64-linux-gnu"
+  fi
+	./configure $DARWIN_CONFIG $LINUX_CONFIG $BUILD_VERSION_CONFIG \
             --with-debug-level=$DEBUG_LEVEL \
             --with-conf-name=$JDK_CONF \
             --disable-zip-debug-info \
             --with-target-bits=64 \
             --with-jvm-variants=server \
-	     	--with-native-debug-symbols=internal \
-            --with-jtreg="$BUILD_DIR/tools/jtreg" \
-            --with-freetype-include="$TOOL_DIR/freetype/include" \
-            --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs $DISABLE_PCH
+	     	    --with-native-debug-symbols=internal \
+            $DISABLE_PCH
 	popd
 }
 
 buildjdk() {
 	progress "build jdk"
 	pushd "$JDK_DIR"
+	time=`uname`_`date +"%F_%T"`
 	# compiledb make images $BUILD_LOG COMPILER_WARNINGS_FATAL=false CONF=$JDK_CONF
-	make images $BUILD_LOG COMPILER_WARNINGS_FATAL=false CONF=$JDK_CONF
+	make images $BUILD_LOG COMPILER_WARNINGS_FATAL=false CONF=$JDK_CONF 2>&1
 	if $IS_DARWIN ; then
         # seems the path handling has changed; use rpath instead of hardcoded path
         find  "$JDK_DIR/build/$JDK_CONF/images" -type f -name libfontmanager.dylib -exec install_name_tool -change /usr/local/lib/libfreetype.6.dylib @rpath/libfreetype.dylib.6 {} \; -print

@@ -1980,20 +1980,28 @@ void SystemDictionary::load_abstract_ownable_synchronizer_klass(TRAPS) {
 // ----------------------------------------------------------------------------
 // Initialization
 
+// 字典表创建和基础类预加载
 void SystemDictionary::initialize(TRAPS) {
   // Allocate arrays
   assert(dictionary() == NULL,
          "SystemDictionary should only be initialized once");
   _sdgeneration        = 0;
+    // 创建字典（就是Hash Table）
   _dictionary          = new Dictionary(calculate_systemdictionary_size(PredictedLoadedClassCount));
+    // 创建占位符表（就是Hash Table）
   _placeholders        = new PlaceholderTable(_nof_buckets);
   _number_of_modifications = 0;
+    // 创建约束表（就是Hash Table）
   _loader_constraints  = new LoaderConstraintTable(_loader_constraint_size);
+    // 创建解析错误表（就是Hash Table）
   _resolution_errors   = new ResolutionErrorTable(_resolution_error_size);
+    // 创建调用方法符号表（就是Hash Table）
   _invoke_method_table = new SymbolPropertyTable(_invoke_method_size);
 
   // Allocate private object used as system class loader lock
+    // 分配一个数组来存放系统类加载锁
   _system_loader_lock_obj = oopFactory::new_intArray(0, CHECK);
+    // 初始化基础类，
   // Initialize basic classes
     // 执行预加载
   initialize_preloaded_classes(CHECK);
@@ -2017,13 +2025,19 @@ bool SystemDictionary::initialize_wk_klass(WKID id, int init_opt, TRAPS) {
   assert(id >= (int)FIRST_WKID && id < (int)WKID_LIMIT, "oob");
   int  info = wk_init_info[id - FIRST_WKID];
   int  sid  = (info >> CEIL_LG_OPTION_LIMIT);
+    // 拿到对应的符号
   Symbol* symbol = vmSymbols::symbol_at((vmSymbols::SID)sid);
+    // 从数组 _well_known_klasses 中拿到已加载的类
   Klass**    klassp = &_well_known_klasses[id];
   bool must_load = (init_opt < SystemDictionary::Opt);
+    // 初始klassp肯定是null
   if ((*klassp) == NULL) {
+      //  下面就是真正类加载的环节了
     if (must_load) {
+        // 加载必须的类
       (*klassp) = resolve_or_fail(symbol, true, CHECK_0); // load required class
     } else {
+        // 加载可选的类
       (*klassp) = resolve_or_null(symbol,       CHECK_0); // load optional klass
     }
   }
@@ -2032,16 +2046,19 @@ bool SystemDictionary::initialize_wk_klass(WKID id, int init_opt, TRAPS) {
 
 void SystemDictionary::initialize_wk_klasses_until(WKID limit_id, WKID &start_id, TRAPS) {
   assert((int)start_id <= (int)limit_id, "IDs are out of order!");
+    // 这里就是遍历 WKID 枚举，把基础类都加载一遍
   for (int id = (int)start_id; id < (int)limit_id; id++) {
     assert(id >= (int)FIRST_WKID && id < (int)WKID_LIMIT, "oob");
     int info = wk_init_info[id - FIRST_WKID];
     int sid  = (info >> CEIL_LG_OPTION_LIMIT);
     int opt  = (info & right_n_bits(CEIL_LG_OPTION_LIMIT));
 
+      // 直接看这，这一步完成后，就对基础加载完成了，继续往后看
     initialize_wk_klass((WKID)id, opt, CHECK);
   }
 
   // move the starting value forward to the limit:
+    // 下一次开始的位置换到本次limit的位置
   start_id = limit_id;
 }
 
@@ -2058,11 +2075,13 @@ void SystemDictionary::initialize_preloaded_classes(TRAPS) {
     ik->constants()->restore_unshareable_info(CHECK);
     initialize_wk_klasses_through(WK_KLASS_ENUM_NAME(Class_klass), scan, CHECK);
   } else {
+      // 直接看这一步，这个的实现往后看，完成后，那些基础的类就被加载进来了，现在知道为啥我们在Java代码时，基础类（Object/Class/String等）都是不需要额外加载和import进来的，原因就在这
     initialize_wk_klasses_through(WK_KLASS_ENUM_NAME(Class_klass), scan, CHECK);
   }
 
   // Calculate offsets for String and Class classes since they are loaded and
   // can be used after this point.
+    // 计算String 和 Class 类的字段偏移
   java_lang_String::compute_offsets();
   java_lang_Class::compute_offsets();
 
@@ -2071,10 +2090,13 @@ void SystemDictionary::initialize_preloaded_classes(TRAPS) {
   // so calling them at this point is matters (not before when there
   // are fewer objects and not later after there are more objects
   // in the perm gen.
+    // 给8个基础类型创建它们的Class类型对象（在虚拟机中就是InstanceMirrorKlass）
   Universe::initialize_basic_type_mirrors(CHECK);
+    // 修正mirror
   Universe::fixup_mirrors(CHECK);
 
   // do a bunch more:
+    // 接下来都是继续加载基础类
   initialize_wk_klasses_through(WK_KLASS_ENUM_NAME(Reference_klass), scan, CHECK);
 
   // Preload ref klasses and set reference types
@@ -2102,6 +2124,7 @@ void SystemDictionary::initialize_preloaded_classes(TRAPS) {
 
   initialize_wk_klasses_until(WKID_LIMIT, scan, CHECK);
 
+    // 基础类型的包装类的Klass
   _box_klasses[T_BOOLEAN] = WK_KLASS(Boolean_klass);
   _box_klasses[T_CHAR]    = WK_KLASS(Character_klass);
   _box_klasses[T_FLOAT]   = WK_KLASS(Float_klass);
@@ -2114,10 +2137,12 @@ void SystemDictionary::initialize_preloaded_classes(TRAPS) {
   //_box_klasses[T_ARRAY]   = WK_KLASS(object_klass);
 
   { // Compute whether we should use loadClass or loadClassInternal when loading classes.
+      // 计算加载类时应该使用 loadClass 还是 loadClassInternal
     Method* method = InstanceKlass::cast(ClassLoader_klass())->find_method(vmSymbols::loadClassInternal_name(), vmSymbols::string_class_signature());
     _has_loadClassInternal = (method != NULL);
   }
   { // Compute whether we should use checkPackageAccess or NOT
+      // 计算要不要用 checkPackageAccess 方法
     Method* method = InstanceKlass::cast(ClassLoader_klass())->find_method(vmSymbols::checkPackageAccess_name(), vmSymbols::class_protectiondomain_signature());
     _has_checkPackageAccess = (method != NULL);
   }

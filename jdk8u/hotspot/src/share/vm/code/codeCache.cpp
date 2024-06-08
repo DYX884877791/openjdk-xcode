@@ -629,6 +629,11 @@ void CodeCache::initialize() {
   // This was originally just a check of the alignment, causing failure, instead, round
   // the code cache to the page size.  In particular, Solaris is moving to a larger
   // default page size.
+    /*
+     * 下面三步都是将各自大小调整到按页面大小四舍五入，CodeCache分段的好处：
+     * 1.提升运行时程序性能，特别是GC的性能，GC扫描根只需要遍历一个区域而不需要遍历所有区域
+     * 2.提升代码局部性
+     */
     //按照系统的内存页大小对CodeCache的参数取整
     //CodeCacheExpansionSize表示CodeCache扩展一次内存空间对应的内存大小，x86下默认值是2304k
   CodeCacheExpansionSize = round_to(CodeCacheExpansionSize, os::vm_page_size());
@@ -637,15 +642,18 @@ void CodeCache::initialize() {
     //ReservedCodeCacheSize表示CodeCache的最大内存大小，x86 启用C2编译下，默认值是48M
   ReservedCodeCacheSize = round_to(ReservedCodeCacheSize, os::vm_page_size());
     //完成heap属性的初始化
+    // 按ReservedCodeCacheSize, InitialCodeCacheSize, CodeCacheSegmentSize三块空间创建一个C堆空间，并用CodeHeap对象持有
   if (!_heap->reserve(ReservedCodeCacheSize, InitialCodeCacheSize, CodeCacheSegmentSize)) {
     vm_exit_during_initialization("Could not reserve enough space for code cache");
   }
 
     //将CodeHeap放入一个MemoryPool中管理起来
+    // 将新创建的C堆空间的封装到code heap内存池CodeHeapPool中，然后通过MemoryManager内存管理器对象通过数组来管理这些池对象，最后再分别将CodeHeapPool池对象和MemoryManager内存管理对象，添加到GrowableArray可增长的数组对象中，总结就是，这里预创建了内存区域，并用句柄管理起来
   MemoryService::add_code_heap_memory_pool(_heap);
 
   // Initialize ICache flush mechanism
   // This service is needed for os::register_code_area
+    // 这个里面实际上没做什么，忽略
     //初始化用于刷新CPU指令缓存的Icache，即生成一段用于刷新指令缓存的汇编代码，此时因为heap属性已初始化完成，所以可以从CodeCache中分配Blob了
   icache_init();
 
@@ -653,6 +661,7 @@ void CodeCache::initialize() {
   // This is used on Windows 64 bit platforms to register
   // Structured Exception Handlers for our generated code.
     //通知操作系统我们的CodeCache的内存区域，主要是win64使用
+    // 将生成的CodeCache区域注册到操作系统中，使得当在动态生成的代码中发生异常时，会将异常信息发送到topLevelExceptionFilter（顶级异常过滤器）
   os::register_code_area(_heap->low_boundary(), _heap->high_boundary());
 }
 

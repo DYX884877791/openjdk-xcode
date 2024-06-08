@@ -110,9 +110,11 @@ class Thread: public ThreadShadow {
   // int         _exception_line;                   // line information for exception (debugging only)
  protected:
   // Support for forcing alignment of thread objects for biased locking
+    // 指向线程创建时分配的实际地址的首地址
   void*       _real_malloc_address;
  public:
     // 运算符重载...
+    // 在new函数中，实际调用的是allocate函数，该函数在thread.cpp源文件中实现，作用就是在进程的运行时堆中分配一块内存来存放xxxThread对象
   void* operator new(size_t size) throw() { return allocate(size, true); }
   void* operator new(size_t size, const std::nothrow_t& nothrow_constant) throw() {
     return allocate(size, false); }
@@ -185,6 +187,7 @@ class Thread: public ThreadShadow {
   //
 
   // suspend/resume lock: used for self-suspend
+    // 线程状态更改的监视器
   Monitor* _SR_lock;
 
  protected:
@@ -204,9 +207,11 @@ class Thread: public ThreadShadow {
 
   // various suspension related flags - atomically updated
   // overloaded for async exception checking in check_special_condition_for_native_trans.
+    // 线程挂起标志
   volatile uint32_t _suspend_flags;
 
  private:
+    // 进入线程内部处理linux系统信号的个数，处理完成后会-1
   int _num_nested_signal;
 
  public:
@@ -219,12 +224,15 @@ class Thread: public ThreadShadow {
   static void trace(const char* msg, const Thread* const thread) PRODUCT_RETURN;
 
   // Active_handles points to a block of handles
+    // 指向当前线程持有的JNI句柄链表头指针
   JNIHandleBlock* _active_handles;
 
   // One-element thread local free list
+    // 空闲JNI句柄块的链表头指针
   JNIHandleBlock* _free_handle_block;
 
   // Point to the last handle mark
+    // HandleMark的指针，该Mark会记录指向线程本身、存储区域、存储chunk等信息
   HandleMark* _last_handle_mark;
 
   // The parity of the last strong_roots iteration in which this thread was
@@ -257,7 +265,9 @@ class Thread: public ThreadShadow {
   friend class ThreadLocalStorage;
   friend class GC_locker;
 
+    // 线程本地分配缓存
   ThreadLocalAllocBuffer _tlab;                 // Thread-local eden
+    // 当前线程在Java堆中已分配的字节数
   jlong _allocated_bytes;                       // Cumulative number of bytes allocated on
                                                 // the Java heap
 
@@ -268,7 +278,9 @@ class Thread: public ThreadShadow {
 
   ThreadExt _ext;
 
+    // 记录已开始的VM操作数量
   int   _vm_operation_started_count;            // VM_Operation support
+    // 记录已完成的VM操作数量
   int   _vm_operation_completed_count;          // VM_Operation support
 
   ObjectMonitor* _current_pending_monitor;      // ObjectMonitor this thread
@@ -538,19 +550,24 @@ public:
 
 protected:
   // OS data associated with the thread
+    // 指向基于平台的线程实现
   OSThread* _osthread;  // Platform-specific thread information 特定于平台的线程信息
 
   // Thread local resource area for temporary allocation within the VM
+    // 线程本地的用于临时分配的资源区域
   ResourceArea* _resource_area;
 
   DEBUG_ONLY(ResourceMark* _current_resource_mark;)
 
   // Thread local handle area for allocation of handles within the VM
+    // 线程本地的用于分配JNI句柄的资源区域
   HandleArea* _handle_area;
   GrowableArray<Metadata*>* _metadata_handles;
 
   // Support for stack overflow handling, get_thread, etc.
+    // 线程栈基址
   address          _stack_base;
+    // 线程栈大小
   size_t           _stack_size;
   uintptr_t        _self_raw_id;      // used by get_thread (mutable)
   int              _lgrp_id;
@@ -643,7 +660,9 @@ protected:
  public:
   volatile intptr_t _Stalled ;
   volatile int _TypeTag ;
+    // 线程阻塞时的事件对象
   ParkEvent * _ParkEvent ;                     // for synchronized()    用于 synchronized(), 实现 wait/notify
+    // 线程睡眠时的事件对象
   ParkEvent * _SleepEvent ;                    // for Thread.sleep      用于 Thread.sleep
   ParkEvent * _MutexEvent ;                    // for native internal Mutex/Monitor
   ParkEvent * _MuxEvent ;                      // for low-level muxAcquire-muxRelease
@@ -785,6 +804,9 @@ class CompilerThread;
 
 typedef void (*ThreadFunction)(JavaThread*, TRAPS);
 
+/**
+ * JavaThread是继承自Thread的，在JavaThread类中没有找到new运算符的实现函数，这种情况一般就要往上找，找它的父类，直到找到为此，很幸运在Thread类中有对new运算符的实现函数
+ */
 class JavaThread: public Thread {
   friend class VMStructs;
  private:

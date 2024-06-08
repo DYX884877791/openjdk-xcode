@@ -322,6 +322,7 @@ class AllStatic {
 
 //------------------------------Chunk------------------------------------------
 // Linked list of raw memory chunks
+// Chunk类是继承自CHeapObj类的，当new Chunk的时候也是通过CHeapObj类的new的实现完成的内存分配，由CHeapObj的名字可以看出，new分配内存时是在C堆内存下通过malloc系统调用函数分配的，注意，这里讲的是C堆，不是Java堆。
 class Chunk: CHeapObj<mtChunk> {
   friend class VMStructs;
 
@@ -343,10 +344,15 @@ class Chunk: CHeapObj<mtChunk> {
     slack      = 20,            // suspected sizeof(Chunk) + internal malloc headers
 #endif
 
+        // 最小的chunk大小，slack就是chunk本身的大小，可以忽略这个slack占用的内存
     tiny_size  =  256  - slack, // Size of first chunk (tiny)
+        // 1k大小的chunk
     init_size  =  1*K  - slack, // Size of first chunk (normal aka small)
+        // 10k大小的chunk
     medium_size= 10*K  - slack, // Size of medium-sized chunk
+        // 32k大小的chunk
     size       = 32*K  - slack, // Default size of an Arena chunk (following the first)
+        // 1k + 32 字节大小的非池化的chunk大小
     non_pool_size = init_size + 32 // An initial size which is not one of above
   };
 
@@ -371,6 +377,7 @@ class Chunk: CHeapObj<mtChunk> {
 
 //------------------------------Arena------------------------------------------
 // Fast allocation of memory
+// 在JVM运行过程中，会产生大量的符号，为了效率在存储时不可能来一个分配一个，所以需要提前划出一片区域chunk来存储，如果一块chunk不够了，再创建一块，依此类推，Arena就是管理这些chunk的类对象，各chunk之间以链表的形式关联，整个JVM中对内存的管理中，大量使用链表这一数据结构来处理。顺便描述下Arena的几个字段的含义
 class Arena : public CHeapObj<mtNone> {
 protected:
   friend class ResourceMark;
@@ -380,11 +387,15 @@ protected:
 
   MEMFLAGS    _flags;           // Memory tracking flags
 
+    // 第一块 chunk
   Chunk *_first;                // First chunk
+    // 当前在用的 chunk
   Chunk *_chunk;                // current chunk
+    // 当前在用的 chunk 起始点和限制点
   char *_hwm, *_max;            // High water mark and max in current chunk
   // Get a new Chunk of at least size x
   void* grow(size_t x, AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM);
+    // Arena的总大小（所有chunk大小相加）
   size_t _size_in_bytes;        // Size of arena (used for native memory tracking)
 
   NOT_PRODUCT(static julong _bytes_allocated;) // total #bytes allocated since start

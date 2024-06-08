@@ -81,8 +81,10 @@ Method* ArrayKlass::uncached_lookup_method(Symbol* name, Symbol* signature, Over
 }
 
 ArrayKlass::ArrayKlass(Symbol* name) {
+    // 设置名字
   set_name(name);
 
+    // 这里默认设置超类为NULL
   set_super(Universe::is_bootstrapping() ? (Klass*)NULL : SystemDictionary::Object_klass());
   set_layout_helper(Klass::_lh_neutral_value);
   set_dimension(1);
@@ -91,6 +93,7 @@ ArrayKlass::ArrayKlass(Symbol* name) {
   set_component_mirror(NULL);
   // Arrays don't add any new methods, so their vtable is the same size as
   // the vtable of klass Object.
+    // Object类的vtable大小
   int vtable_size = Universe::base_vtable_size();
   set_vtable_length(vtable_size);
   set_is_cloneable(); // All arrays are considered to be cloneable (See JLS 20.1.5)

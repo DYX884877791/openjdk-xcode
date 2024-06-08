@@ -2915,6 +2915,7 @@ Arguments::ArgsRange Arguments::parse_memory_size(const char* s,
 
 // Parse JavaVMInitArgs structure
 
+// 虚拟机参数解析
 jint Arguments::parse_vm_init_args(const JavaVMInitArgs* args) {
   // For components of the system classpath.
   SysClassPath scp(Arguments::get_sysclasspath());
@@ -2930,18 +2931,21 @@ jint Arguments::parse_vm_init_args(const JavaVMInitArgs* args) {
   set_mode_flags(_mixed);
 
   // Parse JAVA_TOOL_OPTIONS environment variable (if present)
+    // 解析 JAVA_TOOL_OPTIONS 环境变量
   jint result = parse_java_tool_options_environment_variable(&scp, &scp_assembly_required);
   if (result != JNI_OK) {
     return result;
   }
 
   // Parse JavaVMInitArgs structure passed in
+    // 解析 JavaVMInitArgs 结构，重点在这
   result = parse_each_vm_init_arg(args, &scp, &scp_assembly_required, Flag::COMMAND_LINE);
   if (result != JNI_OK) {
     return result;
   }
 
   // Parse _JAVA_OPTIONS environment variable (if present) (mimics classic VM)
+    // 解析 _JAVA_OPTIONS 环境变量
   result = parse_java_options_environment_variable(&scp, &scp_assembly_required);
   if (result != JNI_OK) {
     return result;
@@ -2953,9 +2957,11 @@ jint Arguments::parse_vm_init_args(const JavaVMInitArgs* args) {
   // needs to know about processor and memory resources must occur after
   // this point.
 
+    // 这一步就是保证在进行最终参数处理之前，处理器和内存资源已正确配置
   os::init_container_support();
 
   // Do final processing now that all arguments have been parsed
+    // 完成参数解析工作，做一些收尾工作，
   result = finalize_vm_init_args(&scp, scp_assembly_required);
   if (result != JNI_OK) {
     return result;
@@ -3021,6 +3027,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
   const char* tail;
 
   // iterate over arguments
+    // 遍历选项参数
   for (int index = 0; index < args->nOptions; index++) {
     bool is_absolute_path = false;  // for -agentpath vs -agentlib
 
@@ -3035,10 +3042,18 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         // the -Djava.class.path and the -Dsun.java.command options are
         // omitted from jvm_args string as each have their own PerfData
         // string constant object.
+        // 将所有的jvm 选项参数（除了-Djava.class.path,-Dsun.java.command,-Dsun.java.launcher 这三个，因为它们都有自己的PerfData字符串常量对象，作为字符串添加到jvm_args字符串数组中
         build_jvm_args(option->optionString);
     }
 
     // -verbose:[class/gc/jni]
+     /* -verbose:[class/gc/jni]，就是确定是否输出对应的日志信息
+      * 命令格式如：java -verbose[:flag] [argument]
+      * flag是参数，argument是可选的参数。启用Java-verbose的方式有以下几种：
+      * -verbose:gc：输出垃圾收集器的日志信息
+      * -verbose:class：输出类加载器加载Class的详细信息
+      * -verbose:jni：输出jni绑定日志
+      */
     if (match_option(option, "-verbose", &tail)) {
       if (!strcmp(tail, ":class") || !strcmp(tail, "")) {
         FLAG_SET_CMDLINE(bool, TraceClassLoading, true);
@@ -3051,6 +3066,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
     // -da / -ea / -disableassertions / -enableassertions
     // These accept an optional class/package name separated by a colon, e.g.,
     // -da:java.lang.Thread.
+        // 按指定的粒度（程序包名称|类名称），开启/关闭断言功能 e就是开，d就是关
     } else if (match_option(option, user_assertion_options, &tail, true)) {
       bool enable = option->optionString[1] == 'e';     // char after '-' is 'e'
       if (*tail == '\0') {
@@ -3060,22 +3076,27 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         JavaAssertions::addOption(tail + 1, enable);
       }
     // -dsa / -esa / -disablesystemassertions / -enablesystemassertions
+        // 开启/关闭系统断言功能 e就是开，d就是关
     } else if (match_option(option, system_assertion_options, &tail, false)) {
       bool enable = option->optionString[1] == 'e';     // char after '-' is 'e'
       JavaAssertions::setSystemClassDefault(enable);
     // -bootclasspath:
+        // -bootclasspath: 替换class path，这个慎用，尽量别用
     } else if (match_option(option, "-Xbootclasspath:", &tail)) {
       scp_p->reset_path(tail);
       *scp_assembly_required_p = true;
     // -bootclasspath/a:
+        // -bootclasspath/a: 在原class path 上追加，正常情况，用这个就行
     } else if (match_option(option, "-Xbootclasspath/a:", &tail)) {
       scp_p->add_suffix(tail);
       *scp_assembly_required_p = true;
     // -bootclasspath/p:
+        // -bootclasspath/p: 在原class path 前面添加
     } else if (match_option(option, "-Xbootclasspath/p:", &tail)) {
       scp_p->add_prefix(tail);
       *scp_assembly_required_p = true;
     // -Xrun
+        // -Xrun：这个参数已经不用了
     } else if (match_option(option, "-Xrun", &tail)) {
       if (tail != NULL) {
         const char* pos = strchr(tail, ':');
@@ -3098,6 +3119,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         add_init_library(name, options);
       }
     // -agentlib and -agentpath
+        // -agentlib and -agentpath：加载本机代理库参数，主要用于jmx、远程调试
     } else if (match_option(option, "-agentlib:", &tail) ||
           (is_absolute_path = match_option(option, "-agentpath:", &tail))) {
       if(tail != NULL) {
@@ -3122,6 +3144,7 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args,
         add_init_agent(name, options, is_absolute_path);
       }
     // -javaagent
+        // -javaagent：加载 Java 编程语言代理,就是在main方法执行前先执行这个代理jar（因为代理必须打包成jar）
     } else if (match_option(option, "-javaagent:", &tail)) {
 #if !INCLUDE_JVMTI
       jio_fprintf(defaultStream::error_stream(),

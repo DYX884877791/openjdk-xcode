@@ -56,6 +56,7 @@ void basic_fatal(const char* msg) {
 // Something to help porters sleep at night
 
 void basic_types_init() {
+    // 下面的操作就是验证各个类型的在32位和64位机器上的内存占用位数
 #ifdef ASSERT
 #ifdef _LP64
   assert(min_intx ==  (intx)CONST64(0x8000000000000000), "correct constant");
@@ -86,6 +87,7 @@ void basic_types_init() {
   assert( 2 == sizeof( u2),        "wrong size for basic type");
   assert( 4 == sizeof( u4),        "wrong size for basic type");
 
+    // 验证各个基础类型代表的字符，比如B代表byte，C代表char，依此类推
   int num_type_chars = 0;
   for (int i = 0; i < 99; i++) {
     if (type2char((BasicType)i) != 0) {
@@ -93,6 +95,7 @@ void basic_types_init() {
       num_type_chars++;
     }
   }
+    // 类型个数只能是11个，8个基础类型 + 1个void类型 + 1个object类型 + 1个array类型
   assert(num_type_chars == 11, "must have tested the right number of mappings");
   assert(char2type(0) == T_ILLEGAL, "correct illegality");
 
@@ -137,6 +140,7 @@ void basic_types_init() {
   assert(sizeof(NULL) == sizeof(char*), "NULL must be same size as pointer");
 #endif
 
+    // 设置Java与OS的线程优先级对应关系，默认都是-1（JavaPriority1_To_OSPriority到JavaPriority10_To_OSPriority初始值都是-1），也就是没有优先级
   if( JavaPriority1_To_OSPriority != -1 )
     os::java_to_os_priority[1] = JavaPriority1_To_OSPriority;
   if( JavaPriority2_To_OSPriority != -1 )
@@ -160,6 +164,7 @@ void basic_types_init() {
 
   // Set the size of basic types here (after argument parsing but before
   // stub generation).
+    // 压缩指针，为了降低学习难度，又不失去完整流程的学习，先忽略压缩指针情况
   if (UseCompressedOops) {
     // Size info for oops within java objects is fixed
     heapOopSize        = jintSize;
@@ -168,12 +173,18 @@ void basic_types_init() {
     BytesPerHeapOop    = BytesPerInt;
     BitsPerHeapOop     = BitsPerInt;
   } else {
+      // 堆对象指针内存占用大小，32位机器占4字节，64位机器占8字节
     heapOopSize        = oopSize;
+      // 每个字(word)的字节的幂次方，32位机器为2，64位机器为3
     LogBytesPerHeapOop = LogBytesPerWord;
+      // 每个堆对象指针的位数的幂次方，32位机器为5，64位机器为6
     LogBitsPerHeapOop  = LogBitsPerWord;
+      // 每个字(word)的字节的数，32位机器为4字节，64位机器为8字节，
     BytesPerHeapOop    = BytesPerWord;
+      // 每个堆对象指针的位数，32位机器为32位，64位机器为64位
     BitsPerHeapOop     = BitsPerWord;
   }
+    // object和array在jvm中的表现都是指针，所以就是 heapOopSize 的值
   _type2aelembytes[T_OBJECT] = heapOopSize;
   _type2aelembytes[T_ARRAY]  = heapOopSize;
 }

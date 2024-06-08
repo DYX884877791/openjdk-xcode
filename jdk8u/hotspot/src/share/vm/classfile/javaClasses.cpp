@@ -3355,11 +3355,16 @@ oop java_util_concurrent_locks_AbstractOwnableSynchronizer::get_owner_threadObj(
 // Compute hard-coded offsets
 // Invoked before SystemDictionary::initialize, so pre-loaded classes
 // are not available to determine the offset_of_static_fields.
+// 硬编码偏移计算
+//主要是对预加载的系统类的一些static字段的偏移进行计算，因为在C/C++中，对象分配后是一串连续的内存空间，各字段内容无法像java那样直接属性名获取，只能通过内存偏移位置来获取，所以这里要计算偏移位置
 void JavaClasses::compute_hard_coded_offsets() {
+    // 指针占用大小，32位的话只占4字节
   const int x = heapOopSize;
+    // instanceOopDesc 把这个想像成指向java对象的句柄，句柄本身是一个C++对象，也要占用空间，所以这里先计算句柄占用的空间，Java对象中各字段的偏移位置，都是是相对这个header的大小来计算
   const int header = instanceOopDesc::base_offset_in_bytes();
 
   // Throwable Class
+    // Throwable Class，计算异常类中详细消息、异常原因、异常堆栈等字段的偏移
   java_lang_Throwable::backtrace_offset  = java_lang_Throwable::hc_backtrace_offset  * x + header;
   java_lang_Throwable::detailMessage_offset = java_lang_Throwable::hc_detailMessage_offset * x + header;
   java_lang_Throwable::cause_offset      = java_lang_Throwable::hc_cause_offset      * x + header;
@@ -3371,6 +3376,7 @@ void JavaClasses::compute_hard_coded_offsets() {
   java_lang_boxing_object::long_value_offset = align_size_up((java_lang_boxing_object::hc_value_offset + header), BytesPerLong);
 
   // java_lang_ref_Reference:
+    // java_lang_ref_Reference: 对应Java中Reference，计算这个类的各字段偏移
   java_lang_ref_Reference::referent_offset = java_lang_ref_Reference::hc_referent_offset * x + header;
   java_lang_ref_Reference::queue_offset = java_lang_ref_Reference::hc_queue_offset * x + header;
   java_lang_ref_Reference::next_offset  = java_lang_ref_Reference::hc_next_offset * x + header;
@@ -3380,6 +3386,8 @@ void JavaClasses::compute_hard_coded_offsets() {
   // Artificial fields for java_lang_ref_Reference
   // The first field is for the discovered field added in 1.4
   java_lang_ref_Reference::number_of_fake_oop_fields = 1;
+
+    // 下面是一些其他类的字段偏移计算，参考上面的介绍就行，这里不一一介绍了，以下的类在Java中都有一一对应的类定义
 
   // java_lang_ref_SoftReference Class
   java_lang_ref_SoftReference::timestamp_offset = align_size_up((java_lang_ref_SoftReference::hc_timestamp_offset * x + header), BytesPerLong);

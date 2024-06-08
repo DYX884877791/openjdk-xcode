@@ -190,6 +190,15 @@ typedef enum {
 #define FLAG_SET_DEFAULT(name, value) ((name) = (value))
 
 #define FLAG_SET_CMDLINE(type, name, value) (CommandLineFlagsEx::type##AtPut(FLAG_MEMBER_WITH_TYPE(name,type), (type)(value), Flag::COMMAND_LINE))
+/**
+ * 调用宏：FLAG_SET_CMDLINE(uintx, MaxNewSize, (uintx)long_initial_young_size);
+ *
+ * 展开之后：(CommandLineFlagsEx::uintxAtPut(Flag_MaxNewSize_uintx, (uintx)(value), Flag::COMMAND_LINE))
+ *
+ * 这个函数就是把选项参数封装成一个Flag对象，把value值和类型Flag::COMMAND_LINE对应起来
+ *
+ */
+
 #define FLAG_SET_ERGO(type, name, value)    (CommandLineFlagsEx::type##AtPut(FLAG_MEMBER_WITH_TYPE(name,type), (type)(value), Flag::ERGONOMIC))
 #define FLAG_SET_MGMT(type, name, value)    (CommandLineFlagsEx::type##AtPut(FLAG_MEMBER_WITH_TYPE(name, type), (type)(value), Flag::MANAGEMENT))
 

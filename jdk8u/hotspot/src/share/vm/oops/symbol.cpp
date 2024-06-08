@@ -48,7 +48,9 @@ void* Symbol::operator new(size_t sz, int len, TRAPS) throw() {
 }
 
 void* Symbol::operator new(size_t sz, int len, Arena* arena, TRAPS) throw() {
+    // 计算要分配内存的字节大小
   int alloc_size = size(len)*HeapWordSize;
+    // 在arena管辖的区域内分配，arena的初始化和定义的实现可以回头看`章节19.2`，怎么分配的呢，就把它理解成一个带刻度的水缸，往里面加水时，刻度值上升，就这么简单。接着往下看
   address res = (address)arena->Amalloc(alloc_size);
   return res;
 }

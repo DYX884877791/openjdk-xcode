@@ -64,6 +64,7 @@ class TypeArrayKlass : public ArrayKlass {
   static TypeArrayKlass* create_klass(BasicType type, const char* name_str,
                                TRAPS);
   static inline Klass* create_klass(BasicType type, int scale, TRAPS) {
+      // 创建type类型的基础类型的数组类型
     TypeArrayKlass* tak = create_klass(type, external_name(type), CHECK_NULL);
     assert(scale == (1 << tak->log2_element_size()), "scale must check out");
     return tak;

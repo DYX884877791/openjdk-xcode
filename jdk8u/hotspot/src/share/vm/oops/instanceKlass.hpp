@@ -138,6 +138,8 @@ struct JvmtiCachedClassFileData;
 
 //
 /**
+ * 每个被加载的类在虚拟机中的表示为一个InstanceKlass
+ *
  * 每个InstanceKlass对象表示一个具体的Java类（这里的Java类不包括Java数组）。
  *
  * 有了InstanceKlass与Klass中定义的这些属性足够用来保存Java类元信息。在后续的类解析中会看到对相关变量的属性填充操作。

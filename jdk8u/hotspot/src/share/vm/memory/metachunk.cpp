@@ -73,6 +73,11 @@ Metachunk::Metachunk(size_t word_size,
 #endif
 }
 
+/**
+ * 看代码实现，非常简单，就是把_top上移word_size个字，读者只需把它理解成一个带刻度的水缸，往里面加水时，刻度值上升，就这么简单。
+ * @param word_size
+ * @return
+ */
 MetaWord* Metachunk::allocate(size_t word_size) {
   MetaWord* result = NULL;
   // If available, bump the pointer to allocate.

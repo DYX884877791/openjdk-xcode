@@ -385,6 +385,9 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 
     /* Parse command line options; if the return value of
      * ParseArguments is false, the program should exit.
+     *
+     * 解析命令行中的option，并把解析出来的option都转成JavaVMOption对象存入JavaVMOption数组中
+     * 解析失败，程序直接退出
      */
     if (!ParseArguments(&argc, &argv, &mode, &what, &ret, jrepath))
     {
@@ -394,6 +397,7 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
 
     // -- 设置额外的虚拟机启动选项；
     /* Override class path if -jar flag was specified */
+    /* 如果有-jar option，那么就会覆盖-cp的classpath*/
     if (mode == LM_JAR) {
         SetClassPath(what);     /* Override class path */
     }
@@ -418,7 +422,11 @@ JLI_Launch(int argc, char ** argv,              /* main argc, argc */
     SetJavaLauncherPlatformProps();
 
     // 初始化JVM。
-    /**
+    /*
+     * 这个函数才是正式开始执行程序的入口，主要做2件事
+     * 1、调用ShowSplashScreen函数展示Java虚拟机的欢迎画面
+     * 2、调用ContinueInNewThread函数创建一个新线程并在其中启动Java虚拟机，执行后续流程
+     *
      * 命令行参数被解析后，虚拟机启动选项已经构造完毕，JLI_Launch函数最后调用JVMInit函数在新的线程中初始化虚拟机，在新线程做的原因详见
      * https://bugs.java.com/bugdatabase/view_bug.do?bug_id=6316197。
      * JVMInit函数定义在文件jdk/src/solaris/bin/java_md_solinux.c中
@@ -480,6 +488,7 @@ int JNICALL
 JavaMain(void * _args)
 {
     slog_debug("进入jdk/src/share/bin/java.c中的JavaMain函数...");
+    // 参数赋值
     JavaMainArgs *args = (JavaMainArgs *)_args;
     int argc = args->argc;
     char **argv = args->argv;
@@ -488,6 +497,7 @@ JavaMain(void * _args)
     // ifn结构体保存了先前用LoadJavaVM函数在JVM动态库中查找到的JNI_CreateJavaVM、JNI_GetDefaultJavaVMInitArgs和JNI_GetCreatedJavaVMs函数指针。
     InvocationFunctions ifn = args->ifn;
 
+    // 初始化局部变量值
     JavaVM *vm = 0;
     JNIEnv *env = 0;
     jclass mainClass = NULL;
@@ -497,6 +507,7 @@ JavaMain(void * _args)
     int ret = 0;
     jlong start = 0, end = 0;
 
+    // 这个函数在linux和windows实现中都是空白，也就不管了，把它看作成java里的一个钩子函数即可
     // 可以看到macos的实现有一特殊的调用. 而在windows等其它平台均是一个空函数. macos的实现里面调用了objc_registerThreadWithCollector; 这个函数是干嘛用的呢.
     RegisterThread();
 
@@ -530,6 +541,7 @@ JavaMain(void * _args)
         LEAVE();
     }
 
+    // 释放启动虚拟时加载的jvm.cfg中的配置项占用的空间，jvm.cfg的配置加载在CreateExecutionEnvironment函数中
     FreeKnownVMs();  /* after last possible PrintUsage() */
 
     end = CounterGet();
@@ -656,6 +668,7 @@ JavaMain(void * _args)
      */
     ret = (*env)->ExceptionOccurred(env) == NULL ? 0 : 1;
     slog_debug("will LEAVE...");
+    // 这是一个宏定义的函数，内部主要做一次资源回收的工作
     LEAVE();
 }
 
@@ -833,6 +846,10 @@ SetJvmEnvironment(int argc, char **argv) {
          * as -version or -h), or an argument that indicates the following
          * arguments are for the application (i.e. the main class name, or
          * the -jar argument).
+         *
+         * 略过一些jvm不需要的参数 (比如 -version or -h), 或者一些应用级参数 (例如 the main class name, or
+         * the -jar argument).
+         *
          */
         if (i > 0) {
             char *prev = argv[i - 1];
@@ -854,6 +871,8 @@ SetJvmEnvironment(int argc, char **argv) {
             }
         }
         /*
+         * NativeMemoryTracking 参数是记录jvm向系统申请内存时的埋点，有一定的性能消耗，使用需要谨慎
+         *
          * The following case checks for "-XX:NativeMemoryTracking=value".
          * If value is non null, an environmental variable set to this value
          * will be created to be used by the JVM.
@@ -1408,6 +1427,8 @@ ParseArguments(int *pargc, char ***pargv,
 /*
  * Initializes the Java Virtual Machine. Also frees options array when
  * finished.
+ *
+ * 初始化java 虚拟机，完成后释放options数组，option就是虚拟机启动时设置的参数，这里初始化完了，当然要释放咯
  */
 static jboolean
 InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
@@ -1417,9 +1438,14 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
     JavaVMInitArgs args;
     jint r;
 
+    // 将args所代表的内存空间，用0填充
     memset(&args, 0, sizeof(args));
+    // 变量赋值
+    // 版本
     args.version  = JNI_VERSION_1_2;
+    // option选项数量
     args.nOptions = numOptions;
+    // option选项数组/指针
     args.options  = options;
     args.ignoreUnrecognized = JNI_FALSE;
 
@@ -1438,6 +1464,7 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
     slog_debug("即将调用定义在文件hotspot/src/share/vm/prims/jni.cpp中的JNI_CreateJavaVM函数...");
     //ifn结构体的CreateJavaVM函数指针即指向JVM动态库中的JNI_CreateJavaVM函数。JNI_CreateJavaVM函数定义在文件hotspot/src/share/vm/prims/jni.cpp中
     r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
+    // 初始化后，options没什么意义了，释放资源
     JLI_MemFree(options);
     return r == JNI_OK;
 }
@@ -2238,7 +2265,16 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
 {
     slog_debug("进入jdk/src/share/bin/java.c中的ContinueInNewThread函数...");
 
-    /*
+    /**
+     *
+     * 如果用户没有指定 threadStackSize 大小，那就要去检查下VM自带的默认值。Hotspot本身不再支持jdk1.1版本，但可以通过init args结构返回其默认堆栈大小，调用 GetDefaultJavaVMInitArgs（对应的实际函数是JNI_GetDefaultJavaVMInitArgs），这个函数可以取到VM设置的默认的 threadStackSize 大小。
+     * 这里为什么用不支持jdk1.1但是又用jdk1.1来做参数，我想原因是历史遗留，当然这个也不重要，我们只需要知道这里是可以拿到默认 threadStackSize 大小的就行。
+     *
+     * threadStackSize参数表示线程执行时的栈空间，因为每个线程执行时都要有自己的私有栈空间做数据存储，所以这是必须的， 这个值可以自己设置，不设置的话，系统会自己默认给个值：
+     * linux64位系统默认是1024k，32位系统默认是320k
+     * 另外，自己查看threadStackSize栈大小可以通过下列方式：
+     * java -XX:+PrintFlagsFinal -version | grep ThreadStackSize
+     *
      * 设置线程栈大小
      *
      * 如果启动参数未设置-Xss，即threadStackSize为0，则调用InvocationFunctions的GetDefaultJavaVMInitArgs方法获取JavaVM的初始化参数，

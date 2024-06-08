@@ -18,8 +18,60 @@ set(CMAKE_ASM_CREATE_SHARED_LIBRARY "gcc ${CFLAGS} -o *.o")
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 
-set(PLATFORM bsd)
-set(OS macosx)
+
+
+# 如果cmake版本在3.22以上，可以直接使用cmake_host_system_information变量
+# 如果cmake版本在3.22以上，可以直接使用cmake_host_system_information变量，原型如下：
+#
+#cmake_host_system_information(RESULT <variable> QUERY <key> ...)
+#1
+#使用它查询系统信息，可以在key处指定多个待查询的指标，查询结果会存储在variable的list中。
+#
+#经常使用key如下：
+#
+#NUMBER_OF_LOGICAL_CORES：逻辑核数量
+#NUMBER_OF_PHYSICAL_CORES：物理核数量
+#HOSTNAME：主机名
+#FQDN：全限定域名，同时带有主机名和域名的名称
+#TOTAL_VIRTUAL_MEMORY：总虚拟内存，单位MB
+#AVAILABLE_VIRTUAL_MEMORY：可用虚拟内存
+#TOTAL_PHYSICAL_MEMORY：总物理内存
+#AVAILABLE_PHYSICAL_MEMORY：可用物理内存
+#IS_64BIT：如果处理器是64位，值为1
+#HAS_FPU：如果处理器支持浮点单元，值为1
+#PROCESSOR_NAME：处理器名称，如我的电脑上输出“Unknown P6 family”
+#PROCESSOR_DESCRIPTION：处理器描述，如“8 core Intel® Xeon® CPU E5640 @ 2.67GHz”
+#OS_NAME：操作系统名称，如“Linux”
+#OS_RELEASE：操作系统发行信息，如“4.15.0-161-generic”
+#OS_VERSION：操作系统版本，如“#169-Ubuntu SMP Fri Oct 15 13:41:54 UTC 2021”
+#OS_PLATFORM：操作系统平台，如“x86_64”
+#DISTRIB_INFO：3.22版本提供，根据/etc/os-release文件确定查询的变量
+#DISTRIB_：3.22版本提供，如果/etc/os-release文件中存在name变量，则获取它
+#除指定3.22版本的特性外，其他特性在3.10版本都已提供。
+cmake_host_system_information(RESULT PRETTY_NAME QUERY DISTRIB_PRETTY_NAME)
+message(STATUS "${PRETTY_NAME}")
+
+cmake_host_system_information(RESULT DISTRO QUERY DISTRIB_INFO)
+foreach(VAR IN LISTS DISTRO)
+    message(STATUS "${VAR}=`${${VAR}}`")
+endforeach()
+
+IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    MESSAGE(STATUS "current platform: Linux ")
+    set(PLATFORM linux)
+    set(OS linux)
+    set(LINUX 1)
+ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Windows")
+    MESSAGE(STATUS "current platform: Windows")
+ELSEIF (CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    MESSAGE(STATUS "current platform: Mac OS X")
+    set(PLATFORM bsd)
+    set(MACOSX 1)
+    set(OS macosx)
+ELSE ()
+    MESSAGE(STATUS "other platform: ${CMAKE_SYSTEM_NAME}")
+ENDIF (CMAKE_SYSTEM_NAME MATCHES "Linux")
+
 set(LEVEL slowdebug)
 set(MAKE_OUTPUT_DIR build)
 
@@ -40,18 +92,27 @@ add_definitions(-DHOTSPOT_LIB_ARCH="amd64")
 
 add_definitions(-DALLOW_OPERATOR_NEW_USAGE)
 add_definitions(-DARCH="amd64")
-add_definitions(-DMACOSX)
+
+if (MACOSX)
+    add_definitions(-DMACOSX)
+    add_definitions(-D_ALLBSD_SOURCE)
+    add_definitions(-D_XOPEN_SOURCE)
+endif (MACOSX)
+
+if (LINUX)
+    add_definitions(-DLINUX)
+endif (LINUX)
+
 add_definitions(-D_GNU_SOURCE)
-add_definitions(-D_ALLBSD_SOURCE)
-add_definitions(-D_XOPEN_SOURCE)
+
 add_definitions(-DAMD64)
 add_definitions(-DASSERT)
 
-add_definitions(-DTARGET_OS_FAMILY_bsd)
+add_definitions(-DTARGET_OS_FAMILY_${PLATFORM})
 add_definitions(-DTARGET_ARCH_x86)
 add_definitions(-DTARGET_ARCH_MODEL_x86_64)
-add_definitions(-DTARGET_OS_ARCH_bsd_x86)
-add_definitions(-DTARGET_OS_ARCH_MODEL_bsd_x86_64)
+add_definitions(-DTARGET_OS_ARCH_${PLATFORM}_x86)
+add_definitions(-DTARGET_OS_ARCH_MODEL_${PLATFORM}_x86_64)
 add_definitions(-DTARGET_COMPILER_gcc)
 add_definitions(-D_LP64)
 add_definitions(-DCOMPILER1)
@@ -132,7 +193,6 @@ else()
             -fno-exceptions
             -pipe
             -fno-strict-aliasing
-            -flimit-debug-info
             -fno-omit-frame-pointer
             -Wno-logical-op-parentheses
             -Wno-parentheses-equality
@@ -154,8 +214,14 @@ else()
             -g
             -m64
             -mno-omit-leaf-frame-pointer
-            -mstack-alignment=16
     )
+
+    if (MACOSX)
+        target_compile_options(jvm PRIVATE
+                -flimit-debug-info
+                -mstack-alignment=16
+        )
+    endif ()
 
 #    add_library(jli STATIC
 #            jdk/src/share/bin/java.c

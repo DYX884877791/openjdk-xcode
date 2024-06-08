@@ -386,13 +386,16 @@ static void signal_thread_entry(JavaThread* thread, TRAPS) {
 
 void os::init_before_ergo() {
   slog_debug("进入hotspot/src/share/vm/runtime/os.cpp中的os::init_before_ergo方法...");
+    // 通过系统调用api，拿到有效的cpu核数
   initialize_initial_active_processor_count();
   // We need to initialize large page support here because ergonomics takes some
   // decisions depending on large page support and the calculated large page size.
+    // 大页初始化，默认是没有实现
   large_page_init();
 
   // VM version initialization identifies some characteristics of the
   // the platform that are used during ergonomic decisions.
+    // 确定平台特性，即所使用的平台架构指令集
   VM_Version::init_before_ergo();
 }
 
@@ -477,6 +480,10 @@ extern struct JavaVM_ main_vm;
 
 static void* _native_java_library = NULL;
 
+/**
+ * 这个函数就是加载几个函数库:libverify.so、libjava.so、libnet.so
+ * @return
+ */
 void* os::native_java_library() {
   if (_native_java_library == NULL) {
     char buffer[JVM_MAXPATHLEN];
@@ -485,14 +492,17 @@ void* os::native_java_library() {
     // Try to load verify dll first. In 1.3 java dll depends on it and is not
     // always able to find it when the loading executable is outside the JDK.
     // In order to keep working with 1.2 we ignore any loading errors.
+      // 加载 libverify.so动态函数库，并装入内存
     if (dll_build_name(buffer, sizeof(buffer), Arguments::get_dll_dir(),
                        "verify")) {
       dll_load(buffer, ebuf, sizeof(ebuf));
     }
 
     // Load java dll
+      // 加载 libverify.so动态函数库，并装入内存
     if (dll_build_name(buffer, sizeof(buffer), Arguments::get_dll_dir(),
                        "java")) {
+        // _native_java_library 指向加载后的函数库指针，方便后续符号解析时使用
       _native_java_library = dll_load(buffer, ebuf, sizeof(ebuf));
     }
     if (_native_java_library == NULL) {
@@ -502,6 +512,7 @@ void* os::native_java_library() {
 #if defined(__OpenBSD__)
     // Work-around OpenBSD's lack of $ORIGIN support by pre-loading libnet.so
     // ignore errors
+        // 加载 libnet.so动态函数库，并装入内存
     if (dll_build_name(buffer, sizeof(buffer), Arguments::get_dll_dir(),
                        "net")) {
       dll_load(buffer, ebuf, sizeof(ebuf));
@@ -516,6 +527,7 @@ void* os::native_java_library() {
       // java.lang.ClassLoader$NativeLibrary, but the VM loads the base library
       // explicitly so we have to check for JNI_OnLoad as well
       const char *onLoadSymbols[] = JNI_ONLOAD_SYMBOLS;
+        // 下面一段代码就是把符号解析libjava.so函数库的JNI_OnLoad函数，并执行
       JNI_OnLoad_t JNI_OnLoad = CAST_TO_FN_PTR(
           JNI_OnLoad_t, dll_lookup(_native_java_library, onLoadSymbols[0]));
       if (JNI_OnLoad != NULL) {
@@ -530,6 +542,7 @@ void* os::native_java_library() {
       }
     }
   }
+    // 最终返回的是libjava.so的函数库指针
   return _native_java_library;
 }
 

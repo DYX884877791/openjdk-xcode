@@ -77,6 +77,7 @@ void SymbolTable::initialize_symbols(int arena_alloc_size) {
   if (arena_alloc_size == 0) {
     _arena = new (mtSymbol) Arena(mtSymbol);
   } else {
+      // 创建一个Arena对象
     _arena = new (mtSymbol) Arena(mtSymbol, arena_alloc_size);
   }
 }
@@ -391,16 +392,21 @@ Symbol* SymbolTable::new_permanent_symbol(const char* name, TRAPS) {
   slog_trace("进入hotspot/src/share/vm/classfile/symbolTable.cpp中的SymbolTable::new_permanent_symbol函数...");
   unsigned int hash;
     //从符号表中查找符号应用，SymbolTable是HashTable
+    // 先从符号表SymbolTable中根据hash和name来查找，这里参考Java的HashMap查找的方式
   Symbol* result = SymbolTable::lookup_only((char*)name, (int)strlen(name), hash);
   if (result != NULL) {
+      // 查到了，就不会重复创建，直接取出来
     return result;
   }
   // Grab SymbolTable_lock first.
   MutexLocker ml(SymbolTable_lock, THREAD);
 
     //如果不存在则创建hash索引，并放到表中
+    // 拿到符号表指针
   SymbolTable* table = the_table();
+    // 计算hash对应的索引
   int index = table->hash_to_index(hash);
+    // 将新的符号插入到符号表中，实现细节，看接下来的代码描述
   return table->basic_add(index, (u1*)name, (int)strlen(name), hash, false, THREAD);
 }
 
@@ -411,6 +417,7 @@ Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
          "proposed name of symbol must be stable");
 
   // Don't allow symbols to be created which cannot fit in a Symbol*.
+    // 字符太长，不允许
   if (len > Symbol::max_length()) {
     THROW_MSG_0(vmSymbols::java_lang_InternalError(),
                 "name is too long to represent");
@@ -423,6 +430,7 @@ Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
   // the hash value and index.
   unsigned int hashValue;
   int index;
+    // 设置hash值和索引index
   if (use_alternate_hashcode()) {
     hashValue = hash_symbol((const char*)name, len);
     index = hash_to_index(hashValue);
@@ -433,6 +441,7 @@ Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
 
   // Since look-up was done lock-free, we need to check if another
   // thread beat us in the race to insert the symbol.
+    // 考虑多线程问题，需要再次尝试去符号表中查找一遍
   Symbol* test = lookup(index, (char*)name, len, hashValue);
   if (test != NULL) {
     // A race occurred and another thread introduced the symbol.
@@ -441,11 +450,15 @@ Symbol* SymbolTable::basic_add(int index_arg, u1 *name, int len,
   }
 
   // Create a new symbol.
+    // 创建一个新的字符，接下来再看看它在哪分配内存
   Symbol* sym = allocate_symbol(name, len, c_heap, CHECK_NULL);
   assert(sym->equals((char*)name, len), "symbol must be properly initialized");
 
+    // 封装成 HashtableEntry
   HashtableEntry<Symbol*, mtSymbol>* entry = new_entry(hashValue, sym);
+    // 将 entry 添加到 hash table
   add_entry(index, entry);
+    // 返回该字符
   return sym;
 }
 

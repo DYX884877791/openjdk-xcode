@@ -5236,6 +5236,8 @@ DT_RETURN_MARK_DECL(CreateJavaVM, jint
 #endif /* USDT2 */
 
 /**
+ * 这行的宏定义，就把它想像成一个返回jint的函数：jint  JNI_CreateJavaVM(JavaVM **vm, void **penv, void *args) {}
+ *
  * JNI_CreateJavaVM函数开始：
  * OpenJDK总结了JNI_CreateJavaVM函数的工作：
  * 1. 保证同一时间只有一个线程调用此方法，并且同一进程中只能创建一个虚拟机实例。请注意一旦到达了不可返回点（point of no return），
@@ -5276,6 +5278,10 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
   // platforms use the GCC builtin __sync_lock_test_and_set for this,
   // but __sync_lock_test_and_set is not guaranteed to do what we want
   // on all architectures.  So we check it works before relying on it.
+  /*
+   * 这一段是检验Atomic::xchg（汇编命令：原子性更改变量的值）是否可用，jvm用Atomic::xchg来
+   * 实现synchronization同步。
+   */
 #if defined(ZERO) && defined(ASSERT)
   {
     jint a = 0xcafebabe;
@@ -5299,11 +5305,13 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
   // on a multiprocessor, and at this stage of initialization the os::is_MP
   // function used to determine this will always return false. Atomic::xchg
   // does not have this problem.
+    // 原子操作：设置vm_created为1，防止其他线程创建jvm
     // 通过CAS判断vm_created变量是否为1，来保证当前只有一个JVM被创建
     // 通过Atomic::xchg方法修改全局volatile变量vm_created为1，该变量默认为0，如果返回1则说明JVM已经创建完成或者创建中，返回JNI_EEXIST错误码，如果返回0则说明JVM未创建
   if (Atomic::xchg(1, &vm_created) == 1) {
     return JNI_EEXIST;   // already created, or create attempt in progress
   }
+    // 原子操作：设置safe_to_recreate_vm为0，防止重试
     // 通过Atomic::xchg方法修改全局volatile变量safe_to_recreate_vm为0，该变量默认为1，如果返回0则说明JVM已经在重新创建了，返回JNI_ERR错误码，如果返回1则说明JVM未创建
   if (Atomic::xchg(0, &safe_to_recreate_vm) == 0) {
     return JNI_ERR;  // someone tried and failed and retry not allowed.
@@ -5359,6 +5367,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
 
     // Check if we should compile all classes on bootclasspath
       // 根据配置加载类路径中所有的类
+      // CompileTheWorld 默认值定义在globals.hpp中，默认值是false,就是判断是否要对bootclasspath上的所有类做全局编译，默认不需要
     if (CompileTheWorld) {
         ClassLoader::compile_the_world();
     }
@@ -5390,6 +5399,7 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
     *(JNIEnv**)penv = 0;
     // reset vm_created last to avoid race condition. Use OrderAccess to
     // control both compiler and architectural-based reordering.
+      // 释放创建过程vm_created空间
     OrderAccess::release_store(&vm_created, 0);
   }
 

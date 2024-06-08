@@ -323,7 +323,11 @@ class ChunkPool: public CHeapObj<mtInternal> {
   static ChunkPool* small_pool()  { assert(_small_pool  != NULL, "must be initialized"); return _small_pool;  }
   static ChunkPool* tiny_pool()   { assert(_tiny_pool   != NULL, "must be initialized"); return _tiny_pool;   }
 
+    /*
+     * 将chunk分为4种大小
+     */
   static void initialize() {
+        // 为了满足各种内存大小的分配，分别按4种类型的大小创建chunk池，其实就是将Chunk组成一个链表，ChunkPool指向链表的表头
     _large_pool  = new ChunkPool(Chunk::size        + Chunk::aligned_overhead_size());
     _medium_pool = new ChunkPool(Chunk::medium_size + Chunk::aligned_overhead_size());
     _small_pool  = new ChunkPool(Chunk::init_size   + Chunk::aligned_overhead_size());
@@ -440,7 +444,9 @@ void Chunk::start_chunk_pool_cleaner_task() {
 Arena::Arena(MEMFLAGS flag, size_t init_size) : _flags(flag), _size_in_bytes(0)  {
   size_t round_size = (sizeof (char *)) - 1;
   init_size = (init_size+round_size) & ~round_size;
+    // 主要看这里，创建了一个init_size大小的chunk块
   _first = _chunk = new (AllocFailStrategy::EXIT_OOM, init_size) Chunk(init_size);
+    // 保存 hwm, max，分别指向chunk块可操作的起始点和限制点
   _hwm = _chunk->bottom();      // Save the cached hwm, max
   _max = _chunk->top();
   MemTracker::record_new_arena(flag);

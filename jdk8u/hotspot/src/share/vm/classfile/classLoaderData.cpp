@@ -68,6 +68,7 @@
 
 ClassLoaderData * ClassLoaderData::_the_null_class_loader_data = NULL;
 
+// 发现这个构造函数，啥也没做，就是对字段赋初始值
 ClassLoaderData::ClassLoaderData(Handle h_class_loader, bool is_anonymous, Dependencies dependencies) :
   _class_loader(h_class_loader()),
   _is_anonymous(is_anonymous),

@@ -54,6 +54,7 @@ inline char* AllocateHeap(size_t size, MEMFLAGS flags,
     const NativeCallStack& stack,
     AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM) {
     //调用os接口分配指定大小的内存
+    // 最终分配是通过系统调用malloc来完成的
   char* p = (char*) os::malloc(size, flags, stack);
   #ifdef ASSERT
     //打印日志

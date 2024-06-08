@@ -118,7 +118,9 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
                                char* requested_address,
                                const size_t noaccess_prefix,
                                bool executable) {
+    // 看源码得知，这里就是取page size（页大小），没什么逻辑
   const size_t granularity = os::vm_allocation_granularity();
+    // 断言检验
   assert((size & (granularity - 1)) == 0,
          "size not aligned to os::vm_allocation_granularity()");
   assert((alignment & (granularity - 1)) == 0,
@@ -126,6 +128,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
   assert(alignment == 0 || is_power_of_2((intptr_t)alignment),
          "not a power of 2");
 
+    // 取二者最大值对齐
   alignment = MAX2(alignment, (size_t)os::vm_page_size());
 
   // Assert that if noaccess_prefix is used, it is the same as alignment.
@@ -144,14 +147,17 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
 
   // If OS doesn't support demand paging for large page memory, we need
   // to use reserve_memory_special() to reserve and pin the entire region.
+    // 不存在大页，special 为 false
   bool special = large && !os::can_commit_large_page_memory();
   char* base = NULL;
 
+    // 32位机器时 requested_address == 0，这条线也不会走
   if (requested_address != 0) {
     requested_address -= noaccess_prefix; // adjust requested address
     assert(requested_address != NULL, "huge noaccess prefix?");
   }
 
+    // special为false,这个if不会走
   if (special) {
 
     base = os::reserve_memory_special(size, alignment, requested_address, executable);
@@ -195,17 +201,23 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
         base = NULL;
       }
     } else {
+        // 这一步就是通过系统调用mmap映射一块size大小的内存，Java堆内存就是mmap映射出来的
       base = os::reserve_memory(size, NULL, alignment);
     }
 
+      // 映射失败，直接退出函数，分配Java堆内存失败
     if (base == NULL) return;
 
     // Check alignment constraints
+      // 验证对齐，为啥要验证呢，因为base是mmap映射后返回的内存首地址，这个地址是os自己的规则选取的一个地址，不一定能按照alignment对齐，所以这一定要验证
     if ((((size_t)base + noaccess_prefix) & (alignment - 1)) != 0) {
       // Base not aligned, retry
+        // base没有对齐，只能释放刚才mmap映射的内存，然后重试
       if (!os::release_memory(base, size)) fatal("os::release_memory failed");
       // Make sure that size is aligned
+        // 确保对齐
       size = align_size_up(size, alignment);
+        // 再次mmap映射内存，返回的base同样有上面一样的不对齐问题，所以这个函数中包含了手动对齐操作
       base = os::reserve_memory_aligned(size, alignment);
 
       if (requested_address != 0 &&
@@ -219,12 +231,16 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     }
   }
   // Done
+    // 最终拿到了Java堆的首地址
   _base = base;
+    // 最终拿到了Java堆的大小
   _size = size;
+    // 对齐值
   _alignment = alignment;
   _noaccess_prefix = noaccess_prefix;
 
   // Assert that if noaccess_prefix is used, it is the same as alignment.
+    // 断言判断
   assert(noaccess_prefix == 0 ||
          noaccess_prefix == _alignment, "noaccess prefix wrong");
 
@@ -337,6 +353,7 @@ void ReservedSpace::protect_noaccess_prefix(const size_t size) {
 
 ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment,
                                      bool large, char* requested_address) :
+         // 先调用父类构造函数
   ReservedSpace(size, alignment, large,
                 requested_address,
                 (UseCompressedOops && (Universe::narrow_oop_base() != NULL) &&

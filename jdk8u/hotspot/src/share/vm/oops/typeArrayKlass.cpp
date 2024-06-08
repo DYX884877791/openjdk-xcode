@@ -57,20 +57,30 @@ TypeArrayKlass* TypeArrayKlass::create_klass(BasicType type,
                                       const char* name_str, TRAPS) {
   Symbol* sym = NULL;
   if (name_str != NULL) {
+      // 把name_str先创建一个符号，并加入到符号表SymbolTable中，看到符号表是不是眼熟
     sym = SymbolTable::new_permanent_symbol(name_str, CHECK_NULL);
   }
 
+    // 拿到null加载器的CLD，也就是Java中所谓的根加载器
   ClassLoaderData* null_loader_data = ClassLoaderData::the_null_class_loader_data();
 
+    // 给数组类型的Klass分配内存
   TypeArrayKlass* ak = TypeArrayKlass::allocate(null_loader_data, type, sym, CHECK_NULL);
 
   // Add all classes to our internal class loader list here,
   // including classes in the bootstrap (NULL) class loader.
   // GC walks these as strong roots.
+    // 将当前创建的klass ak，添加到根加载器的CLD的klasses链表中
   null_loader_data->add_class(ak);
   JFR_ONLY(ASSIGN_PRIMITIVE_CLASS_ID(ak);)
 
   // Call complete_create_array_klass after all instance variables have been initialized.
+   /*
+    * 通过Java我们知道，每个类都有一个对应的java.lang.Class对象，同理在JVM中也需要有这么一个对象，在JVM中，
+    * 该对象用InstanceMirrorKlass的对象来表示，所以这一步就是创建该数组类型的InstanceMirrorKlass对象。
+    * 由`图20-10`，得到InstanceMirrorKlass是继承自InstanceKlass的，并且在InstanceMirrorKlass中定义了很多
+    * 操作InstanceKlass类对象的函数，所以在Java中，java.lang.Class可以用来做反射处理。
+    */
   complete_create_array_klass(ak, ak->super(), CHECK_NULL);
 
   return ak;
@@ -80,14 +90,16 @@ TypeArrayKlass* TypeArrayKlass::allocate(ClassLoaderData* loader_data, BasicType
   assert(TypeArrayKlass::header_size() <= InstanceKlass::header_size(),
       "array klasses must be same size as InstanceKlass");
 
+    // 先计算要分配的内存大小
   int size = ArrayKlass::static_size(TypeArrayKlass::header_size());
 
     // 调用的构造函数在下面
+    // 在元空间中分配内存
   return new (loader_data, size, THREAD) TypeArrayKlass(type, name);
 }
 
 // 非常类似于InstanceKlass等对象的创建，首先获取需要内存的大小size，然后通过重载new运算符完成对象内存分配后，调用TypeArrayKlass初始化一些属性
-TypeArrayKlass::TypeArrayKlass(BasicType type, Symbol* name) : ArrayKlass(name) {
+TypeArrayKlass::TypeArrayKlass(BasicType type, Symbol* name) : ArrayKlass(name) { // 调用父类构造函数
   set_layout_helper(array_layout_helper(type));
   assert(oop_is_array(), "sanity");
   assert(oop_is_typeArray(), "sanity");
@@ -96,6 +108,7 @@ TypeArrayKlass::TypeArrayKlass(BasicType type, Symbol* name) : ArrayKlass(name) 
   set_max_length(arrayOopDesc::max_array_length(type));
   assert(size() >= TypeArrayKlass::header_size(), "bad size");
 
+    // 设置该数组类的CLD为根加载器Data，也就是说基础数组类型的加载都是通过根加载器去加载的
   set_class_loader_data(ClassLoaderData::the_null_class_loader_data());
 }
 
@@ -266,6 +279,7 @@ void TypeArrayKlass::initialize(TRAPS) {
 
 const char* TypeArrayKlass::external_name(BasicType type) {
   switch (type) {
+      // 看着下面这些[开头的类型是不是很熟悉，在Java中打印基础类型的数组对象时，就会出现下面符号中的一种，也就是虚拟机层面给各基础类型数组的类型简称
     case T_BOOLEAN: return "[Z";
     case T_CHAR:    return "[C";
     case T_FLOAT:   return "[F";

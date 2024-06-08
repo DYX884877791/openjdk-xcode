@@ -1140,14 +1140,20 @@ void VM_Version::initialize() {
   ResourceMark rm;
   // Making this stub must be FIRST use of assembler
 
+    // 创建BufferBlob对象，stub_size 默认是600
   stub_blob = BufferBlob::create("get_cpu_info_stub", stub_size);
   if (stub_blob == NULL) {
+      // 创建失败，打印日志并退出vm
     vm_exit_during_initialization("Unable to allocate get_cpu_info_stub");
   }
+    // 创建CodeBuffer
   CodeBuffer c(stub_blob);
+    // 创建VM_Version_StubGenerator
   VM_Version_StubGenerator g(&c);
+    // 得到获取cpu信息的函数
   get_cpu_info_stub = CAST_TO_FN_PTR(get_cpu_info_stub_t,
                                      g.generate_get_cpu_info());
 
+    // 调用函数获取cpu特征信息，比如cpu支持的各种指令集
   get_processor_features();
 }

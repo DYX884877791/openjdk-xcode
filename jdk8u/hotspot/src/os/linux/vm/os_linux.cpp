@@ -309,12 +309,16 @@ julong os::Linux::host_swap() {
 // determined by looking at the /proc file system.  In a chroot environment,
 // the system call returns 1.  This causes the VM to act as if it is
 // a single processor and elide locking (see is_MP() call).
+// // 原文注释翻译：大部分的linux都有一个错误，即处理器数量通过查看/proc 文件系统来确定。
+// 在chroot环境中，系统调用返回是1，这就使的虚拟机看起来像是在单处理器中工作。
 static bool unsafe_chroot_detected = false;
 static const char *unstable_chroot_error = "/proc file system not found.\n"
                      "Java may be unstable running multithreaded in a chroot "
                      "environment on Linux when /proc filesystem is not mounted.";
 
+// 这个函数就做2件事：1.获取并设置cpu核数；2.获取并设置系统总物理内存数
 void os::Linux::initialize_system_info() {
+    // 获取到系统的处理器总核数
   set_processor_count(sysconf(_SC_NPROCESSORS_CONF));
   if (processor_count() == 1) {
     pid_t pid = os::Linux::gettid();
@@ -327,6 +331,7 @@ void os::Linux::initialize_system_info() {
       fclose(fp);
     }
   }
+    // 物理内存总数
   _physical_memory = (julong)sysconf(_SC_PHYS_PAGES) * (julong)sysconf(_SC_PAGESIZE);
   assert(processor_count() > 0, "linux error");
 }
@@ -1727,27 +1732,34 @@ bool os::dll_build_name(char* buffer, size_t buflen,
                         const char* pname, const char* fname) {
   bool retval = false;
   // Copied from libhpi
+    // pname就是你上层路径
   const size_t pnamelen = pname ? strlen(pname) : 0;
 
   // Return error on buffer overflow.
+    // 判断长度合法性
   if (pnamelen + strlen(fname) + 10 > (size_t) buflen) {
     return retval;
   }
 
   if (pnamelen == 0) {
+      // 没有上层路径，直接拼接成libjava.so这种形式
+      // snprintf函数内部使用到了va_start库函数，用来处理C里面的动态参数，因为C里面的动态参数只能通过栈空间的遍布来处理，这一步就把它想像成java语言里面的format方法，%s就会format成fname值
     snprintf(buffer, buflen, "lib%s.so", fname);
     retval = true;
   } else if (strchr(pname, *os::path_separator()) != NULL) {
+      // 如果有上层路径并且是多个目录，就要分隔开来，每个目录都遍历
     int n;
     char** pelements = split_path(pname, &n);
     if (pelements == NULL) {
       return false;
     }
+      // 遍历每个上层路径并查询路径里的函数库文件
     for (int i = 0 ; i < n ; i++) {
       // Really shouldn't be NULL, but check can't hurt
       if (pelements[i] == NULL || strlen(pelements[i]) == 0) {
         continue; // skip the empty path values
       }
+        // 第一个%s格式化成当前层级路径名pelements[i]，第二个%s就是要查询的函数库文件名后缀fname
       snprintf(buffer, buflen, "%s/lib%s.so", pelements[i], fname);
       if (file_exists(buffer)) {
         retval = true;
@@ -1755,6 +1767,7 @@ bool os::dll_build_name(char* buffer, size_t buflen,
       }
     }
     // release the storage
+      // 遍历完成，释放刚才上层路径遍历时，对路径名分配的临时内存
     for (int i = 0 ; i < n ; i++) {
       if (pelements[i] != NULL) {
         FREE_C_HEAP_ARRAY(char, pelements[i], mtInternal);
@@ -1764,6 +1777,7 @@ bool os::dll_build_name(char* buffer, size_t buflen,
       FREE_C_HEAP_ARRAY(char*, pelements, mtInternal);
     }
   } else {
+      // 只有一层目录，那直接按%s格式化就行
     snprintf(buffer, buflen, "%s/lib%s.so", pname, fname);
     retval = true;
   }
@@ -4499,6 +4513,7 @@ static int SR_initialize() {
   struct sigaction act;
   char *s;
   /* Get signal number to use for suspend/resume */
+    /* 通过环境变量 _JAVA_SR_SIGNUM 获取信号码 */
   if ((s = ::getenv("_JAVA_SR_SIGNUM")) != 0) {
     int sig = ::strtol(s, 0, 10);
     if (sig > 0 || sig < _NSIG) {
@@ -4509,10 +4524,13 @@ static int SR_initialize() {
   assert(SR_signum > SIGSEGV && SR_signum > SIGBUS,
         "SR_signum must be greater than max(SIGSEGV, SIGBUS), see 4355769");
 
+    // 先清空信号集
   sigemptyset(&SR_sigset);
+    // 往信号集中添加信号
   sigaddset(&SR_sigset, SR_signum);
 
   /* Set up signal handler for suspend/resume */
+    // 设置信息处理器 SR_handler（产生信号时需要调用的函数）
   act.sa_flags = SA_RESTART|SA_SIGINFO;
   act.sa_handler = (void (*)(int)) SR_handler;
 
@@ -4521,13 +4539,16 @@ static int SR_initialize() {
   // supported Linux platforms). Note that LinuxThreads need to block
   // this signal for all threads to work properly. So we don't have
   // to use hard-coded signal number when setting up the mask.
+    // 获取信号屏蔽码
   pthread_sigmask(SIG_BLOCK, NULL, &act.sa_mask);
 
+  // 给信号指定相关的处理程序
   if (sigaction(SR_signum, &act, 0) == -1) {
     return -1;
   }
 
   // Save signal flag
+    // 保存信号标志
   os::Linux::set_our_sigflags(SR_signum, act.sa_flags);
   return 0;
 }
@@ -5168,39 +5189,54 @@ void os::init(void) {
   // via the sun.java.launcher.pid property.
   // Use this property instead of getpid() if it was correctly passed.
   // See bug 6351349.
+   /*
+    * 执行JavaMain的线程的pid不同于java launcher线程的pid。在linux中，java launcher线程pid可以通过VM的  sun.java.launcher.pid属性设置，否则就通过系统调用getpid()获取进程id
+    */
+    // 获取参数 -Dsun.java.launcher.pid= 设置的值
   pid_t java_launcher_pid = (pid_t) Arguments::sun_java_launcher_pid();
 
+    // java_launcher_pid 没有设置值，那就取当前进程id
   _initial_pid = (java_launcher_pid > 0) ? java_launcher_pid : getpid();
 
+    // 系统调用sysconf获取属性_SC_CLK_TCK的值，这个值表示时钟每秒的滴答数
   clock_tics_per_sec = sysconf(_SC_CLK_TCK);
 
+    // 设置随机数的种子 1234567
   init_random(1234567);
 
+    // 钩子函数，目前没有具体实现
   ThreadCritical::initialize();
 
     //设置全局默认页大小，通过 Linux::page_size() 可以获取全局默认页大小
+    // 系统调用sysconf获取内存页大小，并设置，供后面使用
   Linux::set_page_size(sysconf(_SC_PAGESIZE));
   if (Linux::page_size() == -1) {
     fatal(err_msg("os_linux.cpp: os::init: sysconf failed (%s)",
                   strerror(errno)));
   }
+    // 设置到 _page_sizes 数组中
   init_page_sizes((size_t) Linux::page_size());
 
   Linux::initialize_system_info();
 
   // _main_thread points to the thread that created/loaded the JVM.
+    // _main_thread 指向当前线程，也就是创建/加载 JVM的线程，pthread_self 也是一个系统调用api
   Linux::_main_thread = pthread_self();
 
+    // 时钟处理初始化
   Linux::clock_init();
+    // 记录时间
   initial_time_count = javaTimeNanos();
 
   // pthread_condattr initialization for monotonic clock
   int status;
+    // pthread_condattr 初始化时钟属性，时钟属性就是控制条件变量超时时采用的哪个时钟
   pthread_condattr_t* _condattr = os::Linux::condAttr();
   if ((status = pthread_condattr_init(_condattr)) != 0) {
     fatal(err_msg("pthread_condattr_init: %s", strerror(status)));
   }
   // Only set the clock if CLOCK_MONOTONIC is available
+    // 如果 CLOCK_MONOTONIC 是可用的，就把条件变量的时钟属性设置成 CLOCK_MONOTONIC
   if (Linux::supports_monotonic_clock()) {
     if ((status = pthread_condattr_setclock(_condattr, CLOCK_MONOTONIC)) != 0) {
       if (status == EINVAL) {
@@ -5213,11 +5249,17 @@ void os::init(void) {
   }
   // else it defaults to CLOCK_REALTIME
 
+    // 初始化互斥变量，作为后面互斥锁使用
   pthread_mutex_init(&dl_mutex, NULL);
 
   // If the pagesize of the VM is greater than 8K determine the appropriate
   // number of initial guard pages.  The user can change this with the
   // command line arguments, if needed.
+   /*
+    * const int os::Linux::_vm_default_page_size = (8 * K); os_linux.cpp源码中有对
+    * _vm_default_page_size 初始化为 8k
+    * 如果page size 大于8k，就要启用保护页，正常page szie就是4k,不会大于8k，所以这一段暂且不考虑
+    */
   if (vm_page_size() > (int)Linux::vm_default_page_size()) {
     StackYellowPages = 1;
     StackRedPages = 1;
@@ -5225,6 +5267,7 @@ void os::init(void) {
   }
 
   // retrieve entry point for pthread_setname_np
+    // 动态链接解析系统调用函数 pthread_setname_np 并用Linux::_pthread_setname_np指针指向该函数，该函数用来设置线程名，默认创建的线程名都是程序名
   Linux::_pthread_setname_np =
     (int(*)(pthread_t, const char*))dlsym(RTLD_DEFAULT, "pthread_setname_np");
 
@@ -5242,14 +5285,22 @@ void os::pd_init_container_support() {
 }
 
 // this is called _after_ the global arguments have been parsed
+// 这个函数是在全部参数都解析后调用的
 jint os::init_2(void)
 {
   Linux::fast_thread_clock_init();
 
   // Allocate a single page and mark it as readable for safepoint polling
+    /*
+     * 通过系统调用mmap分配一个可读的单页内存，用于安全点的轮循。这里介绍一下这个内存页的用处
+     * `polling_page`与JVM的垃圾回收机制相关，用于在线程间进行通信，因为JVM中用户工作线程和GC线程。具体来说，
+     * 就是线程通过在`polling_page`上进行轮询，等待特殊的信号或标记，以知道何时有工作需要执行。这种轮询目的就是为
+     * 了允许垃圾回收器在并发阶段与用户工作线程并发执行，以减小垃圾收集带来的暂停时间。
+     */
   address polling_page = (address) ::mmap(NULL, Linux::page_size(), PROT_READ, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
   guarantee( polling_page != MAP_FAILED, "os::init_2: failed to allocate polling page" );
 
+    // 设置`polling_page`
   os::set_polling_page( polling_page );
 
 #ifndef PRODUCT
@@ -5257,7 +5308,19 @@ jint os::init_2(void)
     tty->print("[SafePoint Polling address: " INTPTR_FORMAT "]\n", (intptr_t)polling_page);
 #endif
 
+    /*
+     * UseMembar 为 true 表示使用内存屏障（memory barrier）,内存屏障是一种硬件或编译器指令，用于确保内存操作
+     * 按照代码书写的顺序执行的机制。
+     * 在多线程编程中，由于线程之间的执行顺序是不确定的，可能导致一些意外的情况，比如数据竞争、缓存一致性问题等。
+     * Hotspot membar 提供了一种方式来显示地指示内存屏障，以确保在内存中进行的读写操作的顺序性和可见性。
+     * 具体来讲，Hotspot membar内存屏障可用于：
+     * 1.防止指令重排序：内存屏障可防止对指令进行优化和重排序，确保代码的执行顺序与编写顺序一致
+     * 2.保证内存可见性：内存屏障可确保一个线程写入的数据对其他线程是可见的，避免由于线程间缓存不一致性导致的问题
+     * 3.实现同步机制：在多线程环境中，使用内存屏障可以实现一些同步机制，比如在临界区前后插入内存屏障，以确保线程
+     * 按照期望的顺序执行。
+     */
   if (!UseMembar) {
+      // 这里的意思是虚拟机没有开放内存屏障，就用系统调用mmap分配一个页大小的内存操作来代替，现在知道有这个东西就行，后面在讲解安全点知识时会细讲这个的作用
     address mem_serialize_page = (address) ::mmap(NULL, Linux::page_size(), PROT_READ | PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     guarantee( mem_serialize_page != MAP_FAILED, "mmap Failed for memory serialize page");
     os::set_memory_serialize_page( mem_serialize_page );
@@ -5269,12 +5332,15 @@ jint os::init_2(void)
   }
 
   // initialize suspend/resume support - must do this before signal_sets_init()
+    // 初始化线程的 暂停/启动 信息处理
   if (SR_initialize() != 0) {
     perror("SR_initialize failed");
     return JNI_ERR;
   }
 
+    // 继续系统级别的信号初始化，比如SIGSEGV、SIGBUS等
   Linux::signal_sets_init();
+    // 给对应的信号安装/设置处理器程序
     // 设置信号处理函数
   Linux::install_signal_handlers();
 
@@ -5283,11 +5349,14 @@ jint os::init_2(void)
   // size.  Add a page for compiler2 recursion in main thread.
   // Add in 2*BytesPerWord times page size to account for VM stack during
   // class initialization depending on 32 or 64 bit VM.
+    // 校验最小的线程栈大小，默认最小就是64k
   os::Linux::min_stack_allowed = MAX2(os::Linux::min_stack_allowed,
             (size_t)(StackYellowPages+StackRedPages+StackShadowPages) * Linux::page_size() +
                     (2*BytesPerWord COMPILER2_PRESENT(+1)) * Linux::vm_default_page_size());
 
+    // 拿到默认设置/用户设置的ThreadStackSize
   size_t threadStackSizeInBytes = ThreadStackSize * K;
+    // 比较，如果ThreadStackSize太小，就报错，退出
   if (threadStackSizeInBytes != 0 &&
       threadStackSizeInBytes < os::Linux::min_stack_allowed) {
         tty->print_cr("\nThe stack size specified is too small, "
@@ -5298,9 +5367,11 @@ jint os::init_2(void)
 
   // Make the stack size a multiple of the page size so that
   // the yellow/red zones can be guarded.
+    // 按大于threadStackSizeInBytes最近的2的幂次方设置
   JavaThread::set_stack_size_at_create(round_to(threadStackSizeInBytes,
         vm_page_size()));
 
+    // 设置栈的范围（最高位和最低位）
   Linux::capture_initial_stack(JavaThread::stack_size_at_create());
 
 #if defined(IA32) && !defined(ZERO)
@@ -5314,6 +5385,7 @@ jint os::init_2(void)
           Linux::is_floating_stack() ? "floating stack" : "fixed stack");
   }
 
+    // NUMA（Non-Uniform Memory Access）是一种计算机体系结构，为了学习hotspot源码方便，在保证原流程不影响的情况下，尽量减少一些其他的知识的参杂，这块就先忽略
   if (UseNUMA) {
     if (!Linux::libnuma_init()) {
       UseNUMA = false;
@@ -5347,6 +5419,7 @@ jint os::init_2(void)
     }
   }
 
+    // 设置最大文件描述符限制
   if (MaxFDLimit) {
     // set the number of file descriptors to max. print out error
     // if getrlimit/setrlimit fails but continue regardless.
@@ -5367,6 +5440,7 @@ jint os::init_2(void)
   }
 
   // Initialize lock used to serialize thread creation (see os::create_thread)
+    // 初始化创建线程时的锁在 os::create_thread 中会有
   Linux::set_createThread_lock(new Mutex(Mutex::leaf, "createThread_lock", false));
 
   // at-exit methods are called in the reverse order of their registration.
@@ -5389,6 +5463,7 @@ jint os::init_2(void)
   }
 
   // initialize thread priority policy
+    // 初始化线程优先级策略，主要分为-1(线程初始化状态时，没有等级)、1、5、9、10/11 5个等级
   prio_init();
 
   return JNI_OK;

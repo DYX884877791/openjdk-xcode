@@ -136,6 +136,7 @@ char* os::reserve_memory_aligned(size_t size, size_t alignment) {
   size_t extra_size = size + alignment;
   assert(extra_size >= size, "overflow, size is too large to allow alignment");
 
+    // mmap映射一块内存区域，返回首地址
   char* extra_base = os::reserve_memory(extra_size, NULL, alignment);
 
   if (extra_base == NULL) {
@@ -143,6 +144,7 @@ char* os::reserve_memory_aligned(size_t size, size_t alignment) {
   }
 
   // Do manual alignment
+    // 手动对齐
   char* aligned_base = (char*) align_size_up((uintptr_t) extra_base, alignment);
 
   // [  |                                       |  ]
@@ -152,17 +154,22 @@ char* os::reserve_memory_aligned(size_t size, size_t alignment) {
   //                       extra_base + extra_size ^
   // |<>| == begin_offset
   //                              end_offset == |<>|
+    // 用对齐后的地址-mmap的首地址，得出与首地址的偏移值
   size_t begin_offset = aligned_base - extra_base;
+    // 结束地址对齐后的偏移
   size_t end_offset = (extra_base + extra_size) - (aligned_base + size);
 
+    // begin_offset > 0，表示确实有偏移，那就把extra_base到偏移的这部分释放掉，因为有新的首地址了
   if (begin_offset > 0) {
       os::release_memory(extra_base, begin_offset);
   }
 
+    // end_offset > 0，表示确实有偏移，那就把end_offset偏移的这部分释放掉，因为有新的限制地址了
   if (end_offset > 0) {
       os::release_memory(extra_base + begin_offset + size, end_offset);
   }
 
+    // 返回首地址
   return aligned_base;
 }
 

@@ -61,8 +61,11 @@ class ThreadShadow: public CHeapObj<mtThread> {
   friend class VMStructs;
 
  protected:
+    // 指向当前线程等待处理的异常对象的引用
   oop  _pending_exception;                       // Thread has gc actions.
+    // 指向异常发生时的文件信息
   const char* _exception_file;                   // file information for exception (debugging only)
+    // 指向异常发生时的代码行信息
   int         _exception_line;                   // line information for exception (debugging only)
   friend void check_ThreadShadow();              // checks _pending_exception offset
 

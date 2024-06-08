@@ -169,24 +169,34 @@ void Bytecodes::def(Code code, const char* name, const char* format, const char*
 }
 
 
+/*
+ * 总结一下字节码定义函数def做的事情：就是将所有字节码的信息按着字节码指令操作码（bytecode）
+ * 归整到对应的索引值的数组中，方便使用时，直接按bytecode索引值取出来就行
+ */
 void Bytecodes::def(Code code, const char* name, const char* format, const char* wide_format, BasicType result_type, int depth, bool can_trap, Code java_code) {
   assert(wide_format == NULL || format != NULL, "short form must exist if there's a wide form");
+    // 得出format字符占的长度
   int len  = (format      != NULL ? (int) strlen(format)      : 0);
+    // 得出format字符占的长度
   int wlen = (wide_format != NULL ? (int) strlen(wide_format) : 0);
     // _name、_result_type等都是在Bytecodes类中定义的静态数组，其下标为Opcode值，而存储的值就是name、result_type等
+    // 这里的意思就是把字节码指令的相关属性都按字节数组存储起来，数组的index都是对应的字节码code
   _name          [code] = name;
   _result_type   [code] = result_type;
   _depth         [code] = depth;
     // 0xF的二进制值为1111
+    // 这里用1个字节存放了format（低4位）和wide_format（高4位）
   _lengths       [code] = (wlen << 4) | (len & 0xF);
   _java_code     [code] = java_code;
   int bc_flags = 0;
+    // bc_flags 用低2位分别表示can_trap和can_rewrite
     // ldc、ldc_w、ldc2_w、_aload_0、iaload、iastore、idiv、ldiv、ireturn等
     // 字节码指令都会含有_bc_can_trap
   if (can_trap)           bc_flags |= _bc_can_trap;
     // 虚拟机内部定义的指令都会有_bc_can_rewrite
   if (java_code != code)  bc_flags |= _bc_can_rewrite;
     // 在这里对_flags赋值操作
+    // 将bc_flags、format和wide_format通过位运算操作都整到一个整型值中，并存储到_flags数组中，用的时候再按位拆解出来
   _flags[(u1)code+0*(1<<BitsPerByte)] = compute_flags(format,      bc_flags);
   _flags[(u1)code+1*(1<<BitsPerByte)] = compute_flags(wide_format, bc_flags);
   assert(is_defined(code)      == (format != NULL),      "");
@@ -293,7 +303,9 @@ int Bytecodes::compute_flags(const char* format, int more_flags) {
 // 字节码指令的定义。在Bytecodes::initialize()函数中会定义字节码指令的一些属性
 // 现在Java虚拟机规范定义的202个字节码指令都会在这里调用def()函数进行定义，我们需要重点关注调用def()函数时传递的参数bytecode name、format等
 void Bytecodes::initialize() {
+    // 重复初始化判断
   if (_is_initialized) return;
+    // 字节码指令个数不能大于256，Java字节码指令都是精简指令，用一个字节表示，所以最多256个
   assert(number_of_codes <= 256, "too many bytecodes");
 
   // initialize bytecode tables - didn't use static array initializers
@@ -310,7 +322,7 @@ void Bytecodes::initialize() {
   // wide表示字节码前面是否可以加wide，如果可以，则值为"wbii"；
   // result tp表示指令执行后的结果类型，如为T_ILLEGAL时，表示只参考当前字节码无法决定执行结果的类型，如_invokevirtual方法调用指令，结果类型应该为方法返回类型，但是此时只参考这个调用方法的字节码指令是无法决定的；
   // stk表示对表达式栈深度的影响，如_nop指令不执行任何操作，所以对表达式栈的深度无影响，stk的值为0；当用_iconst_0向栈中压入0时，栈的深度增加1，所以stk的值为1。当为_lconst_0时，栈的深度会增加2；当为_lstore_0时，栈的深度会减少2；
-  // traps表示can_trap，这个比较重要，在后面会详细介绍。
+  // traps表示can_trap，这个比较重要，先把它理解成操作系统中的陷阱门，在后面会详细介绍。
   // format，这个属性能表达2个意思，首先能表达字节码的格式，另外还能表示字节码的长度。
   // 重点介绍一下format这个参数。format表示字节码的格式，当字符串中有一个字符时就是一个字节长度的字节码，当为2个字符时就是2个字节长度的字节码...，如_iconst_0就是一个字节宽度的字节码，_istore的format为"bi"，所以是2个字节宽度。format还可能为空字符串，当为空字符串时，表示当前的字节码不是Java虚拟机规范中定义的字节码，如为了提高解释执行效率的_fast_agetfield、_fast_bgetfield等字节码，这些字节码是虚拟机内部定义的。还能表达字节码的格式，其中的字符串中各个字符的含义如下：
   //
@@ -330,6 +342,7 @@ void Bytecodes::initialize() {
   //
   //  w：可用来扩展局部变量表索引的字节码，这些字节码有iload、fload等，所以wild的值为"wbii"；
   //  Java bytecodes
+    //  下面都是Java规范中定义的字节码
   //  bytecode               bytecode name           format   wide f.   result tp  stk traps
   def(_nop                 , "nop"                 , "b"    , NULL    , T_VOID   ,  0, false);
   def(_aconst_null         , "aconst_null"         , "b"    , NULL    , T_OBJECT ,  1, false);
@@ -536,6 +549,7 @@ void Bytecodes::initialize() {
   def(_breakpoint          , "breakpoint"          , ""     , NULL    , T_VOID   ,  0, true);
 
   //  JVM bytecodes
+    // 下面这些都是JVM扩展定义的字节码
   //  bytecode               bytecode name           format   wide f.   result tp  stk traps  std code
 
   def(_fast_agetfield      , "fast_agetfield"      , "bJJ"  , NULL    , T_OBJECT ,  0, true , _getfield       );
@@ -582,17 +596,23 @@ void Bytecodes::initialize() {
   def(_shouldnotreachhere  , "_shouldnotreachhere" , "b"    , NULL    , T_VOID   ,  0, false);
 
   // platform specific JVM bytecodes
+    // 针对JVM字节码的平台特性操作，默认这个函数未做实现
   pd_initialize();
 
   // compare can_trap information for each bytecode with the
   // can_trap information for the corresponding base bytecode
   // (if a rewritten bytecode can trap, so must the base bytecode)
   #ifdef ASSERT
+    // 遍历检查定义后的字节码
     { for (int i = 0; i < number_of_codes; i++) {
+            // 判断是不是都定义了
         if (is_defined(i)) {
+            // 类型转成枚举Code
           Code code = cast(i);
           Code java = java_code(code);
+            // 通过前面的def定义函数可以了解到，这里的code和java是同一个东西，如果不同，那就是错误
           if (can_trap(code) && !can_trap(java))
+              // 打印出错信息的文件和代码行数
             fatal(err_msg("%s can trap => %s can trap, too", name(code),
                           name(java)));
         }
@@ -601,6 +621,7 @@ void Bytecodes::initialize() {
   #endif
 
   // initialization successful
+    // 标记初始化成功，防止重复初始化
   _is_initialized = true;
 }
 

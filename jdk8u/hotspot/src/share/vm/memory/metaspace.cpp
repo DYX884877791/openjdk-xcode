@@ -152,6 +152,7 @@ class ChunkManager : public CHeapObj<mtInternal> {
     // 构造函数中，传入的specialized_size，small_size，medium_size实际是一个枚举值，参考Metaspace::global_initialize()中ChunkManager的初始化
   ChunkManager(size_t specialized_size, size_t small_size, size_t medium_size)
       : _free_chunks_total(0), _free_chunks_count(0) {
+        // 上面提到过chunk块大小有多种，各不一样，这里分别对元空间涉及的3种chunk块设置成_free_chunks数组中的元素，_free_chunks数组指向的是FreeList类型的链表，用于链接所包含的所有chunk块，这里的size是指FreeList链表中每个chunk的大小，千万不要误认为是FreeList链表的总大小
     _free_chunks[SpecializedIndex].set_size(specialized_size);
     _free_chunks[SmallIndex].set_size(small_size);
     _free_chunks[MediumIndex].set_size(medium_size);
@@ -463,6 +464,7 @@ VirtualSpaceNode::VirtualSpaceNode(size_t bytes) : _top(NULL), _next(NULL), _rs(
       //判断是否使用内存页
     bool large_pages = should_commit_large_pages_when_reserving(bytes);
 
+      // 直接看这一行，这里创建一个ReservedSpace对象句柄，同时创建指定大小的内存区域，里面用的是mmap映射方式，总之，这里才是真正给元空间mmap映射了一块内存区域
     _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);
   }
 
@@ -1047,6 +1049,7 @@ Metachunk* VirtualSpaceNode::get_chunk_vs(size_t chunk_word_size) {
 bool VirtualSpaceNode::initialize() {
 
     //_rs申请内存地址空间失败，返回false
+    // 由上一步VirtualSpaceNode::VirtualSpaceNode函数映射的内存区域用ReservedSpace对象来持有，命名为_rs，该对象创建的内存is_reserved()一定是返回true，否则return false退出函数
   if (!_rs.is_reserved()) {
     return false;
   }
@@ -1055,16 +1058,19 @@ bool VirtualSpaceNode::initialize() {
   // grows in steps of Metaspace::commit_alignment(). If both base and size are
   // aligned only the middle alignment of the VirtualSpace is used.
     //校验申请的地址空间是否合法
+    // 断言验证_rs的base和size值都是对齐后的值
   assert_is_ptr_aligned(_rs.base(), Metaspace::commit_alignment());
   assert_is_size_aligned(_rs.size(), Metaspace::commit_alignment());
 
   // ReservedSpaces marked as special will have the entire memory
   // pre-committed. Setting a committed size will make sure that
   // committed_size and actual_committed_size agrees.
+    // 由前面创建_rs得知_rs.special()返回的是false,所以这里pre_committed_size就是0
     //如果rs支持pre-committed，则设置pre_committed_size为rs的大小
   size_t pre_committed_size = _rs.special() ? _rs.size() : 0;
 
     //初始化virtual_space
+    // 这一步也是做一初始值设置工作或赋值操作
   bool result = virtual_space()->initialize_with_granularity(_rs, pre_committed_size,
                                             Metaspace::commit_alignment());
     //申请内存成功
@@ -1073,7 +1079,9 @@ bool VirtualSpaceNode::initialize() {
         "Checking that the pre-committed memory was registered by the VirtualSpace");
 
       //设置其他属性
+      // 设置top值，也就是内存空间的限制界线值
     set_top((MetaWord*)virtual_space()->low());
+      // 设置reserved的值，其实就是上面_rs的值再通过MemRegion来包装
     set_reserved(MemRegion((HeapWord*)_rs.base(),
                  (HeapWord*)(_rs.base() + _rs.size())));
 
@@ -1086,6 +1094,7 @@ bool VirtualSpaceNode::initialize() {
         _rs.size() / BytesPerWord));
   }
 
+    // 返回结果
   return result;
 }
 
@@ -1295,6 +1304,7 @@ VirtualSpaceList::VirtualSpaceList(size_t word_size) :
   MutexLockerEx cl(SpaceManager::expand_lock(),
                    Mutex::_no_safepoint_check_flag);
     //创建一个新的virtual_space
+    // 实际做事的函数
   create_new_virtual_space(word_size);
 }
 
@@ -1323,6 +1333,7 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
   assert_lock_strong(SpaceManager::expand_lock());
 
     //创建compressed class的VirtualSpace不会走到此分支
+    // 上面初始化时，已经设置_is_class = false，所以这条逻辑不会走
   if (is_class()) {
     assert(false, "We currently don't support more than one VirtualSpace for"
                   " the compressed class space. The initialization of the"
@@ -1330,19 +1341,23 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
     return false;
   }
 
+    // 大小不能为0
   if (vs_word_size == 0) {
     assert(false, "vs_word_size should always be at least _reserve_alignment large.");
     return false;
   }
 
   // Reserve the space
+    // 求得对齐后，要分配的字节大小
   size_t vs_byte_size = vs_word_size * BytesPerWord;
     //内存取整
   assert_is_size_aligned(vs_byte_size, Metaspace::reserve_alignment());
 
   // Allocate the meta virtual space and initialize it.
     //创建一个新的节点
+    // 创建并分配VirtualSpaceNode对象，看下面VirtualSpaceNode::VirtualSpaceNode函数
   VirtualSpaceNode* new_entry = new VirtualSpaceNode(vs_byte_size);
+    //   创建完后，要对字段进行初始化，看下面VirtualSpaceNode::initialize函数
   if (!new_entry->initialize()) {
       //初始化失败，返回false
     delete new_entry;
@@ -2466,6 +2481,7 @@ void SpaceManager::initialize() {
   Metadebug::init_allocation_fail_alot_count();
     //初始化数组元素
   for (ChunkIndex i = ZeroIndex; i < NumberOfInUseLists; i = next_chunk_index(i)) {
+      //  把所有chunk已用状态设置为null
     _chunks_in_use[i] = NULL;
   }
   _current_chunk = NULL;
@@ -2762,6 +2778,7 @@ MetaWord* SpaceManager::allocate(size_t word_size) {
     p = fl->get_block(raw_word_size);
   }
   if (p == NULL) {
+      // 直接看这一行
       //从当前chunk中分配，如果内存不足则创建一个新的chunk，从新chunk中分配
     p = allocate_work(raw_word_size);
   }
@@ -2792,11 +2809,13 @@ MetaWord* SpaceManager::allocate_work(size_t word_size) {
     return current_chunk()->allocate(word_size); // caller handles null result
   }
 
+    // current_chunk() 函数拿到当前在用的chunk，这个chunk就是initialize_first_chunk()函数实现里面设置的，然后再通过allocate分配，怎么分配的呢，继续往下看
   if (current_chunk() != NULL) {
       //从当前的chunk中分配
     result = current_chunk()->allocate(word_size);
   }
 
+    // 分配不成功，肯定是容量不够了，这一步就是扩容
   if (result == NULL) {
       //当前chunk可用空间不足导致分配失败，则扩展一个新的chunk，从新的chunk中分配
     result = grow_and_allocate(word_size);
@@ -3547,17 +3566,28 @@ void Metaspace::ergo_initialize() {
 
 }
 
+/**
+ * 元空间就是从C堆中划出来的一片完整的区域，为了提升元数据的内存分配效率，又把元空间按若干个chunk内存块管理起来，其中chunk块又分为已使用和空间两种类型，并分别用VirtualSpaceList和ChunkManager来管理，chunk内存块之间以链表的形式关联起来，同时为了满足不同元数据占用内存大小的内存分配，chunk内存块也是有多种不同大小的chunk，如SpecializedChunk, SmallChunk, MediumChunk，分别表示128B、512B、8K大小。本章要做的工作就是在实际分配内存存放元数据前的一切准备工作。
+ */
 // global_initialize方法用于初始化_first_chunk_word_size，_space_list，_chunk_manager_metadata等静态属性
 void Metaspace::global_initialize() {
+    // 这一步就是给_capacity_until_GC参数赋值为最大元空间大小：_capacity_until_GC = MaxMetaspaceSize;表示当空间到_capacity_until_GC的值时，就会触发GC操作
   MetaspaceGC::initialize();
 
   // Initialize the alignment for shared spaces.
+    // 初始化共享空间的对齐大小，实际上vm_allocation_granularity()里面就是去拿page size（页大小4*k）
   int max_alignment = os::vm_allocation_granularity();
   size_t cds_total = 0;
 
+    // 设置空间对齐值
   MetaspaceShared::set_max_alignment(max_alignment);
 
     //DumpSharedSpaces默认为false
+    /*
+     * DumpSharedSpaces 表示共享空间转储到文件，默认是不开启的，为了减少HotSpot源码的复杂性，这个也按默认false处理，这条线也不走。
+     * JVM可以在多个Java进程之间共享公共类元数据，以减少内存使用并缩短启动时间。该共享类数据存储在共享空间。实际生产中也不会这么做，所以可以忽略。如果想开启，可以按如下命令执行：
+     * java -XX:+DumpSharedSpaces -XX:SharedArchiveFile=yourSharedSpaces.jsa -jar yourApplication.jar
+     */
   if (DumpSharedSpaces) {
 #if INCLUDE_CDS
     MetaspaceShared::estimate_regions_size();
@@ -3618,14 +3648,21 @@ void Metaspace::global_initialize() {
     // and map in the memory before initializing the rest of metaspace (so
     // the addresses don't conflict)
     address cds_address = NULL;
+      /*
+       * UseSharedSpaces：启用共享存档，这个空间主要是针对热点数据的存储，比如包含元数据、字节码和其他相关信息的共享存档文件。开启命令如下：
+       *  java -Xshare:dump -XX:SharedArchiveFile=yourSharedArchive.jsa -jar yourApplication.jar
+       *  这块默认是开启的，该文档用于存放CDS数据（类共享数据），该数据用于缩短Java应用程序的启动时间并减少内存占用。CDS的想法是创建一个包含预先计算的数据结构、类元数据和字节码的共享存档文件。该存档可以内存映射mmap到多个Java进程地址空间，允许它们共享公共类和资源（这样省去了JVM启动时对公共类的加载、分配内存等时间和内存空间）。
+       */
       // UseSharedSpaces表示使用基于文件的共享Metaspace，即不同的JVM进程通过将Metaspace映射到同一个文件实现Metaspace共享，默认为false
     if (UseSharedSpaces) {
+        // 找到那个存档文件，并封装成FileMapInfo
       FileMapInfo* mapinfo = new FileMapInfo();
 
       // Open the shared archive file, read and validate the header. If
       // initialization fails, shared spaces [UseSharedSpaces] are
       // disabled and the file is closed.
       // Map in spaces now also
+        // map_shared_spaces()函数，将存档文件映射到当前Java进程的内存地址空间
       if (mapinfo->initialize() && MetaspaceShared::map_shared_spaces(mapinfo)) {
         cds_total = FileMapInfo::shared_spaces_size();
         cds_address = (address)mapinfo->region_base(0);
@@ -3635,6 +3672,7 @@ void Metaspace::global_initialize() {
       }
     }
 #endif // INCLUDE_CDS
+      // 64位机器
 #ifdef _LP64
     // If UseCompressedClassPointers is set then allocate the metaspace area
     // above the heap and above the CDS area (if it exists).
@@ -3656,6 +3694,7 @@ void Metaspace::global_initialize() {
 
     // Initialize these before initializing the VirtualSpaceList
       //计算_first_chunk_word_size和_first_class_chunk_word_size
+      // 下面的操作都是内存分配钱的大小对齐和确定
     _first_chunk_word_size = InitialBootClassLoaderMetaspaceSize / BytesPerWord;
     _first_chunk_word_size = align_word_size_up(_first_chunk_word_size);
     // Make the first class chunk bigger than a medium chunk so it's not put
@@ -3671,7 +3710,9 @@ void Metaspace::global_initialize() {
     word_size = align_size_up(word_size, Metaspace::reserve_alignment_words());
 
     // Initialize the list of virtual spaces.
+      // 创建VirtualSpaceList来管理已使用的chunk
     _space_list = new VirtualSpaceList(word_size);
+      // 创建ChunkManager来管理空闲的chunk
     _chunk_manager_metadata = new ChunkManager(SpecializedChunk, SmallChunk, MediumChunk);
 
       //_space_list初始化失败
@@ -3736,10 +3777,12 @@ void Metaspace::initialize(Mutex* lock, MetaspaceType type) {
 
   // Allocate SpaceManager for metadata objects.
     //初始化_vsm和_class_vsm
+    // 创建 SpaceManager 对象，分配元数据（主要是符号、字符串等）需要用到
   _vsm = new SpaceManager(NonClassType, lock);
 
   if (using_class_space()) {
     // Allocate SpaceManager for classes.
+      // 创建 SpaceManager 对象，分配类时需要用到
     _class_vsm = new SpaceManager(ClassType, lock);
   } else {
     _class_vsm = NULL;
@@ -3750,9 +3793,11 @@ void Metaspace::initialize(Mutex* lock, MetaspaceType type) {
 
   // Allocate chunk for metadata objects
     //初始化第一个Chunk
+    // 这一步就是从已分配的空闲chunk链表中找出一个适合当前分配大小（前面讲过，MetaChunk块有三种大小，取一个适合自己的就行）的MetaChunk块对象，并把它添加到 SpaceManager 对象（在这里表示 _vsm）来管理
   initialize_first_chunk(type, NonClassType);
 
   // Allocate chunk for class metadata objects
+    // 同上，这是取出一块MetaChunk来存放类数据，并用 SpaceManager 对象（在这里表示 _class_vsm）管理
   if (using_class_space()) {
     initialize_first_chunk(type, ClassType);
   }
@@ -3770,6 +3815,7 @@ MetaWord* Metaspace::allocate(size_t word_size, MetadataType mdtype) {
   // DumpSharedSpaces doesn't use class metadata area (yet)
   // Also, don't use class_vsm() unless UseCompressedClassPointers is true.
     //通过SpaceManager分配内存
+    // class_vsm() 和 vsm() 取出的都是SpaceManager对象
   if (is_class_space_allocation(mdtype)) {
     return  class_vsm()->allocate(word_size);
   } else {
@@ -3947,10 +3993,12 @@ MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
     return result;
   }
 
+    // 确定要分配的内存内容的类型，类的创建都是ClassType
   MetadataType mdtype = (type == MetaspaceObj::ClassType) ? ClassType : NonClassType;
 
   // Try to allocate metadata.
     //获取ClassLoaderData的_metaspace，然后分配内存
+    // 尝试分配元数据。loader_data->metaspace_non_null()函数，可以拿到Metaspace的指针指向的元空间对象，然后再通过allocate函数在元空间中分配内存，allocate分配看后面描述
   MetaWord* result = loader_data->metaspace_non_null()->allocate(word_size, mdtype);
 
   if (result == NULL) {
@@ -3958,16 +4006,19 @@ MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
     tracer()->report_metaspace_allocation_failure(loader_data, word_size, type, mdtype);
 
     // Allocation failed.
+      // 分配失败，可能是内存不足，所以启动GC
     if (is_init_completed()) {
       // Only start a GC if the bootstrapping has completed.
 
       // Try to clean out some memory and retry.
         //启动完成通过GC释放部分内存，然后尝试重新分配
+        // 尝试GC 清空一些内存
       result = Universe::heap()->collector_policy()->satisfy_failed_metadata_allocation(
           loader_data, word_size, mdtype);
     }
   }
 
+    // 启动GC 后还是失败，那就直接报告oom错误
   if (result == NULL) {
       //报告分配失败，会对外抛出异常
     report_metadata_oome(loader_data, word_size, type, mdtype, CHECK_NULL);
@@ -3977,6 +4028,7 @@ MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
     //将分配的内存初始化成0
   Copy::fill_to_aligned_words((HeapWord*)result, word_size, 0);
 
+    // 返回分配后的内存首地址
   return result;
 }
 

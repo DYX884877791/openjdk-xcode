@@ -263,6 +263,13 @@ void initialize_basic_type_klass(Klass* k, TRAPS) {
   k->append_to_sibling_list();
 }
 
+/**
+ * 基础类型的数组类型创建
+ * 该函数的入口在init.cpp->init_globals()，然后再调用universe.cpp->universe2_init()函数，实际执行的函数是Universe::genesis，所以从这开始源码的解析。解析前先了解一下Klass的概念，大家思考个问题：我们编写的java类在JVM中是以何种形式存在的呢？
+ *
+ * 答：其实他就是以Klass类存在的，Klass类就是java类在jvm中存在的形式。
+ * @param __the_thread__
+ */
 void Universe::genesis(TRAPS) {
   ResourceMark rm;
 
@@ -276,10 +283,12 @@ void Universe::genesis(TRAPS) {
       // determine base vtable size; without that we cannot create the array klasses
         // compute_base_vtable_size方法计算了虚表的基础大小
         //设置_base_vtable_size属性，实际就是取Object类的虚函数表的大小
+        // 计算Object类的虚函数表占用内存大小
       compute_base_vtable_size();
 
         //UseSharedSpaces表示为元数据使用共享空间，默认为true
       if (!UseSharedSpaces) {
+          // 下面创建8个基础类型的数组类型的对象
         _boolArrayKlassObj      = TypeArrayKlass::create_klass(T_BOOLEAN, sizeof(jboolean), CHECK);
         _charArrayKlassObj      = TypeArrayKlass::create_klass(T_CHAR,    sizeof(jchar),    CHECK);
         _singleArrayKlassObj    = TypeArrayKlass::create_klass(T_FLOAT,   sizeof(jfloat),   CHECK);
@@ -289,6 +298,7 @@ void Universe::genesis(TRAPS) {
         _intArrayKlassObj       = TypeArrayKlass::create_klass(T_INT,     sizeof(jint),     CHECK);
         _longArrayKlassObj      = TypeArrayKlass::create_klass(T_LONG,    sizeof(jlong),    CHECK);
 
+          // 将已创建的数组类型对象都存储到_typeArrayKlassObjs数组中，方便后面使用
         _typeArrayKlassObjs[T_BOOLEAN] = _boolArrayKlassObj;
         _typeArrayKlassObjs[T_CHAR]    = _charArrayKlassObj;
         _typeArrayKlassObjs[T_FLOAT]   = _singleArrayKlassObj;
@@ -301,26 +311,36 @@ void Universe::genesis(TRAPS) {
         ClassLoaderData* null_cld = ClassLoaderData::the_null_class_loader_data();
 
           // MetadataFactory::new_array方法初始化了一些比如Klass和InstanceKlass的数组,初始大小都为0
+          // 在null_cld中创建一个Array对象的数组，长度为2，元素默认值都为NULL
         _the_array_interfaces_array = MetadataFactory::new_array<Klass*>(null_cld, 2, NULL, CHECK);
+          // 在null_cld中创建一个Array对象的数组，长度为0
         _the_empty_int_array        = MetadataFactory::new_array<int>(null_cld, 0, CHECK);
+          // 在null_cld中创建一个Array对象的数组，长度为0
         _the_empty_short_array      = MetadataFactory::new_array<u2>(null_cld, 0, CHECK);
+          // 在null_cld中创建一个Array对象的数组，长度为0
         _the_empty_method_array     = MetadataFactory::new_array<Method*>(null_cld, 0, CHECK);
+          // 在null_cld中创建一个Array对象的数组，长度为0
         _the_empty_klass_array      = MetadataFactory::new_array<Klass*>(null_cld, 0, CHECK);
       }
     }
 
       // vmSymbols::initialize方法初始化了vm符号系统
       //初始化符号表
+      // 将系统类（System/Object/Class/String等等）表示的字符串都以符号symbol的对象存储到虚拟机的符号表中，为什么要创建符号表呢？因为这些系统类是公共的，后面都会用到的，所以统一放符号表中。
     vmSymbols::initialize(CHECK);
 
       /**
+       * 各字典（其实就是一个hash table）和基础类的预加载，字典主要用在后续类加载过程中，比如占位符字典表、解析出错表
+       *
        * SystemDictionary::initialize方法初始化了系统的字典,主要内容就是设置类型和其偏移量,比如invoke_method_table代表的调用表,
        * 同时也解析和设置了常用类型,包括基本类型,软引用类型,弱饮用类型等,之后为各个组成设置偏移量,比如class字节码中类和引用的偏移量.
        */
     SystemDictionary::initialize(CHECK);
 
+      // 取出 Object Klass
     Klass* ok = SystemDictionary::Object_klass();
 
+      // 把 null 和 -2147483648 作为字符串，预先存储到字符串表
     _the_null_string            = StringTable::intern("null", CHECK);
     _the_min_jint_string       = StringTable::intern("-2147483648", CHECK);
 
@@ -333,12 +353,14 @@ void Universe::genesis(TRAPS) {
              SystemDictionary::Serializable_klass(), "u3");
     } else {
       // Set up shared interfaces array.  (Do this before supers are set up.)
+        // 设置共享的接口类数组，0号位是Cloneable klass，1号位是Serializable klass
       _the_array_interfaces_array->at_put(0, SystemDictionary::Cloneable_klass());
       _the_array_interfaces_array->at_put(1, SystemDictionary::Serializable_klass());
     }
 
       // initialize_basic_type_klass初始化基本类型.
       //boolArrayKlassObj方法返回_boolArrayKlassObj属性，initialize_basic_type_klass用来初始化Klass部分属性
+      // 设置基础类型的数组类型的超类为Object
     initialize_basic_type_klass(boolArrayKlassObj(), CHECK);
     initialize_basic_type_klass(charArrayKlassObj(), CHECK);
     initialize_basic_type_klass(singleArrayKlassObj(), CHECK);
@@ -368,6 +390,7 @@ void Universe::genesis(TRAPS) {
   // for Object_klass_loaded in objArrayKlassKlass::allocate_objArray_klass_impl.
     // 调用表示Object类的InstanceKlass类的array_klass()方法
     // 调用array_klass()方法时传递的参数1表示创建一维数组。调用表示Object类的InstanceKlass对象的方法创建的，所以Object数组的创建要依赖于InstanceKlass对象（表示Object类）进行创建。
+    // Object 数组类型 Klass
   _objectArrayKlassObj = InstanceKlass::
     cast(SystemDictionary::Object_klass())->array_klass(1, CHECK);
   // OLD
@@ -376,8 +399,10 @@ void Universe::genesis(TRAPS) {
   // ---
   // New
   // Have already been initialized.
+    // 将该类型添加到其兄弟类型的列表中
   _objectArrayKlassObj->append_to_sibling_list();
 
+    // 针对 jdk1.3、1.4、1.5或更高版本的特殊几个类的加载
   // Compute is_jdk version flags.
   // Only 1.3 or later has the java.lang.Shutdown class.
   // Only 1.4 or later has the java.lang.CharSequence interface.
@@ -412,6 +437,7 @@ void Universe::genesis(TRAPS) {
   }
 
   #ifdef ASSERT
+    // GC相关
   if (FullGCALot) {
     // Allocate an array of dummy objects.
     // We'd like these to be at the bottom of the old generation,
@@ -699,9 +725,13 @@ jint universe_init() {
     StringTable::create_table();
   } else {
       // 创建符号表
+      // 两个表的创建过程都非常简单，但是符号表SymbolTable的创建要复杂些，增加了initialize_symbols初始化符号的操作
       //不使用共享空间时，分别初始化各个组件，SymbolTable表示符号表，StringTable表示字符串表
+      // 创建符号表，把它想像成java里的HashMap
     SymbolTable::create_table();
+      // 创建字符串表，把它想像成java里的HashMap
     StringTable::create_table();
+      // 创建包信息表，也可以想像成一个HashMap
     ClassLoader::create_package_info_table();
 
     if (DumpSharedSpaces) {
@@ -735,9 +765,11 @@ char* Universe::preferred_heap_base(size_t heap_size, size_t alignment, NARROW_O
   assert(is_size_aligned(heap_size, alignment), "Must be");
 
     //HeapBaseMinAddress表示Java堆的内存基地址，x86下默认是2G，将HeapBaseMinAddress按照alignment取整
+    // HeapBaseMinAddress 是操作系统明确设定的堆内存的最低地址限制，默认设置的是2*G，这里按alignment对齐，把HeapBaseMinAddress的值按alignment对齐后，作为堆内存的最低地址
   uintx heap_base_min_address_aligned = align_size_up(HeapBaseMinAddress, alignment);
 
   size_t base = 0;
+    // 下面是对64位机器及使用压缩指针时的实现
 #ifdef _LP64
     //如果是64位系统
     //如果开启指针压缩，64位下默认为true
@@ -823,12 +855,15 @@ char* Universe::preferred_heap_base(size_t heap_size, size_t alignment, NARROW_O
 #endif
 
   assert(is_ptr_aligned((char*)base, alignment), "Must be");
+    // 最终返回base,在32位机器时，虚拟机就是返回0
   return (char*)base; // also return NULL (don't care) for 32-bit VM
 }
 
 // Java堆的初始化入口
+// 这里才是真正Java堆空间的创建
 jint Universe::initialize_heap() {
 
+    // 下面是对使用的垃圾收集器的判断
   if (UseParallelGC) {
       // 1. 如果使用ParallelGC，如果JVM使用了并行收集器（-XX:+UseParallelGC），则将堆初始化为ParallelScavengeHeap类型，即并行收集堆
 #if INCLUDE_ALL_GCS
@@ -853,8 +888,10 @@ jint Universe::initialize_heap() {
     GenCollectorPolicy *gc_policy;
 
       //不同的回收策略
+      // 古老的串行GC
     if (UseSerialGC) {
         // 3. 如果没有选择以上两种收集器，就继续检查是否使用了串行收集器（-XX:+UseSerialGC），如是，设置GC策略为MarkSweepPolicy，即标记-清除。
+        // 创建标记清除策略对象，MarkSweepPolicy继承自分代收集策略类GenCollectorPolicy，看到分代是不是就熟悉了，就是所谓的老年代和新生代，这一步也没做啥，就是创建一个对象，并初始化对象的字段
       gc_policy = new MarkSweepPolicy();
     } else if (UseConcMarkSweepGC) {
         // 4. 再检查到如果使用了CMS收集器（-XX:+UseConcMarkSweepGC），就根据是否启用自适应开关（-XX:+UseAdaptiveSizePolicy），
@@ -872,21 +909,26 @@ jint Universe::initialize_heap() {
         // 5. 如果以上情况都没有配置，就采用默认的GC策略为MarkSweepPolicy。
       gc_policy = new MarkSweepPolicy();
     }
+      // GC策略初始化操作
     gc_policy->initialize_all();
 
     // 对于步骤3~5的所有情况，都会将堆初始化为GenCollectedHeap类型，即分代收集堆。调用各堆实现类对应的initialize()方法执行堆的初始化操作。
+      // 通过GC策略，创建分代收集堆空间对象
     Universe::_collectedHeap = new GenCollectedHeap(gc_policy);
   }
 
     //设置TLAB的最大值
+    // 设置线程本地分配缓存的最大值
   ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
 
     //初始化collectedHeap，调用各堆实现类对应的initialize()方法执行堆的初始化操作。
+    // 针对Java堆空间进行初始化操作
   jint status = Universe::heap()->initialize();
   if (status != JNI_OK) {
     return status;
   }
 
+    // 以下是64位机器实现
 #ifdef _LP64
   if (UseCompressedOops) {
     // Subtract a page because something can get allocated at heap base.
@@ -975,21 +1017,25 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
       err_msg("actual alignment " SIZE_FORMAT " must be within maximum heap alignment " SIZE_FORMAT,
           alignment, Arguments::conservative_max_heap_alignment()));
     //heap_size取整
+    // 通过内存对齐，得到要分配的空间大小
   size_t total_reserved = align_size_up(heap_size, alignment);
     //使用指针压缩时堆空间不能超过OopEncodingHeapMax，是计算出来的，32G
   assert(!UseCompressedOops || (total_reserved <= (OopEncodingHeapMax - os::vm_page_size())),
       "heap size is too big for compressed oops");
 
     //是否使用大内存页，UseLargePages默认是false
+    // 大页时考虑
   bool use_large_pages = UseLargePages && is_size_aligned(alignment, os::large_page_size());
   assert(!UseLargePages
       || UseParallelGC
       || use_large_pages, "Wrong alignment to use large pages");
 
     //计算Java堆的基地址
+    // 取出Java堆的基址base的值，32位机器时，就是0
   char* addr = Universe::preferred_heap_base(total_reserved, alignment, Universe::UnscaledNarrowOop);
 
     //在执行构造方法的时候会向操作系统申请一段连续的内存空间
+    // 创建一个ReservedHeapSpace对象，该对象就是用来保留连续内存地址范围空间的数据结构
   ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, addr);
 
   if (UseCompressedOops) {
@@ -1284,6 +1330,7 @@ bool universe_post_init() {
 
 
 void Universe::compute_base_vtable_size() {
+    // 计算Object类的虚函数表占用内存大小
   _base_vtable_size = ClassLoader::compute_Object_vtable();
 }
 

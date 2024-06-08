@@ -151,6 +151,8 @@ class PackageInfo;
 class SharedPathsMiscInfo;
 template <MEMFLAGS F> class HashtableBucket;
 
+// 类加载器，每个ClassLoader都有一个CLD
+//
 // ClassLoader类的定义在classfile/classLoader.hpp中，ClassLoader就是传说中的用于加载Java核心类文件如rt.jar的启动类加载器的实现。
 // ClassLoader定义的方法不多，大多是统计类加载性能相关的，除此之外有以下几个方法比较重要：
 //

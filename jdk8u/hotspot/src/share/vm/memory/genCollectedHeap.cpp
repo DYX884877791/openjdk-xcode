@@ -85,16 +85,20 @@ enum GCH_strong_roots_tasks {
 };
 
 GenCollectedHeap::GenCollectedHeap(GenCollectorPolicy *policy) :
-  // 调用父类的构造方法...
+        // 调用父类的SharedHeap构造函数
   SharedHeap(policy),
+        // _gen_policy 赋值为 policy
   _gen_policy(policy),
+        // 创建一个子任务管理类，管理所有子任务，并赋值给_process_strong_tasks
   _process_strong_tasks(new SubTasksDone(GCH_PS_NumElements)),
+        // _full_collections_completed 赋值
   _full_collections_completed(0)
 {
   assert(policy != NULL, "Sanity check");
 }
 
 jint GenCollectedHeap::initialize() {
+    // 这一步只是对c2编译器开通使用时，做一些参数赋值操作
   CollectedHeap::pre_initialize();
 
   int i;
@@ -106,28 +110,35 @@ jint GenCollectedHeap::initialize() {
   // system which believe this to be true (e.g. oop->object_size in some
   // cases incorrectly returns the size in wordSize units rather than
   // HeapWordSize).
+    // 保证2个值相等wordSize和HeapWordSize分别是在操作系统和Java堆中代表一个字word占用内存的大小，这两个值必然相同，否则出错
   guarantee(HeapWordSize == wordSize, "HeapWordSize must equal wordSize");
 
   // The heap must be at least as aligned as generations.
+    // Java堆的对齐值
   size_t gen_alignment = Generation::GenGrain;
 
+    // 获取分代对象数组，数组元素就2个，索引0元素表示年轻代，索引1元素表示老年代
   _gen_specs = gen_policy()->generations();
 
   // Make sure the sizes are all aligned.
+    // 分别遍历新生代和老年代，并设置各自分代的空间大小（初始值和最大值），同时确保内存对齐
   for (i = 0; i < _n_gens; i++) {
       //将内存的初始值和最大值按照内存分配粒度对齐
     _gen_specs[i]->align(gen_alignment);
   }
 
   // Allocate space for the heap.
+    // 下面才是给Java堆分配空间
 
   char* heap_address;
   size_t total_reserved = 0;
   int n_covered_regions = 0;
   ReservedSpace heap_rs;
 
+    // 这是最外层Java堆的内存对齐值
   size_t heap_alignment = collector_policy()->heap_alignment();
 
+    // 这是最外层Java堆的内存对齐值
     //根据各GenerationSpec的最大大小计算总的需要保留的内存空间，然后申请指定大小的连续内存空间
   heap_address = allocate(heap_alignment, &total_reserved,
                           &n_covered_regions, &heap_rs);
@@ -139,18 +150,24 @@ jint GenCollectedHeap::initialize() {
     return JNI_ENOMEM;
   }
 
+    // 将分配的Java堆内存，用 MemRegion 内存区域对象管理起来
   _reserved = MemRegion((HeapWord*)heap_rs.base(),
                         (HeapWord*)(heap_rs.base() + heap_rs.size()));
 
   // It is important to do this in a way such that concurrent readers can't
   // temporarily think somethings in the heap.  (Seen this happen in asserts.)
     //设置_reserved相关属性
+    // 参数赋值
   _reserved.set_word_size(0);
+    // Java堆内存的首地址
   _reserved.set_start((HeapWord*)heap_rs.base());
+    // Java堆内存大小
   size_t actual_heap_size = heap_rs.size();
+    // Java堆内存的限制地址，也就是不能超过这条线
   _reserved.set_end((HeapWord*)(heap_rs.base() + actual_heap_size));
 
     //初始化GenRemSet
+    // 接下来就是创建记忆集、卡表的过程，卡表和记忆集都是为了解决跨代引用的实现方案
   _rem_set = collector_policy()->create_rem_set(_reserved, n_covered_regions);
   set_barrier_set(rem_set()->bs());
 
@@ -195,11 +212,13 @@ char* GenCollectedHeap::allocate(size_t alignment,
   assert(alignment % pageSize == 0, "Must be");
 
     //遍历所有的_gen_specs，累加各GenerationSpec的max_size和n_covered_regions
+    // 遍历_gen_specs，求得新生代和老年代的分配大小
   for (int i = 0; i < _n_gens; i++) {
     total_reserved += _gen_specs[i]->max_size();
     if (total_reserved < _gen_specs[i]->max_size()) {
       vm_exit_during_initialization(overflow_msg);
     }
+      // 最终为2
     n_covered_regions += _gen_specs[i]->n_covered_regions();
   }
     //校验累加后的total_reserved已经是内存对齐的
@@ -210,6 +229,7 @@ char* GenCollectedHeap::allocate(size_t alignment,
   // Needed until the cardtable is fixed to have the right number
   // of covered regions.
     //加2是为卡表保留的
+    // 再加2，就是4，也就是把堆最终分成4个区（新生代、S1、S2、老年代）
   n_covered_regions += 2;
 
     //赋值
@@ -217,6 +237,7 @@ char* GenCollectedHeap::allocate(size_t alignment,
   *_n_covered_regions = n_covered_regions;
 
     //申请指定大小的连续内存空间
+    // 分配内存
   *heap_rs = Universe::reserve_heap(total_reserved, alignment);
     //返回基地址
   return heap_rs->base();

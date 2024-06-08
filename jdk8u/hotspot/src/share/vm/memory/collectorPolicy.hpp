@@ -108,8 +108,11 @@ class CollectorPolicy : public CHeapObj<mtGC> {
 
  public:
   virtual void initialize_all() {
+      // 父类中，这是一个纯虚函数（相当于Java里面的抽象函数），只能去子类中找实现，这个函数就是计算即将要创建和分配的内存的对齐值
     initialize_alignments();
+      // 对 Java堆大小值的判断和设置
     initialize_flags();
+      // 对以上两步产生的大小做参数检验
     initialize_size_info();
   }
 
@@ -288,8 +291,11 @@ friend class TestGenCollectorPolicy;
 
   virtual void initialize_generations() { };
 
+  // 这一步主要就是确定分代（新生代和老年代）信息、即将分配的Java堆内存的大小，以及针对这些信息的校验
   virtual void initialize_all() {
+      // 针对内存分配的大小值做设置和校验
     CollectorPolicy::initialize_all();
+      // 创建并分配新生代和老年代对象的内存
     initialize_generations();
   }
 

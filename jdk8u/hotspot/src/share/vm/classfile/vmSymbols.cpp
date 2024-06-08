@@ -85,9 +85,12 @@ void vmSymbols::initialize(TRAPS) {
 
   if (!UseSharedSpaces) {
       //vm_symbol_bodies声明在上面
+      // 取出vm_symbol_bodies的首地址
     const char* string = &vm_symbol_bodies[0];
+      // FIRST_SID 和 SID_LIMIT 都是 vmSymbols 类中的枚举 SID 的项，该枚举中也用到了宏定义 VM_SYMBOLS_DO，这里就不再做展开处理了，有兴趣的读者，根据我上面展开的方式，自行展开。总之，这一步就是遍历 FIRST_SID 到 SID_LIMIT，这里说明一下，枚举项最终都会转成整型存储，
     for (int index = (int)FIRST_SID; index < (int)SID_LIMIT; index++) {
         //为Java类创建符号
+        // 检查符号表，如果有该符号就取出，没有则创建
       Symbol* sym = SymbolTable::new_permanent_symbol(string, CHECK);
         //存到符号数组中
       _symbols[index] = sym;
@@ -98,6 +101,7 @@ void vmSymbols::initialize(TRAPS) {
     }
 
       //Java基本类型
+      // 设置各类型的签名，签名的定义在vmSymbols.hpp文件中
     _type_signatures[T_BYTE]    = byte_signature();
     _type_signatures[T_CHAR]    = char_signature();
     _type_signatures[T_DOUBLE]  = double_signature();
@@ -113,6 +117,7 @@ void vmSymbols::initialize(TRAPS) {
 #ifdef ASSERT
   // Check for duplicates:
     // 校验重复...
+    // 双层for循环，验证有没有重复的符号
   for (int i1 = (int)FIRST_SID; i1 < (int)SID_LIMIT; i1++) {
     Symbol* sym = symbol_at((SID)i1);
     for (int i2 = (int)FIRST_SID; i2 < i1; i2++) {
@@ -128,12 +133,15 @@ void vmSymbols::initialize(TRAPS) {
 #endif //ASSERT
 
   // Create an index for find_id:
+    // 为了查找方便，为符号创建对应的索引
   {
     for (int index = (int)FIRST_SID; index < (int)SID_LIMIT; index++) {
       vm_symbol_index[index] = (SID)index;
     }
     int num_sids = SID_LIMIT-FIRST_SID;
       /**
+       * 调用库函数qsort对数组vm_symbol_index按元素地址进行排序
+       *
        * void qsort (void* base, size_t num, size_t size,int (*compar)(const void*,const void*));
        *
        * 1.首元素地址base
@@ -155,6 +163,7 @@ void vmSymbols::initialize(TRAPS) {
 #ifdef ASSERT
   {
     // Spot-check correspondence between strings, symbols, and enums:
+      // 最后，抽查字符串、符号和枚举之间的对应关系:
     assert(_symbols[NO_SID] == NULL, "must be");
     const char* str = "java/lang/Object";
     TempNewSymbol jlo = SymbolTable::new_permanent_symbol(str, CHECK);
@@ -175,6 +184,7 @@ void vmSymbols::initialize(TRAPS) {
 
     // The string "format" happens (at the moment) not to be a vmSymbol,
     // though it is a method name in java.lang.String.
+      //尽管format是java.lang.String的方法名，但是它依然不是虚拟字符号，这里要加以验证
     str = "format";
     TempNewSymbol fmt = SymbolTable::new_permanent_symbol(str, CHECK);
     sid = find_sid(fmt);

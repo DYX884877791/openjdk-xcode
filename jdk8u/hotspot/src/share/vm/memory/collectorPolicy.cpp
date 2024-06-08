@@ -79,6 +79,7 @@ void CollectorPolicy::assert_size_info() {
 #endif // ASSERT
 
 void CollectorPolicy::initialize_flags() {
+    // 检验上一步计算的各空间对齐值不为0
   assert(_space_alignment != 0, "Space alignment not set up properly");
   assert(_heap_alignment != 0, "Heap alignment not set up properly");
   assert(_heap_alignment >= _space_alignment,
@@ -88,6 +89,7 @@ void CollectorPolicy::initialize_flags() {
          err_msg("heap_alignment: " SIZE_FORMAT " not aligned by space_alignment: " SIZE_FORMAT,
                  _heap_alignment, _space_alignment));
 
+    // 检查空间大小限制
   if (FLAG_IS_CMDLINE(MaxHeapSize)) {
     if (FLAG_IS_CMDLINE(InitialHeapSize) && InitialHeapSize > MaxHeapSize) {
       vm_exit_during_initialization("Initial heap size set to a larger value than the maximum heap size");
@@ -99,19 +101,23 @@ void CollectorPolicy::initialize_flags() {
   }
 
   // Check heap parameter properties
+    // 初始堆大小不能小于1M
   if (InitialHeapSize < M) {
     vm_exit_during_initialization("Too small initial heap");
   }
+    // 最小堆大小不能小于1M
   if (_min_heap_byte_size < M) {
     vm_exit_during_initialization("Too small minimum heap");
   }
 
   // User inputs from -Xmx and -Xms must be aligned
+    // 用 用户从 -Xmx and -Xms 设置的值，并通过_heap_alignment的大小对齐，得到最小堆大小、初始堆大小、最大堆大小
   _min_heap_byte_size = align_size_up(_min_heap_byte_size, _heap_alignment);
   uintx aligned_initial_heap_size = align_size_up(InitialHeapSize, _heap_alignment);
   uintx aligned_max_heap_size = align_size_up(MaxHeapSize, _heap_alignment);
 
   // Write back to flags if the values changed
+    // 值改变了，就写回对应的flags中
   if (aligned_initial_heap_size != InitialHeapSize) {
     FLAG_SET_ERGO(uintx, InitialHeapSize, aligned_initial_heap_size);
   }
@@ -181,8 +187,10 @@ size_t CollectorPolicy::compute_heap_alignment() {
   // There is only the GenRemSet in Hotspot and only the GenRemSet::CardTable
   // is supported.
   // Requirements of any new remembered set implementations must be added here.
+    // 这里就是按CardTable卡表的大小乘以页大小来对齐的，查看源码可以得出，卡表大小card_size=1 << 9 ==> 2^9 ==> 512，最终对齐大小等于：512 * 4K（page_size）
   size_t alignment = GenRemSet::max_alignment_constraint(GenRemSet::CardTable);
 
+    // 用大页
   if (UseLargePages) {
       // In presence of large pages we have to make sure that our
       // alignment is large page aware.
@@ -986,11 +994,22 @@ bool GenCollectorPolicy::should_try_older_generation_allocation(
 //
 
 void MarkSweepPolicy::initialize_alignments() {
+  /*
+   * 设置空间和分代对齐（C/C++中分配内存时都需要按着一定大小对齐），对齐的目的就是为了提高内存访问效率，CPU读取内存时不是一个一个字节读的，而是一批字节来读，比如4字节、8字节和64字节等，具体读多少，与CPU的架构、型号、年份有关，现在的机器基本是读64字节（缓存行大小），如果没按对齐规则对齐，就可能读取到的内存是“半包”，这就需要CPU多次读取，效率较低。这里按Generation::GenGrain对齐，这个值定义在generattion.hpp的枚举中
+   * enum SomePublicConstants {
+   * LogOfGenGrain = 16 ARM32_ONLY(+1),  // 最终得出结果16
+   * GenGrain = 1 << LogOfGenGrain    // 1 << 16  ==> 2^16 ==> 64 * k
+   * };
+   * 通过上面的定义可知，_space_alignment和_gen_alignment的值最终就是64*k，也就是按这个值来对齐
+   */
   _space_alignment = _gen_alignment = (uintx)Generation::GenGrain;
+    // 计算堆空间的对齐值，最终=512 * 4K
   _heap_alignment = compute_heap_alignment();
 }
 
+// 分代初始化，默认分成两代（年轻和老年代）
 void MarkSweepPolicy::initialize_generations() {
+    // 通过malloc() 库函数分配内存，并得到一个大小为2的分代数组，分别存放年轻代和老年代GenerationSpec，number_of_generations() 这个函数里面写死了返回2
   _generations = NEW_C_HEAP_ARRAY3(GenerationSpecPtr, number_of_generations(), mtGC, CURRENT_PC,
     AllocFailStrategy::RETURN_NULL);
   if (_generations == NULL) {
@@ -1000,8 +1019,10 @@ void MarkSweepPolicy::initialize_generations() {
   if (UseParNewGC) {
     _generations[0] = new GenerationSpec(Generation::ParNew, _initial_gen0_size, _max_gen0_size);
   } else {
+      // 串行GC的，走这条线，创建新生代GenerationSpec对象，对象内存都是通过malloc()来分配的
     _generations[0] = new GenerationSpec(Generation::DefNew, _initial_gen0_size, _max_gen0_size);
   }
+    // 创建老年代GenerationSpec对象
   _generations[1] = new GenerationSpec(Generation::MarkSweepCompact, _initial_gen1_size, _max_gen1_size);
 
   if (_generations[0] == NULL || _generations[1] == NULL) {

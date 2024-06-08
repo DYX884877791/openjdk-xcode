@@ -181,26 +181,36 @@ HS_DTRACE_PROBE_DECL5(hotspot, thread__stop, char*, intptr_t,
 
 // ======= Thread ========
 // Support for forcing alignment of thread objects for biased locking
+// 这个函数就是给线程分配内存的，分为两部分，一个是支持偏向锁；一个是不支持偏向锁
 void* Thread::allocate(size_t size, bool throw_excpt, MEMFLAGS flags) {
+    // 支持偏向锁
   if (UseBiasedLocking) {
+      // 偏向锁对齐大小
     const int alignment = markOopDesc::biased_lock_alignment;
+      // 要分配的内存大小
     size_t aligned_size = size + (alignment - sizeof(intptr_t));
+      // 实际分配内存操作，并返回分配的内存首地址
     void* real_malloc_addr = throw_excpt? AllocateHeap(aligned_size, flags, CURRENT_PC)
                                           : AllocateHeap(aligned_size, flags, CURRENT_PC,
                                               AllocFailStrategy::RETURN_NULL);
       // 内存对齐...
+      // 处理对齐操作
     void* aligned_addr     = (void*) align_size_up((intptr_t) real_malloc_addr, alignment);
     assert(((uintptr_t) aligned_addr + (uintptr_t) size) <=
            ((uintptr_t) real_malloc_addr + (uintptr_t) aligned_size),
            "JavaThread alignment code overflowed allocated storage");
+      // 打印日志
     if (TraceBiasedLocking) {
       if (aligned_addr != real_malloc_addr)
         tty->print_cr("Aligned thread " INTPTR_FORMAT " to " INTPTR_FORMAT,
                       real_malloc_addr, aligned_addr);
     }
+      // 给Thread对象中属性 _real_malloc_address 赋值为分配的内存首地址
     ((Thread*) aligned_addr)->_real_malloc_address = real_malloc_addr;
     return aligned_addr;
   } else {
+      // 不支持偏向锁，直接分配
+      // 用AllocateHeap来在C堆（注意，这里不是Java堆，这个C堆就是所谓的进程运行时堆）中分配内存
     return throw_excpt? AllocateHeap(size, flags, CURRENT_PC)
                        : AllocateHeap(size, flags, CURRENT_PC, AllocFailStrategy::RETURN_NULL);
   }
@@ -1557,7 +1567,8 @@ void JavaThread::initialize() {
   }
 
   // Setup safepoint state info for this thread
-    // ThreadSafepointState的设置,可见每个java线程都支持安全点.
+    // ThreadSafepointState的设置,可见每个java线程都支持安全点
+    // 设置线程安全点状态信息，底层线程的很多操作都要检查安全点
   ThreadSafepointState::create(this);
 
   debug_only(_java_call_counter = 0);
@@ -2596,6 +2607,33 @@ void JavaThread::java_resume() {
   }
 }
 
+/**
+ * https://blog.csdn.net/zhang527294844/article/details/135392720
+ *
+ * 了解保护页，先从几个问题开始吧
+ *
+ * 1、为什么线程栈有栈帧了，还要有保护页？
+ *
+ * 答：在操作系统中内存可以看成是一个大数组，这就有一个问题，线程之间可能会互相踩了别人的内存空间，所以栈空间也存在这个问题。为了防止栈溢出时破坏栈之外的数据结构，语言运行时会保留最大栈上限limit所在的一片区域，这就是保护页（Guard Page）,也可叫哨兵值（Sentry）。当函数返回时检查保护页的值，如果被修改，说明已到达最大栈上限，此时就要输出错误并终止程序。
+ *
+ * 2、Java栈溢出后，保护页的作用？
+ *
+ * 答：Java也有栈溢出，发生时会抛出StackOverflowError，输出调用栈和代码行数。这些过程都需要额外执行很多方法，但是发生栈溢出就意味着不能继续执行方法了（因为方法执行需要栈空间）。为了解决这个问题，HotSpot虚拟机在C++语言运行时提供的保护页（Linux的JavaThread没有）之外会使用create_stack_guard_pages()创建额外的保护页来支持栈溢出错误处理，如图12-1所示。
+ *
+ * 3、保护页有几种类型及各类型的作用？
+ *
+ * 答：线程栈的最大上限处会保留三块保护页（Guard Page）支持栈溢出，分别是Reserved Page、Yellow Page、Red Page。图12-1中的主要内容分析如下：
+ *
+ * 1）Reserved Page：Reserved Page旨在为一些关键段（Critical Section）方法保存外栈空间，让有@ jdk.internal.vm.annotation.ReservedStackAccess注解的方法能完成执行（如lock与unlock之间的代码），防止关键段方法中的对象出现不一致的状态。当执行关键段方法时分配的栈顶触及Reserved Page，则虚拟机会将Reserved Page标记为正常栈空间，供关键段方法完成执行，然后再抛出StackOVerflowError。Reserved Page的大小由-XX:+StackReservedPages指定。
+ *
+ * 2）Yellow Page：如果执行Java代码时分配的栈顶触及YellowPage，则虚拟机会抛出StackOverflowError，然后将Yellow Page标为正常栈空间，让抛异常的代码有栈可用。Yellow Page的数量由参数-XX:StackYellowPages=指定，最后Yellow Page占用的空间是page数量*page大小（page的大小一般是4KB，如果开启-XX:+UseLargePages且操作系统支持large page特性，page的大小可达到4MB)。
+ *
+ * 3）Red Page：如果执行Java代码时分配的栈顶触及Red Page，则虚拟机会创建错误日志hs_err_pid.log然后关闭虚拟机。同样，为了让创建日志的代码执行，虚拟机会将Red Page标为正常栈空间。RedPage的大小由-XX:StackRedPages指定。
+ *
+ * 4）Shadow Page：前面区域都是执行Java代码出现栈溢出的错误处理。虚拟机还可能执行native方法或者虚拟机本身需要执行的方法，这些方法的栈大小不像Java代码一样能确定（编译器能确定但是虚拟机不能），如果开启虚拟机参数-XX:+UseStackBanging，JVM会分配一块足够大的Shadow Page执行，如果RSP（栈顶指针）超出Shadow Page区则抛出StackOverflowError。
+ *
+ * 有了create_stack_guard_pages()创建的额外的保护页，即便产生StackOverflowError，虚拟机也能执行额外的代码，正确地抛出Java异常并输出调用栈以提醒用户。
+ */
 void JavaThread::create_stack_guard_pages() {
   if (!os::uses_stack_guard_pages() ||
       _stack_guard_state != stack_guard_unused ||
@@ -2606,20 +2644,27 @@ void JavaThread::create_stack_guard_pages() {
       }
     return;
   }
+    // 这里为什么是栈基址减去栈大小呢，因为在Linux系统中，栈空间是从大到小开辟空间的，栈顶(ESP) <= 栈基址（EBP），正常栈基址EBP应该是在上面，而栈顶（ESP）是在下面，所以图12-1和图12-2实际上把它们倒过来看就行，画成正向的，是为了从概念上和感观上看更清晰
   address low_addr = stack_base() - stack_size();
+    // 根据设置的Yellow Page数和Red Page数，然后乘以 page size，就可以得出要分配的空间
   size_t len = (StackYellowPages + StackRedPages) * os::vm_page_size();
 
   int allocate = os::allocate_stack_guard_pages();
   // warning("Guarding at " PTR_FORMAT " for len " SIZE_FORMAT "\n", low_addr, len);
 
+    // 通过create_stack_guard_pages函数从low_addr地址开始分配长度为len的区域，底层是通过mmap系统调用完成的
   if (allocate && !os::create_stack_guard_pages((char *) low_addr, len)) {
     warning("Attempt to allocate stack guard pages failed.");
+      // 分配失败，退出函数
     return;
   }
 
+    // 通过系统调用mprotect，设置这块区域不可访问，也就是激活保护区
   if (os::guard_memory((char *) low_addr, len)) {
+      // 设置激活保护区状态
     _stack_guard_state = stack_guard_enabled;
   } else {
+      // 激活失败，就通过uncommit_memory释放空间
     warning("Attempt to protect stack guard pages failed.");
     if (os::uncommit_memory((char *) low_addr, len)) {
       warning("Attempt to deallocate stack guard pages failed.");

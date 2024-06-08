@@ -40,7 +40,9 @@ PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
 SharedHeap* SharedHeap::_sh;
 
 SharedHeap::SharedHeap(CollectorPolicy* policy_) :
+        // 继续调用上级构造函数
   CollectedHeap(),
+        // 以下为赋值操作
   _collector_policy(policy_),
   _rem_set(NULL),
   _strong_roots_parity(0),
@@ -48,6 +50,7 @@ SharedHeap::SharedHeap(CollectorPolicy* policy_) :
 {
     //初始化静态属性_sh
   _sh = this;  // ch is static, should be set only once.
+    // 由于我们讨论的是串行的GC收集器，所以下面这个逻辑不会走，忽略
   if ((UseParNewGC ||
       (UseConcMarkSweepGC && (CMSParallelInitialMarkEnabled ||
                               CMSParallelRemarkEnabled)) ||

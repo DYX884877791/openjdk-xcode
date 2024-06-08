@@ -55,6 +55,8 @@ class Metadebug;
 
 // GC root for walking class loader data created
 
+// 这是CLD的总入口，把所有CLD通过链表管理起来
+//
 // ClassLoaderDataGraph的定义同样位于classLoaderData.hpp中，相当于ClassLoaderData的一个管理类，方便遍历所有的ClassLoaderData，其定义的属性和方法都是静态的
 class ClassLoaderDataGraph : public AllStatic {
   friend class ClassLoaderData;
@@ -124,6 +126,9 @@ class ClassLoaderDataGraph : public AllStatic {
 
 // ClassLoaderData class
 
+/**
+ * 类加载器加载类后，存储数据的对象，也就是说被加载的类最终都存储在ClassLoaderData指向的地方，一个CLD可以存入很多被加载的类InstanceKlass，多个InstanceKlass之间通过链表形式存储，且链表头永远是最新加载的类
+ */
 class ClassLoaderData : public CHeapObj<mtClass> {
   friend class VMStructs;
  private:
@@ -259,14 +264,19 @@ class ClassLoaderData : public CHeapObj<mtClass> {
 
   bool is_anonymous() const { return _is_anonymous; }
 
+    // 根加载器CLD的创建
   static void init_null_class_loader_data() {
+        // 验证重复初始化
     assert(_the_null_class_loader_data == NULL, "cannot initialize twice");
     assert(ClassLoaderDataGraph::_head == NULL, "cannot initialize twice");
 
     // We explicitly initialize the Dependencies object at a later phase in the initialization
+        // 创建ClassLoaderData对象，第一个加载器的参数是NULL，因为在Java中，没有对根加载器的实现，这个是由虚拟机自身来实现加载的，所以相对Java，这是一个NULL，实现看`章节19.1.2`
     _the_null_class_loader_data = new ClassLoaderData((oop)NULL, false, Dependencies());
+        // 创建完后，赋值给ClassLoaderDataGraph::_head，表示第一个CLD
     ClassLoaderDataGraph::_head = _the_null_class_loader_data;
     assert(_the_null_class_loader_data->is_the_null_class_loader_data(), "Must be");
+        // 不涉及多Java进程共享，这一步不会走
     if (DumpSharedSpaces) {
       _the_null_class_loader_data->initialize_shared_metaspaces();
     }
