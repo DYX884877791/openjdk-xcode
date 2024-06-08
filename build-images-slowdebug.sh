@@ -26,7 +26,7 @@ if [ -z $JAVA_HOME_DIR ] ; then
   echo "请配置JAVA_HOME"
 fi
 
-BOOT_JDK_MACOS="/Library/Java/JavaVirtualMachines/jdk1.8.0_291.jdk/Contents/Home"
+BOOT_JDK_MACOS=$JAVA_HOME_DIR
 BOOT_JDK_LINUX=$JAVA_HOME_DIR
 
 if $IS_LINUX ; then
@@ -144,9 +144,8 @@ configurejdk() {
             --with-xcode-path="$XCODE_APP" \
             --includedir="$XCODE_DEVELOPER_PREFIX/Toolchains/XcodeDefault.xctoolchain/usr/include" \
             --with-boot-jdk="$BOOT_JDK" \
-            --with-jtreg="$BUILD_DIR/tools/jtreg" \
-            --with-freetype-include="$TOOL_DIR/freetype/include" \
-            --with-freetype-lib=$TOOL_DIR/freetype/objs/.libs
+            --with-freetype-include="/usr/local/include/freetype2" \
+            --with-freetype-lib=/usr/local/lib
             "
 	fi
 	unset LINUX_CONFIG
